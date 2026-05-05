@@ -138,13 +138,8 @@ const P1_CTRL_Y = P1_VP_Y + P1_VIEWPORT_H * CELL;   // 736
 const BTN_H = 37;
 // CTRL_H = 8 + 12 + 5 + 37 + 5 + 37 + 8 = 112 ✓
 
-// P1 spawns at the top of P1's zone (row boundary), falls toward bottom.
-function p1SpawnY(boundary) { return boundary; }
-
-// P2 spawns 4 rows above boundary so all piece cells stay in r < boundary.
-// Max piece height is 4 rows ([dc, dr] where dr max = 3), so spawn at boundary-4
-// guarantees cells at rows boundary-4..boundary-1, all in P2's territory.
-function p2SpawnY(boundary) { return Math.max(0, boundary - 4); }
+// P1 spawns at the BOTTOM of P1's zone (row ROWS-4), floats UP toward boundary.
+// P2 spawns at the TOP of P2's zone (row 0), falls DOWN toward boundary.
 
 const PIECE_TYPES = ["I","O","T","S","Z","J","L"];
 
@@ -250,16 +245,16 @@ function clearRows(board, boundary, player) {
     const kept = terr.filter(row => row.includes(null));
     const n    = terr.length - kept.length;
     const fill = Array.from({length: n}, () => Array(COLS).fill(null));
-    // Empty rows at TOP of P1 zone, then kept rows, P2 zone unchanged
-    return [[...next.slice(0, boundary), ...fill, ...kept], n];
+    // Kept rows (stack near boundary), empty rows at BOTTOM of P1 zone, P2 zone unchanged
+    return [[...next.slice(0, boundary), ...kept, ...fill], n];
     // caller: boundary -= n
   } else {
     const terr = next.slice(0, boundary);
     const kept = terr.filter(row => row.includes(null));
     const n    = terr.length - kept.length;
     const fill = Array.from({length: n}, () => Array(COLS).fill(null));
-    // Kept rows, empty rows at BOTTOM of P2 zone, P1 zone unchanged
-    return [[...kept, ...fill, ...next.slice(boundary)], n];
+    // Empty rows at TOP of P2 zone, kept rows (stack near boundary), P1 zone unchanged
+    return [[...fill, ...kept, ...next.slice(boundary)], n];
     // caller: boundary += n
   }
 }
@@ -273,11 +268,11 @@ function getP1ViewRange(boundary) {
   return [startRow, endRow];
 }
 
-// P2 viewport: boundary at the BOTTOM EDGE of P2's view.
-// P2 pieces spawn near the top of the viewport and float UP and off-screen.
-// No scaleY flip needed -- upward grid movement (y decreases) is visually upward.
+// P2 viewport: boundary near the BOTTOM of P2's view (symmetric with P1).
+// P2 pieces spawn at row 0 (off-screen top) and fall DOWN toward boundary.
+// PEEK rows into P1 territory are visible at the bottom edge.
 function getP2ViewRange(boundary) {
-  const endRow   = boundary;
+  const endRow   = Math.min(ROWS, boundary + PEEK);
   const startRow = Math.max(0, endRow - P2_VIEWPORT_H);
   return [startRow, endRow];
 }
@@ -290,8 +285,8 @@ function makeInitState() {
     wind:     Math.random() < 0.5 ? -1 : 1,
     windTick: 0,
     aiTick:   0,
-    p1:       { type: randPiece(), rot: 0, x: 3, y: p1SpawnY(boundary) },
-    p2:       { type: randPiece(), rot: 0, x: 3, y: p2SpawnY(boundary) },
+    p1:       { type: randPiece(), rot: 0, x: 3, y: ROWS - 4 },
+    p2:       { type: randPiece(), rot: 0, x: 3, y: 0 },
     p1Next:   randPiece(),
     p2Next:   randPiece(),
     phase:    "playing",
@@ -435,30 +430,30 @@ function TetrisGame() {
         if (s.phase !== "playing") return s;
         let { board, boundary, wind, windTick, aiTick, p1, p2, p1Next, p2Next } = s;
 
-        // -- P1 falls DOWN (y increases, toward bottom of P1 zone)
-        if (isValid(getCells(p1.type, p1.rot, p1.x, p1.y + 1), board, boundary, 1)) {
-          p1 = {...p1, y: p1.y + 1};
+        // -- P1 floats UP (y decreases, toward boundary)
+        if (isValid(getCells(p1.type, p1.rot, p1.x, p1.y - 1), board, boundary, 1)) {
+          p1 = {...p1, y: p1.y - 1};
         } else {
           board = lockPiece(board, getCells(p1.type, p1.rot, p1.x, p1.y), PIECE_COLORS[p1.type]);
           const [b1, n1] = clearRows(board, boundary, 1);
           board = b1;
-          boundary -= n1;  // P1 gains territory at top; boundary moves up
-          p1 = { type: p1Next, rot: 0, x: 3, y: p1SpawnY(boundary) };
+          boundary -= n1;  // P1 gains territory; boundary moves up
+          p1 = { type: p1Next, rot: 0, x: 3, y: ROWS - 4 };
           p1Next = randPiece();
           if (!isValid(getCells(p1.type, p1.rot, p1.x, p1.y), board, boundary, 1)) {
             return {...s, board, boundary, p1, p2, p1Next, p2Next, aiTick, phase: "over", winner: 2};
           }
         }
 
-        // -- P2 floats UP (y decreases, toward top of P2 zone, like balloons)
-        if (isValid(getCells(p2.type, p2.rot, p2.x, p2.y - 1), board, boundary, 2)) {
-          p2 = {...p2, y: p2.y - 1};
+        // -- P2 falls DOWN (y increases, toward boundary)
+        if (isValid(getCells(p2.type, p2.rot, p2.x, p2.y + 1), board, boundary, 2)) {
+          p2 = {...p2, y: p2.y + 1};
         } else {
           board = lockPiece(board, getCells(p2.type, p2.rot, p2.x, p2.y), PIECE_COLORS[p2.type]);
           const [b2, n2] = clearRows(board, boundary, 2);
           board = b2;
-          boundary += n2;  // P2 gains territory at bottom; boundary moves down
-          p2 = { type: p2Next, rot: 0, x: 3, y: p2SpawnY(boundary) };
+          boundary += n2;  // P2 gains territory; boundary moves down
+          p2 = { type: p2Next, rot: 0, x: 3, y: 0 };
           p2Next = randPiece();
           if (!isValid(getCells(p2.type, p2.rot, p2.x, p2.y), board, boundary, 2)) {
             return {...s, board, boundary, p1, p2, p1Next, p2Next, aiTick, phase: "over", winner: 1};
@@ -510,7 +505,7 @@ function TetrisGame() {
       if (e.key === "ArrowLeft")  moveP1(-1, 0, false);
       if (e.key === "ArrowRight") moveP1( 1, 0, false);
       if (e.key === "ArrowUp")    moveP1( 0, 0, true);
-      if (e.key === "ArrowDown")  moveP1( 0, 1, false);
+      if (e.key === "ArrowDown")  moveP1( 0, -1, false);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -583,7 +578,7 @@ function TetrisGame() {
           onLeft={()   => moveP1(-1, 0, false)}
           onRight={()  => moveP1( 1, 0, false)}
           onRotate={()  => moveP1( 0, 0, true)}
-          onDrop={()   => moveP1( 0, 1, false)}
+          onDrop={()   => moveP1( 0, -1, false)}
         />
       </div>
 
@@ -650,7 +645,7 @@ const SECTIONS = [
       {
         id: "TetrisGame",
         label: "Tetris Game",
-        desc: "Single-player test mode. P1 (arrows, bottom 75%) falls toward boundary. P2 (auto, top 25%) floats up toward boundary. Clear rows to push boundary into opponent territory.",
+        desc: "Single-player test mode. P1 (arrows, bottom 75%) floats UP toward boundary. P2 (auto, top 25%) falls DOWN toward boundary. Clear rows to push boundary into opponent territory.",
         component: TetrisGame,
       },
     ],
