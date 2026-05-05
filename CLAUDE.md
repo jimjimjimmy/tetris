@@ -5,7 +5,7 @@
   Whichever machine (MacFQ or Gandalf) adds a component, updates a file,
   or makes a structural change: update this file before ending the session.
   Both machines depend on this as the single source of truth.
-  Last updated: 2026-05-04 — Gandalf (game spec onboarding)
+  Last updated: 2026-05-04 — Gandalf (v1 game prototype)
 -->
 
 ## Required reading before building
@@ -239,8 +239,11 @@ function useReveal(duration) {
 
 ## Current components
 
-### Getting Started
-- `Placeholder` - replace with first real component
+### Game
+- `TetrisGame` - full playable prototype. P1 arrow keys (falls down), P2 WASD (floats up). Wind drifts both pieces every 4 ticks. Clearing rows moves the boundary, stealing opponent territory. Win = push opponent to 0 rows. Game-over overlay with REMATCH.
+
+### Components
+- `ControlPad` - semi-transparent on-screen buttons: [ < ] [ o ] [ > ] with DROP below. Uses onPointerDown for mobile. Props: onLeft, onRight, onRotate, onDrop, label.
 
 ---
 
