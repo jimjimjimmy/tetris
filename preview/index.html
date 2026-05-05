@@ -74,6 +74,31 @@ function useReveal(duration = 800) {
 }
 
 // ============================================================
+// TERRITORY MODEL
+//
+//   P2 zone: rows 0 .. boundary-1   (TOP of board / screen)
+//   P1 zone: rows boundary .. ROWS-1 (BOTTOM of board / screen)
+//
+// Pieces:
+//   P2 spawns near boundary (row boundary-4), floats UP (y decreases)
+//   P2 stack builds downward from row 0 (P2's "ceiling")
+//   P2 locks when piece can't move to y-1 (hit row 0 or another P2 piece)
+//
+//   P1 spawns at boundary (row boundary), falls DOWN (y increases)
+//   P1 stack builds upward from row ROWS-1 (P1's "floor")
+//   P1 locks when piece can't move to y+1 (hit row ROWS-1 or another P1 piece)
+//
+// Territory war:
+//   P1 clears rows -> boundary decreases by n -> P1 gains n rows at top of their zone
+//   P2 clears rows -> boundary increases by n -> P2 gains n rows at bottom of their zone
+//
+// Win:
+//   boundary <= 0  -> P1 wins (P2 out of territory)
+//   boundary >= ROWS -> P2 wins (P1 out of territory)
+//
+// ============================================================
+
+// ============================================================
 // LAYOUT CONSTANTS
 //
 // Screen: 393 x 852
@@ -82,32 +107,25 @@ function useReveal(duration = 800) {
 // CELL = 30 so: (18+6)*30 + 16 divider + 112 P1 controls = 848px.
 //
 // Layout (top to bottom):
-//   P2 viewport: 6 * 30 = 180px   (P2_VP_Y = 0)
-//   Divider:           16px        (DIV_Y = 180)
-//   P1 viewport: 18 * 30 = 540px   (P1_VP_Y = 196)
-//   P1 controls:      112px        (P1_CTRL_Y = 736)
-//   Total: 848px (fits 852)
+//   P2 viewport: 6*30 = 180px  (P2_VP_Y = 0)
+//   Divider:          16px     (DIV_Y = 180)
+//   P1 viewport: 18*30 = 540px  (P1_VP_Y = 196)
+//   P1 controls:     112px     (P1_CTRL_Y = 736)
+//   Total: 848px
 // ============================================================
 
-const CTRL_H        = 112;   // P1 control zone height
+const CTRL_H        = 112;
 const DIVIDER_H     = 16;
-const P1_VIEWPORT_H = 18;    // rows P1 sees (~75%)
-const P2_VIEWPORT_H = 6;     // rows P2 sees (~25%)
-const PEEK          = 2;     // rows of opponent territory visible in each viewport
+const P1_VIEWPORT_H = 18;   // rows P1 sees (~75%)
+const P2_VIEWPORT_H = 6;    // rows P2 sees (~25%)
+const PEEK          = 2;    // rows of opponent territory visible in each viewport
 const TICK_MS       = 550;
 const WIND_EVERY    = 4;
-const AI_PERIOD     = 2;     // P2 makes an AI move every N ticks
+const AI_PERIOD     = 2;    // P2 makes an AI move every N ticks
 
 const CELL      = 30;
 const COLS      = 10;
 const ROWS      = 20;
-
-// P2 spawns near the far end of its visible viewport so it's always on screen.
-// With P2_VIEWPORT_H=6 and PEEK=2, P2 sees rows [boundary-2 .. boundary+4).
-// Spawn at boundary+3 puts the piece at the far (non-boundary) edge of P2's view.
-function p2SpawnY(boundary) {
-  return Math.min(ROWS - 2, boundary + P2_VIEWPORT_H - PEEK - 1);
-}
 
 const BOARD_PX   = COLS * CELL;            // 300
 const BOARD_LEFT = (393 - BOARD_PX) / 2;  // 46.5
@@ -117,8 +135,16 @@ const DIV_Y     = P2_VP_Y + P2_VIEWPORT_H * CELL;   // 180
 const P1_VP_Y   = DIV_Y + DIVIDER_H;                // 196
 const P1_CTRL_Y = P1_VP_Y + P1_VIEWPORT_H * CELL;   // 736
 
-const BTN_H     = 37;
-// CTRL_H check: 8 + 12 + 5 + BTN_H + 5 + BTN_H + 8 = 8+12+5+37+5+37+8 = 112 ✓
+const BTN_H = 37;
+// CTRL_H = 8 + 12 + 5 + 37 + 5 + 37 + 8 = 112 ✓
+
+// P1 spawns at the top of P1's zone (row boundary), falls toward bottom.
+function p1SpawnY(boundary) { return boundary; }
+
+// P2 spawns 4 rows above boundary so all piece cells stay in r < boundary.
+// Max piece height is 4 rows ([dc, dr] where dr max = 3), so spawn at boundary-4
+// guarantees cells at rows boundary-4..boundary-1, all in P2's territory.
+function p2SpawnY(boundary) { return Math.max(0, boundary - 4); }
 
 const PIECE_TYPES = ["I","O","T","S","Z","J","L"];
 
@@ -188,13 +214,14 @@ function emptyBoard() {
   return Array.from({length: ROWS}, () => Array(COLS).fill(null));
 }
 
-// P1 territory: r < boundary. P2 territory: r >= boundary.
+// P1 territory: r >= boundary (bottom half).
+// P2 territory: r < boundary (top half).
 function isValid(cells, board, boundary, player) {
   for (const [c, r] of cells) {
     if (c < 0 || c >= COLS || r < 0 || r >= ROWS) return false;
     if (board[r][c] !== null) return false;
-    if (player === 1 && r >= boundary) return false;
-    if (player === 2 && r < boundary)  return false;
+    if (player === 1 && r < boundary)  return false; // P1 can't cross into P2 zone
+    if (player === 2 && r >= boundary) return false; // P2 can't cross into P1 zone
   }
   return true;
 }
@@ -207,40 +234,51 @@ function lockPiece(board, cells, color) {
   return next;
 }
 
-// Clear filled rows from player's territory.
-// P1: empties added at top; boundary shifts down (P2 loses rows).
-// P2: empties added at bottom; boundary shifts up (P1 loses rows).
+// Clear filled rows in player's territory and return [newBoard, rowsCleared].
+//
+// P1 zone: rows [boundary, ROWS). Stack builds upward from row ROWS-1.
+//   Cleared rows are removed, empty rows inserted at the TOP of P1's zone (row boundary).
+//   This shifts boundary DOWN by n (P1 gains territory at top, P2 loses at bottom).
+//
+// P2 zone: rows [0, boundary). Stack builds downward from row 0.
+//   Cleared rows are removed, empty rows inserted at the BOTTOM of P2's zone (row boundary-1).
+//   This shifts boundary UP by n (P2 gains territory at bottom, P1 loses at top).
 function clearRows(board, boundary, player) {
   const next = board.map(row => [...row]);
   if (player === 1) {
-    const terr = next.slice(0, boundary);
-    const kept = terr.filter(row => row.includes(null));
-    const n    = terr.length - kept.length;
-    const fill = Array.from({length: n}, () => Array(COLS).fill(null));
-    return [[...fill, ...kept, ...next.slice(boundary)], n];
-  } else {
     const terr = next.slice(boundary);
     const kept = terr.filter(row => row.includes(null));
     const n    = terr.length - kept.length;
     const fill = Array.from({length: n}, () => Array(COLS).fill(null));
-    return [[...next.slice(0, boundary), ...kept, ...fill], n];
+    // Empty rows at TOP of P1 zone, then kept rows, P2 zone unchanged
+    return [[...next.slice(0, boundary), ...fill, ...kept], n];
+    // caller: boundary -= n
+  } else {
+    const terr = next.slice(0, boundary);
+    const kept = terr.filter(row => row.includes(null));
+    const n    = terr.length - kept.length;
+    const fill = Array.from({length: n}, () => Array(COLS).fill(null));
+    // Kept rows, empty rows at BOTTOM of P2 zone, P1 zone unchanged
+    return [[...kept, ...fill, ...next.slice(boundary)], n];
+    // caller: boundary += n
   }
 }
 
-// P1 viewport: boundary near the BOTTOM of P1's view (battle zone is the danger zone).
-// P1 sees: their territory above + PEEK rows into P2 below.
-// startRow may be negative -- BoardViewport renders those as empty dark cells (above-board padding).
+// P1 viewport: boundary near the TOP of P1's view (spawn zone).
+// P1 sees: PEEK rows into P2 territory above boundary, then full P1 territory below.
+// endRow may exceed ROWS -- BoardViewport pads those with dark empty cells.
 function getP1ViewRange(boundary) {
-  const endRow   = Math.min(ROWS, boundary + PEEK);
-  const startRow = endRow - P1_VIEWPORT_H;  // intentionally allows negative
+  const startRow = Math.max(0, boundary - PEEK);
+  const endRow   = startRow + P1_VIEWPORT_H;
   return [startRow, endRow];
 }
 
-// P2 viewport (rendered with scaleY(-1)): boundary near the BOTTOM of P2's visual zone.
-// P2 sees: their territory at the top (pieces spawn here), boundary at the bottom.
+// P2 viewport: boundary at the BOTTOM EDGE of P2's view.
+// P2 pieces spawn near the top of the viewport and float UP and off-screen.
+// No scaleY flip needed -- upward grid movement (y decreases) is visually upward.
 function getP2ViewRange(boundary) {
-  const startRow = Math.max(0, boundary - PEEK);
-  const endRow   = Math.min(ROWS, startRow + P2_VIEWPORT_H);
+  const endRow   = boundary;
+  const startRow = Math.max(0, endRow - P2_VIEWPORT_H);
   return [startRow, endRow];
 }
 
@@ -252,7 +290,7 @@ function makeInitState() {
     wind:     Math.random() < 0.5 ? -1 : 1,
     windTick: 0,
     aiTick:   0,
-    p1:       { type: randPiece(), rot: 0, x: 3, y: 0 },
+    p1:       { type: randPiece(), rot: 0, x: 3, y: p1SpawnY(boundary) },
     p2:       { type: randPiece(), rot: 0, x: 3, y: p2SpawnY(boundary) },
     p1Next:   randPiece(),
     p2Next:   randPiece(),
@@ -264,12 +302,13 @@ function makeInitState() {
 // ============================================================
 // BOARD VIEWPORT
 // Renders a clipped window into the full board grid.
-// startRow/endRow define which rows are visible.
+// Rows outside [0, ROWS) render as empty dark cells (padding).
 // ============================================================
 
 function BoardViewport({ grid, boundary, startRow, endRow }) {
   const visRows = endRow - startRow;
 
+  // Red boundary line: at the row-boundary screen position if visible in this range
   const boundaryScreenY = (boundary > startRow && boundary <= endRow)
     ? (boundary - startRow) * CELL - 1
     : null;
@@ -285,14 +324,14 @@ function BoardViewport({ grid, boundary, startRow, endRow }) {
         const r = startRow + ri;
         return Array.from({length: COLS}, (_, c) => {
           const color = (r >= 0 && r < ROWS) ? grid[r][c] : null;
-          const inP1  = r < boundary;
+          const inP2  = r < boundary;  // P2 zone shading (top, slightly different tone)
           return (
             <div key={ri * COLS + c} style={{
               position: "absolute",
               left: c * CELL, top: ri * CELL,
               width: CELL - 1, height: CELL - 1,
-              background: color || (inP1 ? "#111111" : "#0e0e0e"),
-              border: color ? "none" : ("1px solid " + (inP1 ? "#1c1c1c" : "#181818")),
+              background: color || (inP2 ? "#0e0e0e" : "#111111"),
+              border: color ? "none" : ("1px solid " + (inP2 ? "#181818" : "#1c1c1c")),
               borderRadius: color ? 2 : 0,
             }} />
           );
@@ -396,27 +435,29 @@ function TetrisGame() {
         if (s.phase !== "playing") return s;
         let { board, boundary, wind, windTick, aiTick, p1, p2, p1Next, p2Next } = s;
 
-        // -- P1 falls down
+        // -- P1 falls DOWN (y increases, toward bottom of P1 zone)
         if (isValid(getCells(p1.type, p1.rot, p1.x, p1.y + 1), board, boundary, 1)) {
           p1 = {...p1, y: p1.y + 1};
         } else {
           board = lockPiece(board, getCells(p1.type, p1.rot, p1.x, p1.y), PIECE_COLORS[p1.type]);
           const [b1, n1] = clearRows(board, boundary, 1);
-          board = b1; boundary += n1;
-          p1 = { type: p1Next, rot: 0, x: 3, y: 0 };
+          board = b1;
+          boundary -= n1;  // P1 gains territory at top; boundary moves up
+          p1 = { type: p1Next, rot: 0, x: 3, y: p1SpawnY(boundary) };
           p1Next = randPiece();
           if (!isValid(getCells(p1.type, p1.rot, p1.x, p1.y), board, boundary, 1)) {
             return {...s, board, boundary, p1, p2, p1Next, p2Next, aiTick, phase: "over", winner: 2};
           }
         }
 
-        // -- P2 rises up (buoyancy)
+        // -- P2 floats UP (y decreases, toward top of P2 zone, like balloons)
         if (isValid(getCells(p2.type, p2.rot, p2.x, p2.y - 1), board, boundary, 2)) {
           p2 = {...p2, y: p2.y - 1};
         } else {
           board = lockPiece(board, getCells(p2.type, p2.rot, p2.x, p2.y), PIECE_COLORS[p2.type]);
           const [b2, n2] = clearRows(board, boundary, 2);
-          board = b2; boundary -= n2;
+          board = b2;
+          boundary += n2;  // P2 gains territory at bottom; boundary moves down
           p2 = { type: p2Next, rot: 0, x: 3, y: p2SpawnY(boundary) };
           p2Next = randPiece();
           if (!isValid(getCells(p2.type, p2.rot, p2.x, p2.y), board, boundary, 2)) {
@@ -434,7 +475,7 @@ function TetrisGame() {
             p2 = {...p2, x: p2.x + wind};
         }
 
-        // -- P2 AI: random move/rotate every AI_PERIOD ticks
+        // -- P2 AI: random horizontal move or rotate every AI_PERIOD ticks
         aiTick += 1;
         if (aiTick % AI_PERIOD === 0) {
           const r = Math.random();
@@ -453,8 +494,8 @@ function TetrisGame() {
 
         // -- Boundary win check
         let phase = "playing", winner = null;
-        if (boundary >= ROWS) { phase = "over"; winner = 1; }
-        if (boundary <= 0)    { phase = "over"; winner = 2; }
+        if (boundary <= 0)    { phase = "over"; winner = 1; } // P1 pushed P2 to 0 rows
+        if (boundary >= ROWS) { phase = "over"; winner = 2; } // P2 pushed P1 to 0 rows
 
         return { board, boundary, wind, windTick, aiTick, p1, p2, p1Next, p2Next, phase, winner };
       });
@@ -462,7 +503,7 @@ function TetrisGame() {
     return () => clearInterval(id);
   }, []);
 
-  // Keyboard controls -- P1 only (arrow keys). WASD disabled in single-player mode.
+  // Keyboard controls -- P1 only (arrow keys)
   useEffect(() => {
     const onKey = (e) => {
       if (["ArrowLeft","ArrowRight","ArrowUp","ArrowDown"].includes(e.key)) e.preventDefault();
@@ -500,11 +541,8 @@ function TetrisGame() {
       WebkitUserSelect: "none",
     }}>
 
-      {/* P2 board viewport (scaleY -1 so boundary appears at visual bottom, pieces spawn at visual top) */}
-      <div style={{
-        position: "absolute", top: P2_VP_Y, left: BOARD_LEFT,
-        transform: "scaleY(-1)",
-      }}>
+      {/* P2 viewport -- boundary at visual bottom edge, pieces float UP and off-screen */}
+      <div style={{position: "absolute", top: P2_VP_Y, left: BOARD_LEFT}}>
         <BoardViewport
           grid={grid} boundary={boundary}
           startRow={p2Start} endRow={p2End}
@@ -522,12 +560,12 @@ function TetrisGame() {
         fontSize: 9, letterSpacing: 1,
         color: "rgba(255,255,255,0.25)",
       }}>
-        <span>{"P1  " + boundary + "R"}</span>
+        <span>{"P2  " + boundary + "R"}</span>
         <span>{"WIND  " + (wind > 0 ? ">>>" : "<<<")}</span>
-        <span>{"P2  " + (ROWS - boundary) + "R"}</span>
+        <span>{"P1  " + (ROWS - boundary) + "R"}</span>
       </div>
 
-      {/* P1 board viewport -- battle zone near TOP of view, territory stretches down */}
+      {/* P1 viewport -- boundary near TOP, P1 territory stretches down */}
       <div style={{position: "absolute", top: P1_VP_Y, left: BOARD_LEFT}}>
         <BoardViewport
           grid={grid} boundary={boundary}
@@ -587,7 +625,7 @@ function TetrisGame() {
 }
 
 // ============================================================
-// CONTROL PAD PREVIEW (isolated storybook view)
+// CONTROL PAD PREVIEW (isolated component view)
 // ============================================================
 
 function ControlPadPreview() {
@@ -602,7 +640,7 @@ function ControlPadPreview() {
 }
 
 // ============================================================
-// STORYBOOK REGISTRY
+// COMPONENT REGISTRY
 // ============================================================
 
 const SECTIONS = [
@@ -612,7 +650,7 @@ const SECTIONS = [
       {
         id: "TetrisGame",
         label: "Tetris Game",
-        desc: "Single-player test mode. P1 (arrows) gets 75% of the view. P2 auto-plays. Boundary line moves as rows are cleared.",
+        desc: "Single-player test mode. P1 (arrows, bottom 75%) falls toward boundary. P2 (auto, top 25%) floats up toward boundary. Clear rows to push boundary into opponent territory.",
         component: TetrisGame,
       },
     ],
@@ -633,7 +671,7 @@ const SECTIONS = [
 const ANIMATED_IDS = new Set([]);
 
 // ============================================================
-// STORYBOOK SHELL
+// SHELL
 // ============================================================
 
 function ComponentCard({ item }) {
