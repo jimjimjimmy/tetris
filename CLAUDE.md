@@ -5,7 +5,7 @@
   Whichever machine (MacFQ or Gandalf) adds a component, updates a file,
   or makes a structural change: update this file before ending the session.
   Both machines depend on this as the single source of truth.
-  Last updated: 2026-05-04 — MacFQ (setup)
+  Last updated: 2026-05-04 — Gandalf (game spec onboarding)
 -->
 
 ## Required reading before building
@@ -23,7 +23,7 @@ Non-negotiables:
 
 ## What this is
 
-**Tetris** — [describe the project here once scope is defined]
+**Tetris** (working title) -- a two-player mobile web game, eventually wrapped in Capacitor for iOS App Store.
 
 No bundler, no build step. Single HTML file rendered by Babel CDN in the browser.
 
@@ -36,31 +36,107 @@ preview/storybook.html   <- THE file. All components live here.
 
 Live URL: https://jimjimjimmy.github.io/tetris/preview/storybook.html
 
+---
+
+## Game concept
+
+### Core mechanic
+- Shared board split between two players by a boundary line
+- P1 plays from the top half, pieces fall down (normal gravity)
+- P2 plays from the bottom half, pieces float up (balloon/buoyancy physics)
+- Wind drifts pieces left or right as they fall/rise
+- Clearing a row moves the boundary line, stealing territory from the opponent
+- Win condition: push the opponent's territory to zero rows
+
+### Physics notes
+- P1 drop = assisted by gravity (hold to accelerate fall)
+- P2 drop = assisted by buoyancy (release = piece floats up faster)
+- Wind is a constant horizontal drift applied during movement, not just on input
+- Rotate is always clockwise for both players
+
+### Directional language
+- "Toward opponent" = aggressive (P1 moves down, P2 moves up)
+- "Away from opponent" = defensive
+
+---
+
+## Controls (v1 - on-screen buttons)
+
+No swipe gestures in v1. Semi-transparent on-screen buttons only.
+
+Layout:
+```
+[ <- ]  [ rotate ]  [ -> ]
+        [  drop  ]
+```
+
+- P1: drop accelerates the piece downward
+- P2: drop accelerates the piece upward (buoyancy boost)
+- Both: rotate is always clockwise
+
+Wind indicator: planned for v2 (not in v1).
+
+---
+
+## Game modes
+
+| Mode | Description |
+|------|-------------|
+| Versus | Territorial war -- clear rows to push boundary into opponent's space |
+| Co-op | Both players collaboratively clear the same shared board |
+
+---
+
+## Multiplayer (v2+)
+
+| Type | Mechanic |
+|------|----------|
+| Random match | Anonymous or named matchmaking |
+| Friend match | Room code |
+| Solo vs AI | AI opponent |
+
+---
+
+## Visual style
+
+- ASCII/minimal aesthetic -- no custom assets
+- No sprites, no images, block pieces only
+- Color palette TBD (likely monochrome or 2-color contrast)
+- Mobile-first layout (fits 393px wide)
+
+---
+
+## Tech stack
+
+| Layer | Tech |
+|-------|------|
+| v1 | React 18 CDN + Babel Standalone 7.23.9, single storybook.html |
+| v2 | WebSockets for real-time multiplayer |
+| v3 | Capacitor for iOS App Store wrap |
+
+---
+
 ## Folder structure
 
 ```
 preview/storybook.html      <- storybook (design QA)
 components/                 <- engineering deliverables (.jsx per component)
   tokens.js                   design tokens as JS exports
-  icons.jsx                   all Icon* components
-assets/icons/               <- SVGs exported from Figma
+assets/                     <- any static assets (none for v1, ASCII only)
 BUILD-PLAN.md               <- project roadmap
-COMPONENT-INDEX.md          <- engineering reference with Figma node IDs
+COMPONENT-INDEX.md          <- engineering reference with component notes
 CLAUDE.md                   <- this file
 ```
 
-**Rule:** `components/` and `assets/` are parallel engineering deliverables. New components go into storybook.html first, then get extracted to `components/` separately.
+**Rule:** `components/` is a parallel engineering deliverable. New components go into storybook.html first, then get extracted to `components/` separately.
 
-## GitHub - Two-remote setup
+---
+
+## GitHub - Single remote (personal project)
 
 | Remote | Repo | Purpose |
 |--------|------|---------|
-| `origin` | `https://github.com/jimjimjimmy/tetris.git` | Personal dev - push here first |
-
-### Initial setup (one time, already done)
-```bash
-git remote add origin https://github.com/jimjimjimmy/tetris.git
-```
+| `origin` | `https://github.com/jimjimjimmy/tetris.git` | Personal dev - only remote |
 
 ### Push commands (two-account setup - ALWAYS use explicit token)
 ```bash
@@ -68,15 +144,9 @@ GITHUB_TOKEN=$(gh auth token --hostname github.com -u jimjimjimmy 2>/dev/null)
 git push "https://jimjimjimmy:${GITHUB_TOKEN}@github.com/jimjimjimmy/tetris.git" main
 ```
 
-> Note: this machine has two GitHub accounts (jimjimjimmy personal + JimmyChe_floqast work).
+> This machine has two GitHub accounts (jimjimjimmy personal + JimmyChe_floqast work).
 > Always use the explicit token form above or git will use the wrong account and get a 403.
-
-### Ongoing workflow
-```bash
-git add .
-git commit -m "your message"
-# then use the explicit push command above
-```
+> Tetris is personal -- Gandalf CAN push directly. No freeradicals-studio remote needed.
 
 ---
 
@@ -88,10 +158,14 @@ git commit -m "your message"
 - Inter font (Google Fonts)
 - `<script type="text/babel">` - all code is JSX inside this single tag
 
-### Design tokens - T object (fill in from Figma)
+### Design tokens - T object
 ```js
 const T = {
-  // Populate from Figma once design file is established
+  bg:    "#f5f5f5",
+  white: "#ffffff",
+  black: "#1a1a1a",
+  gray:  "#999999",
+  // Expand as the color palette is decided
 };
 ```
 
@@ -143,16 +217,15 @@ function useReveal(duration) {
 - Never simplify. The design is the thinking.
 - Always screenshot after visual changes - never say "done" without visual proof.
 - User uses Brave browser. Control Chrome MCP works with Brave.
-- Before building any component: read exact type specs from Figma info panel for every
-  text element (fontSize, fontWeight, lineHeight, letterSpacing). No guessing.
 
 ---
 
 ## Cross-machine collaboration (MacFQ + Gandalf)
 
-- **MacFQ** = FloQast MacBook (Jimmy's work machine)
-- **Gandalf** = other machine
-- Files live in Dropbox: `~/Library/CloudStorage/Dropbox/04 Projects/AI Shared/Tetris/`
+- **MacFQ** = Jimmy's FloQast MacBook. Has access to FQ GitHub (FloQastInc repos) and freeradicals-studio. All FQ-related pushes happen here only.
+- **Gandalf** = personal machine. Has access to jimjimjimmy personal GitHub only. No FQ GitHub access.
+- Tetris is a personal project - Gandalf CAN push to jimjimjimmy/tetris directly.
+- Files live in Dropbox: `~/Dropbox/04 Projects/AI Shared/Tetris/`
 - Dropbox handles live file sync between machines
 - Git is the source of truth for committed state - push at end of every session
 
