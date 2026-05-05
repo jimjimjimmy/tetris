@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Tetris -- Component Storybook</title>
+  <title>Tetris</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
   <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
@@ -74,46 +74,51 @@ function useReveal(duration = 800) {
 }
 
 // ============================================================
-// TETRIS -- LAYOUT CONSTANTS
-// Everything is derived from the 852px screen height so
-// the layout is pixel-perfect without guessing CSS heights.
+// LAYOUT CONSTANTS
 //
 // Screen: 393 x 852
-// Each control zone: CTRL_H px (8 top margin + label + gap + buttons + gap + DROP)
-// Each board viewport: VIEWPORT_H rows * CELL px
-// Center divider: DIVIDER_H px
+// P1 gets 75% of visual board space, P2 gets 25%.
+// P1_VIEWPORT_H = 18 rows, P2_VIEWPORT_H = 6 rows (3:1 ratio).
+// CELL = 30 so: (18+6)*30 + 16 divider + 112 P1 controls = 848px.
 //
-// Math: 2*CTRL_H + 2*VIEWPORT_H*CELL + DIVIDER_H = 852
-//       CELL = floor((852 - 2*CTRL_H - DIVIDER_H) / (2*VIEWPORT_H))
+// Layout (top to bottom):
+//   P2 viewport: 6 * 30 = 180px   (P2_VP_Y = 0)
+//   Divider:           16px        (DIV_Y = 180)
+//   P1 viewport: 18 * 30 = 540px   (P1_VP_Y = 196)
+//   P1 controls:      112px        (P1_CTRL_Y = 736)
+//   Total: 848px (fits 852)
 // ============================================================
 
-const CTRL_H    = 112;   // height of each control zone (px)
-const DIVIDER_H = 16;    // center divider height (px)
-const VIEWPORT_H = 12;   // rows visible per player
-const PEEK      = 2;     // rows of opponent territory visible
-const TICK_MS   = 550;
-const WIND_EVERY = 4;
+const CTRL_H        = 112;   // P1 control zone height
+const DIVIDER_H     = 16;
+const P1_VIEWPORT_H = 18;    // rows P1 sees (~75%)
+const P2_VIEWPORT_H = 6;     // rows P2 sees (~25%)
+const PEEK          = 2;     // rows of opponent territory visible in each viewport
+const TICK_MS       = 550;
+const WIND_EVERY    = 4;
+const AI_PERIOD     = 2;     // P2 makes an AI move every N ticks
 
-// CELL chosen so 2 viewports + 2 control zones + divider = 852
-// (852 - 2*112 - 16) / (2*12) = 612/24 = 25.5 -> floor = 25
-const CELL      = 25;
+const CELL      = 30;
 const COLS      = 10;
 const ROWS      = 20;
 
-// Fixed y-positions for each layout zone
-const P2_CTRL_Y = 0;
-const P2_VP_Y   = CTRL_H;                            // 112
-const DIV_Y     = P2_VP_Y + VIEWPORT_H * CELL;       // 412
-const P1_VP_Y   = DIV_Y + DIVIDER_H;                 // 428
-const P1_CTRL_Y = P1_VP_Y + VIEWPORT_H * CELL;       // 728
-// Total: 728 + 112 = 840 (12px breathing room at bottom)
+// P2 spawns near the far end of its visible viewport so it's always on screen.
+// With P2_VIEWPORT_H=6 and PEEK=2, P2 sees rows [boundary-2 .. boundary+4).
+// Spawn at boundary+3 puts the piece at the far (non-boundary) edge of P2's view.
+function p2SpawnY(boundary) {
+  return Math.min(ROWS - 2, boundary + P2_VIEWPORT_H - PEEK - 1);
+}
 
-const BTN_H     = 37;   // control button height
-// Check: CTRL_H = 8 (margin) + 12 (label) + 5 (gap) + BTN_H + 5 (gap) + BTN_H + 5 (pad)
-//                = 8 + 12 + 5 + 37 + 5 + 37 + 8 = 112 ✓
+const BOARD_PX   = COLS * CELL;            // 300
+const BOARD_LEFT = (393 - BOARD_PX) / 2;  // 46.5
 
-const BOARD_PX  = COLS * CELL;                        // 250
-const BOARD_LEFT = (393 - BOARD_PX) / 2;             // 71.5
+const P2_VP_Y   = 0;
+const DIV_Y     = P2_VP_Y + P2_VIEWPORT_H * CELL;   // 180
+const P1_VP_Y   = DIV_Y + DIVIDER_H;                // 196
+const P1_CTRL_Y = P1_VP_Y + P1_VIEWPORT_H * CELL;   // 736
+
+const BTN_H     = 37;
+// CTRL_H check: 8 + 12 + 5 + BTN_H + 5 + BTN_H + 8 = 8+12+5+37+5+37+8 = 112 ✓
 
 const PIECE_TYPES = ["I","O","T","S","Z","J","L"];
 
@@ -168,7 +173,7 @@ const PIECE_COLORS = {
 };
 
 // ============================================================
-// TETRIS -- PURE HELPERS
+// PURE HELPERS
 // ============================================================
 
 function randPiece() {
@@ -205,7 +210,6 @@ function lockPiece(board, cells, color) {
 // Clear filled rows from player's territory.
 // P1: empties added at top; boundary shifts down (P2 loses rows).
 // P2: empties added at bottom; boundary shifts up (P1 loses rows).
-// Returns [newBoard, rowsCleared].
 function clearRows(board, boundary, player) {
   const next = board.map(row => [...row]);
   if (player === 1) {
@@ -223,30 +227,33 @@ function clearRows(board, boundary, player) {
   }
 }
 
-// P1 viewport: battle zone (boundary) sits near the BOTTOM of P1's view.
-// P1 sees most of their own territory above the boundary + PEEK rows below.
+// P1 viewport: boundary near the BOTTOM of P1's view (battle zone is the danger zone).
+// P1 sees: their territory above + PEEK rows into P2 below.
+// startRow may be negative -- BoardViewport renders those as empty dark cells (above-board padding).
 function getP1ViewRange(boundary) {
   const endRow   = Math.min(ROWS, boundary + PEEK);
-  const startRow = Math.max(0, endRow - VIEWPORT_H);
+  const startRow = endRow - P1_VIEWPORT_H;  // intentionally allows negative
   return [startRow, endRow];
 }
 
-// P2 viewport: battle zone (boundary) sits near the TOP of P2's view.
-// P2 sees PEEK rows above the boundary + most of their own territory below.
+// P2 viewport (rendered with scaleY(-1)): boundary near the BOTTOM of P2's visual zone.
+// P2 sees: their territory at the top (pieces spawn here), boundary at the bottom.
 function getP2ViewRange(boundary) {
   const startRow = Math.max(0, boundary - PEEK);
-  const endRow   = Math.min(ROWS, startRow + VIEWPORT_H);
+  const endRow   = Math.min(ROWS, startRow + P2_VIEWPORT_H);
   return [startRow, endRow];
 }
 
 function makeInitState() {
+  const boundary = 10;
   return {
     board:    emptyBoard(),
-    boundary: 10,
+    boundary,
     wind:     Math.random() < 0.5 ? -1 : 1,
     windTick: 0,
+    aiTick:   0,
     p1:       { type: randPiece(), rot: 0, x: 3, y: 0 },
-    p2:       { type: randPiece(), rot: 0, x: 3, y: ROWS - 4 },
+    p2:       { type: randPiece(), rot: 0, x: 3, y: p2SpawnY(boundary) },
     p1Next:   randPiece(),
     p2Next:   randPiece(),
     phase:    "playing",
@@ -277,7 +284,7 @@ function BoardViewport({ grid, boundary, startRow, endRow }) {
       {Array.from({length: visRows}, (_, ri) => {
         const r = startRow + ri;
         return Array.from({length: COLS}, (_, c) => {
-          const color = grid[r][c];
+          const color = (r >= 0 && r < ROWS) ? grid[r][c] : null;
           const inP1  = r < boundary;
           return (
             <div key={ri * COLS + c} style={{
@@ -309,14 +316,7 @@ function BoardViewport({ grid, boundary, startRow, endRow }) {
 // ============================================================
 // CONTROL PAD
 // Height breakdown (must sum to CTRL_H=112):
-//   8px top margin
-//   12px label
-//   5px gap
-//   BTN_H=37px (direction row)
-//   5px gap
-//   BTN_H=37px (DROP)
-//   8px bottom margin
-//   Total: 8+12+5+37+5+37+8 = 112 ✓
+//   8px top margin + 12px label + 5px gap + 37px row + 5px gap + 37px DROP + 8px pad = 112
 // ============================================================
 
 function ControlPad({ onLeft, onRight, onRotate, onDrop, label }) {
@@ -367,6 +367,8 @@ function ControlPad({ onLeft, onRight, onRotate, onDrop, label }) {
 
 // ============================================================
 // TETRIS GAME
+// Single-player test mode: P1 uses arrow keys + on-screen buttons.
+// P2 is auto-played by a simple AI so P1 has an opponent.
 // ============================================================
 
 function TetrisGame() {
@@ -387,29 +389,14 @@ function TetrisGame() {
     });
   }, []);
 
-  const moveP2 = useCallback((dx, dy, rotate) => {
-    setState(s => {
-      if (s.phase !== "playing") return s;
-      const { board, boundary, p2 } = s;
-      if (rotate) {
-        const newRot = (p2.rot + 1) % 4;
-        const cells  = getCells(p2.type, newRot, p2.x, p2.y);
-        return isValid(cells, board, boundary, 2) ? {...s, p2: {...p2, rot: newRot}} : s;
-      }
-      const cells = getCells(p2.type, p2.rot, p2.x + dx, p2.y + dy);
-      return isValid(cells, board, boundary, 2)
-        ? {...s, p2: {...p2, x: p2.x + dx, y: p2.y + dy}} : s;
-    });
-  }, []);
-
-  // Gravity / buoyancy tick
+  // Gravity / buoyancy tick + P2 AI
   useEffect(() => {
     const id = setInterval(() => {
       setState(s => {
         if (s.phase !== "playing") return s;
-        let { board, boundary, wind, windTick, p1, p2, p1Next, p2Next } = s;
+        let { board, boundary, wind, windTick, aiTick, p1, p2, p1Next, p2Next } = s;
 
-        // P1 falls down
+        // -- P1 falls down
         if (isValid(getCells(p1.type, p1.rot, p1.x, p1.y + 1), board, boundary, 1)) {
           p1 = {...p1, y: p1.y + 1};
         } else {
@@ -419,25 +406,25 @@ function TetrisGame() {
           p1 = { type: p1Next, rot: 0, x: 3, y: 0 };
           p1Next = randPiece();
           if (!isValid(getCells(p1.type, p1.rot, p1.x, p1.y), board, boundary, 1)) {
-            return {...s, board, boundary, p1, p2, p1Next, p2Next, phase: "over", winner: 2};
+            return {...s, board, boundary, p1, p2, p1Next, p2Next, aiTick, phase: "over", winner: 2};
           }
         }
 
-        // P2 rises up (buoyancy)
+        // -- P2 rises up (buoyancy)
         if (isValid(getCells(p2.type, p2.rot, p2.x, p2.y - 1), board, boundary, 2)) {
           p2 = {...p2, y: p2.y - 1};
         } else {
           board = lockPiece(board, getCells(p2.type, p2.rot, p2.x, p2.y), PIECE_COLORS[p2.type]);
           const [b2, n2] = clearRows(board, boundary, 2);
           board = b2; boundary -= n2;
-          p2 = { type: p2Next, rot: 0, x: 3, y: ROWS - 4 };
+          p2 = { type: p2Next, rot: 0, x: 3, y: p2SpawnY(boundary) };
           p2Next = randPiece();
           if (!isValid(getCells(p2.type, p2.rot, p2.x, p2.y), board, boundary, 2)) {
-            return {...s, board, boundary, p1, p2, p1Next, p2Next, phase: "over", winner: 1};
+            return {...s, board, boundary, p1, p2, p1Next, p2Next, aiTick, phase: "over", winner: 1};
           }
         }
 
-        // Wind nudge every WIND_EVERY ticks
+        // -- Wind nudge every WIND_EVERY ticks
         windTick += 1;
         if (windTick >= WIND_EVERY) {
           windTick = 0;
@@ -447,18 +434,35 @@ function TetrisGame() {
             p2 = {...p2, x: p2.x + wind};
         }
 
-        // Boundary win check
+        // -- P2 AI: random move/rotate every AI_PERIOD ticks
+        aiTick += 1;
+        if (aiTick % AI_PERIOD === 0) {
+          const r = Math.random();
+          const canL = isValid(getCells(p2.type, p2.rot, p2.x - 1, p2.y), board, boundary, 2);
+          const canR = isValid(getCells(p2.type, p2.rot, p2.x + 1, p2.y), board, boundary, 2);
+          if (r < 0.3 && canL) {
+            p2 = {...p2, x: p2.x - 1};
+          } else if (r < 0.6 && canR) {
+            p2 = {...p2, x: p2.x + 1};
+          } else if (r < 0.75) {
+            const nr = (p2.rot + 1) % 4;
+            if (isValid(getCells(p2.type, nr, p2.x, p2.y), board, boundary, 2))
+              p2 = {...p2, rot: nr};
+          }
+        }
+
+        // -- Boundary win check
         let phase = "playing", winner = null;
         if (boundary >= ROWS) { phase = "over"; winner = 1; }
         if (boundary <= 0)    { phase = "over"; winner = 2; }
 
-        return { board, boundary, wind, windTick, p1, p2, p1Next, p2Next, phase, winner };
+        return { board, boundary, wind, windTick, aiTick, p1, p2, p1Next, p2Next, phase, winner };
       });
     }, TICK_MS);
     return () => clearInterval(id);
   }, []);
 
-  // Keyboard controls for desktop testing
+  // Keyboard controls -- P1 only (arrow keys). WASD disabled in single-player mode.
   useEffect(() => {
     const onKey = (e) => {
       if (["ArrowLeft","ArrowRight","ArrowUp","ArrowDown"].includes(e.key)) e.preventDefault();
@@ -466,14 +470,10 @@ function TetrisGame() {
       if (e.key === "ArrowRight") moveP1( 1, 0, false);
       if (e.key === "ArrowUp")    moveP1( 0, 0, true);
       if (e.key === "ArrowDown")  moveP1( 0, 1, false);
-      if (e.key === "a")          moveP2(-1, 0, false);
-      if (e.key === "d")          moveP2( 1, 0, false);
-      if (e.key === "w")          moveP2( 0, 0, true);
-      if (e.key === "s")          moveP2( 0,-1, false);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [moveP1, moveP2]);
+  }, [moveP1]);
 
   const { board, boundary, wind, p1, p2, phase, winner } = state;
 
@@ -500,22 +500,11 @@ function TetrisGame() {
       WebkitUserSelect: "none",
     }}>
 
-      {/* P2 controls */}
+      {/* P2 board viewport (scaleY -1 so boundary appears at visual bottom, pieces spawn at visual top) */}
       <div style={{
-        position: "absolute", top: P2_CTRL_Y + 8, left: 0, right: 0,
-        display: "flex", justifyContent: "center",
+        position: "absolute", top: P2_VP_Y, left: BOARD_LEFT,
+        transform: "scaleY(-1)",
       }}>
-        <ControlPad
-          label="P2  WASD"
-          onLeft={()   => moveP2(-1, 0, false)}
-          onRight={()  => moveP2( 1, 0, false)}
-          onRotate={()  => moveP2( 0, 0, true)}
-          onDrop={()   => moveP2( 0,-1, false)}
-        />
-      </div>
-
-      {/* P2 board viewport -- battle zone near TOP of view */}
-      <div style={{position: "absolute", top: P2_VP_Y, left: BOARD_LEFT}}>
         <BoardViewport
           grid={grid} boundary={boundary}
           startRow={p2Start} endRow={p2End}
@@ -538,7 +527,7 @@ function TetrisGame() {
         <span>{"P2  " + (ROWS - boundary) + "R"}</span>
       </div>
 
-      {/* P1 board viewport -- battle zone near BOTTOM of view */}
+      {/* P1 board viewport -- battle zone near TOP of view, territory stretches down */}
       <div style={{position: "absolute", top: P1_VP_Y, left: BOARD_LEFT}}>
         <BoardViewport
           grid={grid} boundary={boundary}
@@ -553,10 +542,10 @@ function TetrisGame() {
       }}>
         <ControlPad
           label="P1  ARROWS"
-          onLeft={()  => moveP1(-1, 0, false)}
+          onLeft={()   => moveP1(-1, 0, false)}
           onRight={()  => moveP1( 1, 0, false)}
           onRotate={()  => moveP1( 0, 0, true)}
-          onDrop={()  => moveP1( 0, 1, false)}
+          onDrop={()   => moveP1( 0, 1, false)}
         />
       </div>
 
@@ -623,7 +612,7 @@ const SECTIONS = [
       {
         id: "TetrisGame",
         label: "Tetris Game",
-        desc: "Split viewports. P1 (arrows) sees their zone + " + PEEK + "-row peek into P2. P2 (WASD) sees their zone + " + PEEK + "-row peek into P1. Boundary creeping in = danger.",
+        desc: "Single-player test mode. P1 (arrows) gets 75% of the view. P2 auto-plays. Boundary line moves as rows are cleared.",
         component: TetrisGame,
       },
     ],

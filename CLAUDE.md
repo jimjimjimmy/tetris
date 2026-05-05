@@ -1,11 +1,11 @@
-# Tetris — Project Context
+# Tetris - Project Context
 
 <!--
   IMPORTANT: KEEP THIS FILE CURRENT
   Whichever machine (MacFQ or Gandalf) adds a component, updates a file,
   or makes a structural change: update this file before ending the session.
   Both machines depend on this as the single source of truth.
-  Last updated: 2026-05-04 — Gandalf (v1 game prototype)
+  Last updated: 2026-05-05 - MacFQ (viewport ratio, P2 orientation, single-player mode)
 -->
 
 ## Required reading before building
@@ -30,11 +30,11 @@ No bundler, no build step. Single HTML file rendered by Babel CDN in the browser
 ## Key file
 
 ```
-preview/storybook.html   <- THE file. All components live here.
+preview/index.html   <- THE file. All components live here.
                             Never create separate standalone preview files.
 ```
 
-Live URL: https://jimjimjimmy.github.io/tetris/preview/storybook.html
+Live URL: https://jimjimjimmy.github.io/tetris/preview/index.html
 
 ---
 
@@ -110,7 +110,7 @@ Wind indicator: planned for v2 (not in v1).
 
 | Layer | Tech |
 |-------|------|
-| v1 | React 18 CDN + Babel Standalone 7.23.9, single storybook.html |
+| v1 | React 18 CDN + Babel Standalone 7.23.9, single index.html |
 | v2 | WebSockets for real-time multiplayer |
 | v3 | Capacitor for iOS App Store wrap |
 
@@ -119,7 +119,7 @@ Wind indicator: planned for v2 (not in v1).
 ## Folder structure
 
 ```
-preview/storybook.html      <- storybook (design QA)
+preview/index.html      <- storybook (design QA)
 components/                 <- engineering deliverables (.jsx per component)
   tokens.js                   design tokens as JS exports
 assets/                     <- any static assets (none for v1, ASCII only)
@@ -128,7 +128,7 @@ COMPONENT-INDEX.md          <- engineering reference with component notes
 CLAUDE.md                   <- this file
 ```
 
-**Rule:** `components/` is a parallel engineering deliverable. New components go into storybook.html first, then get extracted to `components/` separately.
+**Rule:** `components/` is a parallel engineering deliverable. New components go into index.html first, then get extracted to `components/` separately.
 
 ---
 
@@ -231,7 +231,7 @@ function useReveal(duration) {
 
 ### Handoff rules
 1. **Update this CLAUDE.md** whenever you add a component, rename a file, or change the architecture.
-2. **Never create standalone HTML preview files** - all components go into storybook.html.
+2. **Never create standalone HTML preview files** - all components go into index.html.
 3. **Push to GitHub** at the end of every session so both machines are on the same commit.
 4. **Don't assume the other machine's session history** - write CLAUDE.md as current facts.
 
@@ -240,7 +240,11 @@ function useReveal(duration) {
 ## Current components
 
 ### Game
-- `TetrisGame` - full playable prototype. P1 arrow keys (falls down), P2 WASD (floats up). Wind drifts both pieces every 4 ticks. Clearing rows moves the boundary, stealing opponent territory. Win = push opponent to 0 rows. Game-over overlay with REMATCH.
+- `TetrisGame` - single-player test mode. P1 arrow keys + on-screen controls (falls down). P2 auto-plays (AI random moves). Wind every 4 ticks. Clearing rows moves boundary. Win = push opponent to 0 rows. Game-over overlay with REMATCH.
+  - Layout: P1 gets 75% of board height (18 rows * CELL=30px = 540px), P2 gets 25% (6 rows = 180px). No P2 control zone.
+  - P2 viewport rendered with scaleY(-1): boundary at visual bottom, pieces spawn at visual top.
+  - P1 viewport: boundary near visual bottom (startRow may be negative for above-board padding).
+  - CELL=30, BOARD_PX=300, P2_VP_Y=0, DIV_Y=180, P1_VP_Y=196, P1_CTRL_Y=736.
 
 ### Components
 - `ControlPad` - semi-transparent on-screen buttons: [ < ] [ o ] [ > ] with DROP below. Uses onPointerDown for mobile. Props: onLeft, onRight, onRotate, onDrop, label.
