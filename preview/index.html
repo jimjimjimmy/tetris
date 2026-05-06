@@ -101,19 +101,15 @@ function useReveal(duration = 800) {
 // ============================================================
 // LAYOUT CONSTANTS
 //
-// Screen: 393 x 852
+// Screen: 393px wide
 // Layout (top to bottom):
-//   P2 viewport: 6*30  = 180px  (P2_VP_Y = 0)
-//   Divider:           16px     (DIV_Y = 180)
-//   P1 viewport: 20*30 = 600px  (P1_VP_Y = 196)  -- controls overlaid inside
-//   NEXT strip:        78px     (NEXT_Y = 796)
-//   Total: 874px
+//   P1 viewport: 20*30 = 600px  (P1_VP_Y = 0)  -- controls overlaid inside
+//   NEXT strip:        78px     (NEXT_Y = 600)
+//   Total: 678px
 // ============================================================
 
-const CTRL_H        = 112;
-const DIVIDER_H     = 16;
 const P1_VIEWPORT_H = 20;   // rows P1 sees
-const P2_VIEWPORT_H = 6;    // rows P2 sees
+const P2_VIEWPORT_H = 6;    // rows P2 sees (game logic only)
 const PEEK          = 2;    // rows of opponent territory visible in each viewport
 const TICK_MS       = 550;
 const WIND_EVERY    = 4;
@@ -128,11 +124,9 @@ const P1_DEATH_ROW = ROWS - 5; // white dashed line; P1 loses if stack reaches h
 const BOARD_PX   = COLS * CELL;            // 300
 const BOARD_LEFT = (393 - BOARD_PX) / 2;  // 46.5
 
-const P2_VP_Y   = 0;
-const DIV_Y     = P2_VP_Y + P2_VIEWPORT_H * CELL;   // 180
-const P1_VP_Y   = DIV_Y + DIVIDER_H;                // 196
-const NEXT_Y    = P1_VP_Y + P1_VIEWPORT_H * CELL;   // 796
-const GAME_H    = NEXT_Y + 78;                       // 874
+const P1_VP_Y   = 0;
+const NEXT_Y    = P1_VP_Y + P1_VIEWPORT_H * CELL;   // 600
+const GAME_H    = NEXT_Y + 78;                       // 678
 
 // Controls overlaid inside P1 viewport (offsets from P1_VP_Y)
 const CTRL_DROP_Y = 390;   // ^ button (65% of 600px)
@@ -341,17 +335,6 @@ function BoardViewport({ grid, boundary, startRow, endRow, deathRow }) {
         });
       })}
 
-      {boundaryScreenY !== null && (
-        <div style={{
-          position: "absolute", left: 0, right: 0,
-          top: boundaryScreenY, height: 2,
-          background: "#ff3333",
-          boxShadow: "0 0 8px #ff3333",
-          zIndex: 10,
-          pointerEvents: "none",
-        }} />
-      )}
-
       {deathScreenY !== null && (
         <div style={{
           position: "absolute", left: 0, right: 0,
@@ -552,7 +535,7 @@ function TetrisGame() {
     return () => window.removeEventListener("keydown", onKey);
   }, [moveP1]);
 
-  const { board, boundary, wind, p1, p2, phase, winner } = state;
+  const { board, boundary, p1, p2, phase, winner } = state;
 
   // Overlay active pieces onto render grid
   const grid = board.map(row => [...row]);
@@ -564,7 +547,6 @@ function TetrisGame() {
   });
 
   const [p1Start, p1End] = getP1ViewRange(boundary);
-  const [p2Start, p2End] = getP2ViewRange(boundary);
 
   return (
     <div style={{
@@ -576,30 +558,6 @@ function TetrisGame() {
       userSelect: "none",
       WebkitUserSelect: "none",
     }}>
-
-      {/* P2 viewport -- boundary at visual bottom edge, pieces float UP and off-screen */}
-      <div style={{position: "absolute", top: P2_VP_Y, left: BOARD_LEFT}}>
-        <BoardViewport
-          grid={grid} boundary={boundary}
-          startRow={p2Start} endRow={p2End}
-        />
-      </div>
-
-      {/* Center divider: territory counts + wind */}
-      <div style={{
-        position: "absolute", top: DIV_Y, left: 0, right: 0,
-        height: DIVIDER_H,
-        background: "#050505",
-        borderTop: "1px solid #1a1a1a", borderBottom: "1px solid #1a1a1a",
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "0 " + Math.round(BOARD_LEFT) + "px",
-        fontSize: 9, letterSpacing: 1,
-        color: "rgba(255,255,255,0.25)",
-      }}>
-        <span>{"P2  " + boundary + "R"}</span>
-        <span>{"WIND  " + (wind > 0 ? ">>>" : "<<<")}</span>
-        <span>{"P1  " + (ROWS - boundary) + "R"}</span>
-      </div>
 
       {/* P1 viewport -- boundary near TOP, P1 territory stretches down */}
       <div style={{position: "absolute", top: P1_VP_Y, left: BOARD_LEFT}}>
