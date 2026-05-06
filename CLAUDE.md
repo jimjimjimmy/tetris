@@ -5,7 +5,7 @@
   Whichever machine (MacFQ or Gandalf) adds a component, updates a file,
   or makes a structural change: update this file before ending the session.
   Both machines depend on this as the single source of truth.
-  Last updated: 2026-05-05 - MacFQ (P1 floats up, P2 falls down, correct symmetric physics)
+  Last updated: 2026-05-06 - MacFQ (P1 HUD overlay: ∧ drop + < ↺ > controls overlaid on board, NEXT piece strip, death line, pause)
 -->
 
 ## Required reading before building
@@ -240,15 +240,19 @@ function useReveal(duration) {
 ## Current components
 
 ### Game
-- `TetrisGame` - single-player test mode. P1 arrow keys + on-screen controls (floats UP toward boundary). P2 auto-plays (AI random moves, falls DOWN toward boundary). Wind every 4 ticks. Clearing rows moves boundary. Win = push opponent to 0 rows. Game-over overlay with REMATCH.
-  - Layout: P1 gets 75% of board height (18 rows * CELL=30px = 540px), P2 gets 25% (6 rows = 180px). No P2 control zone.
-  - No scaleY flip - physics are real. P1 territory = rows boundary..ROWS-1. P2 territory = rows 0..boundary-1.
-  - P1 spawns at row ROWS-4=16 (bottom), floats UP (y-1 per tick), stacks near boundary. P1 viewport: boundary near visual top (startRow = boundary - PEEK).
-  - P2 spawns at row 0 (top), falls DOWN (y+1 per tick), stacks near boundary. P2 viewport: boundary near visual bottom (endRow = boundary + PEEK).
-  - CELL=30, BOARD_PX=300, P2_VP_Y=0, DIV_Y=180, P1_VP_Y=196, P1_CTRL_Y=736.
+- `TetrisGame` - single-player test mode (P2_PAUSED=true). P1 arrow keys + on-screen HUD controls. P2 frozen. Wind every 4 ticks. Clearing rows moves boundary. Win = push opponent to 0 rows, or P1 stack reaches death row. Game-over overlay with REMATCH. Pause with "p" key.
+  - ROWS=30, COLS=10, CELL=30, BOARD_PX=300. Initial boundary=12. P1_DEATH_ROW=25.
+  - P1 viewport: 20 rows, startRow = boundary-PEEK. P2 viewport: 6 rows, endRow = boundary+PEEK.
+  - P1 territory = rows boundary..ROWS-1. P2 territory = rows 0..boundary-1.
+  - P1 spawns at row ROWS-4=26 (bottom), floats UP (y-1 per tick), stacks near boundary.
+  - P2 spawns at row 0 (top), falls DOWN (y+1 per tick), stacks near boundary.
+  - Layout constants: P2_VP_Y=0, DIV_Y=180, P1_VP_Y=196, NEXT_Y=796, GAME_H=874.
+  - HUD: ∧ overlaid at P1_VP_Y+390, < ↺ > row at P1_VP_Y+450. NEXT piece strip at NEXT_Y (78px, #080808).
+  - Death line: white dashed, drawn at P1_DEATH_ROW position inside P1 BoardViewport.
 
 ### Components
-- `ControlPad` - semi-transparent on-screen buttons: [ < ] [ o ] [ > ] with DROP below. Uses onPointerDown for mobile. Props: onLeft, onRight, onRotate, onDrop, label.
+- `NextPieceDisplay` - renders upcoming P1 piece using 18px cells. Shows "NEXT" label above.
+- `CtrlBtn` - minimal 56x56 touch button, no border/background. Props: children, onPress.
 
 ---
 

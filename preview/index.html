@@ -102,30 +102,28 @@ function useReveal(duration = 800) {
 // LAYOUT CONSTANTS
 //
 // Screen: 393 x 852
-// P1 gets 75% of visual board space, P2 gets 25%.
-// P1_VIEWPORT_H = 18 rows, P2_VIEWPORT_H = 6 rows (3:1 ratio).
-// CELL = 30 so: (18+6)*30 + 16 divider + 112 P1 controls = 848px.
-//
 // Layout (top to bottom):
-//   P2 viewport: 6*30 = 180px  (P2_VP_Y = 0)
-//   Divider:          16px     (DIV_Y = 180)
-//   P1 viewport: 18*30 = 540px  (P1_VP_Y = 196)
-//   P1 controls:     112px     (P1_CTRL_Y = 736)
-//   Total: 848px
+//   P2 viewport: 6*30  = 180px  (P2_VP_Y = 0)
+//   Divider:           16px     (DIV_Y = 180)
+//   P1 viewport: 20*30 = 600px  (P1_VP_Y = 196)  -- controls overlaid inside
+//   NEXT strip:        78px     (NEXT_Y = 796)
+//   Total: 874px
 // ============================================================
 
 const CTRL_H        = 112;
 const DIVIDER_H     = 16;
-const P1_VIEWPORT_H = 18;   // rows P1 sees (~75%)
-const P2_VIEWPORT_H = 6;    // rows P2 sees (~25%)
+const P1_VIEWPORT_H = 20;   // rows P1 sees
+const P2_VIEWPORT_H = 6;    // rows P2 sees
 const PEEK          = 2;    // rows of opponent territory visible in each viewport
 const TICK_MS       = 550;
 const WIND_EVERY    = 4;
 const AI_PERIOD     = 2;    // P2 makes an AI move every N ticks
+const P2_PAUSED     = true; // DEV: freeze P2 to focus on P1 experience
 
 const CELL      = 30;
 const COLS      = 10;
-const ROWS      = 20;
+const ROWS      = 30;
+const P1_DEATH_ROW = ROWS - 5; // white dashed line; P1 loses if stack reaches here
 
 const BOARD_PX   = COLS * CELL;            // 300
 const BOARD_LEFT = (393 - BOARD_PX) / 2;  // 46.5
@@ -133,7 +131,12 @@ const BOARD_LEFT = (393 - BOARD_PX) / 2;  // 46.5
 const P2_VP_Y   = 0;
 const DIV_Y     = P2_VP_Y + P2_VIEWPORT_H * CELL;   // 180
 const P1_VP_Y   = DIV_Y + DIVIDER_H;                // 196
-const P1_CTRL_Y = P1_VP_Y + P1_VIEWPORT_H * CELL;   // 736
+const NEXT_Y    = P1_VP_Y + P1_VIEWPORT_H * CELL;   // 796
+const GAME_H    = NEXT_Y + 78;                       // 874
+
+// Controls overlaid inside P1 viewport (offsets from P1_VP_Y)
+const CTRL_DROP_Y = 390;   // ^ button (65% of 600px)
+const CTRL_ROW_Y  = 450;   // < ↺ > row (75% of 600px)
 
 const BTN_H = 37;
 // CTRL_H = 8 + 12 + 5 + 37 + 5 + 37 + 8 = 112 ✓
@@ -278,7 +281,7 @@ function getP2ViewRange(boundary) {
 }
 
 function makeInitState() {
-  const boundary = 10;
+  const boundary = 12;
   return {
     board:    emptyBoard(),
     boundary,
@@ -300,12 +303,17 @@ function makeInitState() {
 // Rows outside [0, ROWS) render as empty dark cells (padding).
 // ============================================================
 
-function BoardViewport({ grid, boundary, startRow, endRow }) {
+function BoardViewport({ grid, boundary, startRow, endRow, deathRow }) {
   const visRows = endRow - startRow;
 
-  // Red boundary line: at the row-boundary screen position if visible in this range
+  // Red boundary line
   const boundaryScreenY = (boundary > startRow && boundary <= endRow)
     ? (boundary - startRow) * CELL - 1
+    : null;
+
+  // White dashed death line (P1 only)
+  const deathScreenY = (deathRow !== undefined && deathRow >= startRow && deathRow < endRow)
+    ? (deathRow - startRow) * CELL
     : null;
 
   return (
@@ -343,59 +351,81 @@ function BoardViewport({ grid, boundary, startRow, endRow }) {
           pointerEvents: "none",
         }} />
       )}
+
+      {deathScreenY !== null && (
+        <div style={{
+          position: "absolute", left: 0, right: 0,
+          top: deathScreenY, height: 1,
+          backgroundImage: "repeating-linear-gradient(to right, rgba(255,255,255,0.5) 0px, rgba(255,255,255,0.5) 6px, transparent 6px, transparent 12px)",
+          zIndex: 10,
+          pointerEvents: "none",
+        }} />
+      )}
     </div>
   );
 }
 
 // ============================================================
-// CONTROL PAD
-// Height breakdown (must sum to CTRL_H=112):
-//   8px top margin + 12px label + 5px gap + 37px row + 5px gap + 37px DROP + 8px pad = 112
+// NEXT PIECE DISPLAY
+// Renders the upcoming piece in a small preview grid.
 // ============================================================
 
-function ControlPad({ onLeft, onRight, onRotate, onDrop, label }) {
-  const btn = (content, handler, wide) => (
-    <div
-      onPointerDown={(e) => { e.preventDefault(); handler(); }}
-      style={{
-        width: wide ? 90 : 67, height: BTN_H,
-        background: "rgba(255,255,255,0.07)",
-        border: "1px solid rgba(255,255,255,0.12)",
-        borderRadius: 6,
-        color: "rgba(255,255,255,0.65)",
-        fontSize: wide ? 10 : 15,
-        fontWeight: 600,
-        fontFamily: "monospace",
-        letterSpacing: wide ? 2 : 0,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        userSelect: "none",
-        WebkitUserSelect: "none",
-        touchAction: "none",
-        cursor: "pointer",
-      }}
-    >{content}</div>
-  );
+function NextPieceDisplay({ type }) {
+  const cells = SHAPES[type][0]; // always show rot=0
+  const color = PIECE_COLORS[type];
+  // Bounding box
+  const cs = cells.map(([c]) => c);
+  const rs = cells.map(([,r]) => r);
+  const minC = Math.min(...cs), maxC = Math.max(...cs);
+  const minR = Math.min(...rs), maxR = Math.max(...rs);
+  const w = maxC - minC + 1, h = maxR - minR + 1;
+  const S = 18; // cell size for preview
+  const GAP = 2;
 
   return (
     <div style={{
-      display: "flex", flexDirection: "column",
-      alignItems: "center", gap: 5,
+      display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
     }}>
       <div style={{
-        height: 12,
-        display: "flex", alignItems: "center",
-        color: "rgba(255,255,255,0.18)", fontSize: 9,
-        fontFamily: "monospace", letterSpacing: 2,
+        fontSize: 9, letterSpacing: 3, fontFamily: "monospace",
+        color: "rgba(255,255,255,0.3)",
+      }}>NEXT</div>
+      <div style={{
+        position: "relative",
+        width: w * (S + GAP), height: h * (S + GAP),
       }}>
-        {label || ""}
+        {cells.map(([c, r], i) => (
+          <div key={i} style={{
+            position: "absolute",
+            left: (c - minC) * (S + GAP),
+            top:  (r - minR) * (S + GAP),
+            width: S, height: S,
+            background: color,
+            borderRadius: 2,
+          }} />
+        ))}
       </div>
-      <div style={{display: "flex", gap: 5}}>
-        {btn("<", onLeft)}
-        {btn("o", onRotate)}
-        {btn(">", onRight)}
-      </div>
-      {btn("DROP", onDrop, true)}
     </div>
+  );
+}
+
+// ============================================================
+// OVERLAY CONTROL BUTTON
+// Minimal icon button for in-game HUD controls.
+// ============================================================
+
+function CtrlBtn({ children, onPress }) {
+  return (
+    <div
+      onPointerDown={(e) => { e.preventDefault(); onPress(); }}
+      style={{
+        width: 56, height: 56,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        color: "rgba(255,255,255,0.55)",
+        userSelect: "none", WebkitUserSelect: "none",
+        touchAction: "none", cursor: "pointer",
+      }}
+    >{children}</div>
   );
 }
 
@@ -440,39 +470,43 @@ function TetrisGame() {
           boundary -= n1;  // P1 gains territory; boundary moves up
           p1 = { type: p1Next, rot: 0, x: 3, y: ROWS - 4 };
           p1Next = randPiece();
-          if (!isValid(getCells(p1.type, p1.rot, p1.x, p1.y), board, boundary, 1)) {
+          // P1 loses when the stack grows down to the death row
+          const p1Dead = board.slice(P1_DEATH_ROW, ROWS).some(row => row.some(c => c !== null));
+          if (p1Dead) {
             return {...s, board, boundary, p1, p2, p1Next, p2Next, aiTick, phase: "over", winner: 2};
           }
         }
 
         // -- P2 falls DOWN (y increases, toward boundary)
-        if (isValid(getCells(p2.type, p2.rot, p2.x, p2.y + 1), board, boundary, 2)) {
-          p2 = {...p2, y: p2.y + 1};
-        } else {
-          board = lockPiece(board, getCells(p2.type, p2.rot, p2.x, p2.y), PIECE_COLORS[p2.type]);
-          const [b2, n2] = clearRows(board, boundary, 2);
-          board = b2;
-          boundary += n2;  // P2 gains territory; boundary moves down
-          p2 = { type: p2Next, rot: 0, x: 3, y: 0 };
-          p2Next = randPiece();
-          if (!isValid(getCells(p2.type, p2.rot, p2.x, p2.y), board, boundary, 2)) {
-            return {...s, board, boundary, p1, p2, p1Next, p2Next, aiTick, phase: "over", winner: 1};
+        if (!P2_PAUSED) {
+          if (isValid(getCells(p2.type, p2.rot, p2.x, p2.y + 1), board, boundary, 2)) {
+            p2 = {...p2, y: p2.y + 1};
+          } else {
+            board = lockPiece(board, getCells(p2.type, p2.rot, p2.x, p2.y), PIECE_COLORS[p2.type]);
+            const [b2, n2] = clearRows(board, boundary, 2);
+            board = b2;
+            boundary += n2;  // P2 gains territory; boundary moves down
+            p2 = { type: p2Next, rot: 0, x: 3, y: 0 };
+            p2Next = randPiece();
+            if (!isValid(getCells(p2.type, p2.rot, p2.x, p2.y), board, boundary, 2)) {
+              return {...s, board, boundary, p1, p2, p1Next, p2Next, aiTick, phase: "over", winner: 1};
+            }
           }
         }
 
-        // -- Wind nudge every WIND_EVERY ticks
+        // -- Wind nudge every WIND_EVERY ticks (P1 only when P2 paused)
         windTick += 1;
         if (windTick >= WIND_EVERY) {
           windTick = 0;
           if (isValid(getCells(p1.type, p1.rot, p1.x + wind, p1.y), board, boundary, 1))
             p1 = {...p1, x: p1.x + wind};
-          if (isValid(getCells(p2.type, p2.rot, p2.x + wind, p2.y), board, boundary, 2))
+          if (!P2_PAUSED && isValid(getCells(p2.type, p2.rot, p2.x + wind, p2.y), board, boundary, 2))
             p2 = {...p2, x: p2.x + wind};
         }
 
         // -- P2 AI: random horizontal move or rotate every AI_PERIOD ticks
         aiTick += 1;
-        if (aiTick % AI_PERIOD === 0) {
+        if (!P2_PAUSED && aiTick % AI_PERIOD === 0) {
           const r = Math.random();
           const canL = isValid(getCells(p2.type, p2.rot, p2.x - 1, p2.y), board, boundary, 2);
           const canR = isValid(getCells(p2.type, p2.rot, p2.x + 1, p2.y), board, boundary, 2);
@@ -502,6 +536,13 @@ function TetrisGame() {
   useEffect(() => {
     const onKey = (e) => {
       if (["ArrowLeft","ArrowRight","ArrowUp","ArrowDown"].includes(e.key)) e.preventDefault();
+      if (e.key === "p" || e.key === "P") {
+        setState(s => {
+          if (s.phase === "over") return s;
+          return {...s, phase: s.phase === "paused" ? "playing" : "paused"};
+        });
+        return;
+      }
       if (e.key === "ArrowLeft")  moveP1(-1, 0, false);
       if (e.key === "ArrowRight") moveP1( 1, 0, false);
       if (e.key === "ArrowUp")    moveP1( 0, 0, true);
@@ -527,7 +568,7 @@ function TetrisGame() {
 
   return (
     <div style={{
-      width: 393, height: 852,
+      width: 393, height: GAME_H,
       background: "#0a0a0a",
       position: "relative",
       overflow: "hidden",
@@ -565,22 +606,80 @@ function TetrisGame() {
         <BoardViewport
           grid={grid} boundary={boundary}
           startRow={p1Start} endRow={p1End}
+          deathRow={P1_DEATH_ROW}
         />
       </div>
 
-      {/* P1 controls */}
+      {/* P1 overlay: ^ drop button */}
       <div style={{
-        position: "absolute", top: P1_CTRL_Y + 8, left: 0, right: 0,
+        position: "absolute",
+        top: P1_VP_Y + CTRL_DROP_Y, left: 0, right: 0,
         display: "flex", justifyContent: "center",
+        zIndex: 5,
       }}>
-        <ControlPad
-          label="P1  ARROWS"
-          onLeft={()   => moveP1(-1, 0, false)}
-          onRight={()  => moveP1( 1, 0, false)}
-          onRotate={()  => moveP1( 0, 0, true)}
-          onDrop={()   => moveP1( 0, -1, false)}
-        />
+        <CtrlBtn onPress={() => moveP1(0, -1, false)}>
+          {/* up chevron */}
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="18 15 12 9 6 15"/>
+          </svg>
+        </CtrlBtn>
       </div>
+
+      {/* P1 overlay: < rotate > row */}
+      <div style={{
+        position: "absolute",
+        top: P1_VP_Y + CTRL_ROW_Y, left: 0, right: 0,
+        display: "flex", justifyContent: "center", gap: 48,
+        zIndex: 5,
+      }}>
+        <CtrlBtn onPress={() => moveP1(-1, 0, false)}>
+          {/* left chevron */}
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+        </CtrlBtn>
+        <CtrlBtn onPress={() => moveP1( 0, 0, true)}>
+          {/* rotate clockwise */}
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="1 4 1 10 7 10"/>
+            <path d="M3.51 15a9 9 0 1 0 .49-4.5"/>
+          </svg>
+        </CtrlBtn>
+        <CtrlBtn onPress={() => moveP1( 1, 0, false)}>
+          {/* right chevron */}
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </CtrlBtn>
+      </div>
+
+      {/* NEXT piece strip */}
+      <div style={{
+        position: "absolute", top: NEXT_Y, left: 0, right: 0,
+        height: 78,
+        background: "#080808",
+        borderTop: "1px solid #1a1a1a",
+        display: "flex", alignItems: "center", justifyContent: "center",
+      }}>
+        <NextPieceDisplay type={state.p1Next} />
+      </div>
+
+      {/* Paused overlay */}
+      {phase === "paused" && (
+        <div style={{
+          position: "absolute", inset: 0,
+          background: "rgba(0,0,0,0.7)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          pointerEvents: "none",
+        }}>
+          <div style={{
+            fontSize: 28, fontWeight: 900, letterSpacing: 6,
+            color: "rgba(255,255,255,0.6)",
+          }}>
+            PAUSED
+          </div>
+        </div>
+      )}
 
       {/* Game over overlay */}
       {phase === "over" && (
@@ -620,21 +719,6 @@ function TetrisGame() {
 }
 
 // ============================================================
-// CONTROL PAD PREVIEW (isolated component view)
-// ============================================================
-
-function ControlPadPreview() {
-  return (
-    <div style={{background: "#1a1a1a", padding: 24, borderRadius: 12}}>
-      <ControlPad
-        label="P1  ARROWS"
-        onLeft={()=>{}} onRight={()=>{}} onRotate={()=>{}} onDrop={()=>{}}
-      />
-    </div>
-  );
-}
-
-// ============================================================
 // COMPONENT REGISTRY
 // ============================================================
 
@@ -647,17 +731,6 @@ const SECTIONS = [
         label: "Tetris Game",
         desc: "Single-player test mode. P1 (arrows, bottom 75%) floats UP toward boundary. P2 (auto, top 25%) falls DOWN toward boundary. Clear rows to push boundary into opponent territory.",
         component: TetrisGame,
-      },
-    ],
-  },
-  {
-    section: "Components",
-    items: [
-      {
-        id: "ControlPad",
-        label: "Control Pad",
-        desc: "Semi-transparent on-screen controls. [ < ] [ o ] [ > ] with DROP below.",
-        component: ControlPadPreview,
       },
     ],
   },
