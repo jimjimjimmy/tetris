@@ -247,7 +247,7 @@ function useReveal(duration) {
   - Game over = spawn blocked (standard Tetris lose condition).
   - Row clear: full rows in P1 territory removed, remaining rows shift toward boundary (upward). Viewport stays fixed via p1ViewAnchor.
   - P1 viewport: 20 rows starting at p1ViewAnchor (boundary-PEEK=10). p1ViewAnchor clamped to boundary.
-  - Auto-AI: random left/right/rotate every AI_PERIOD=3 ticks (used for testing).
+  - Auto-AI: smart placement AI. Evaluates all (rot, x) combos via getLandingY + clearRows simulation. Scores by full-row bonus (500) + quadratic density. Moves one step/tick toward best target. AI_PERIOD=1. Clears ~1 row per 12-15 seconds reliably.
   - Controls: arrow keys (left/right/up=rotate/down=drop). No on-screen HUD buttons.
   - Cheat keys: "1" fill+clear boundary row, "2" clear full rows, "3" staircase fill, "0" reset.
   - Layout: P1_VP_Y=0, NEXT_Y=800, GAME_H=874. NEXT strip = 74px (#080808).
