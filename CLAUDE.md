@@ -5,7 +5,7 @@
   Whichever machine (MacFQ or Gandalf) adds a component, updates a file,
   or makes a structural change: update this file before ending the session.
   Both machines depend on this as the single source of truth.
-  Last updated: 2026-05-06 - Gandalf (CELL=40 from Figma, single piece color #B1B2B3, removed grid borders + death line, exact HUD positions from Figma nodes)
+  Last updated: 2026-05-10 - Gandalf (Smart AI with EASY/MEDIUM/HARD difficulty, TEST_SPEED toggle, hole penalty in scoring)
 -->
 
 ## Required reading before building
@@ -247,7 +247,9 @@ function useReveal(duration) {
   - Game over = spawn blocked (standard Tetris lose condition).
   - Row clear: full rows in P1 territory removed, remaining rows shift toward boundary (upward). Viewport stays fixed via p1ViewAnchor.
   - P1 viewport: 20 rows starting at p1ViewAnchor (boundary-PEEK=10). p1ViewAnchor clamped to boundary.
-  - Auto-AI: smart placement AI. Evaluates all (rot, x) combos via getLandingY + clearRows simulation. Scores by full-row bonus (500) + quadratic density. Moves one step/tick toward best target. AI_PERIOD=1. Clears ~1 row per 12-15 seconds reliably.
+  - Auto-AI: board-evaluating smart AI. Evaluates all (rot, x) combos via getLandingY + clearRows simulation. Scores by: line clear bonus (500/line) + quadratic row density (filled^2) + height penalty (keep stack near boundary) + hole penalty (30 per buried empty cell). Moves one step/tick toward best target. AI_PERIOD=1. Clears ~1 row per 20-25 seconds at normal speed.
+  - AI difficulty: AI_DIFFICULTY constant ('EASY'|'MEDIUM'|'HARD'). EASY: 33% chance of random move. MEDIUM/HARD: always optimal.
+  - TEST_SPEED: TEST_SPEED=true sets TICK_MS=110 (5x speed). TEST_SPEED=false (default) sets TICK_MS=550. ALWAYS false before push.
   - Controls: arrow keys (left/right/up=rotate/down=drop). No on-screen HUD buttons.
   - Cheat keys: "1" fill+clear boundary row, "2" clear full rows, "3" staircase fill, "0" reset.
   - Layout: P1_VP_Y=0, NEXT_Y=800, GAME_H=874. NEXT strip = 74px (#080808).
