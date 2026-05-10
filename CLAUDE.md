@@ -5,7 +5,7 @@
   Whichever machine (MacFQ or Gandalf) adds a component, updates a file,
   or makes a structural change: update this file before ending the session.
   Both machines depend on this as the single source of truth.
-  Last updated: 2026-05-10 - Gandalf (Smart AI with EASY/MEDIUM/HARD difficulty, TEST_SPEED toggle, hole penalty in scoring)
+  Last updated: 2026-05-10 - Gandalf (ROWS=33 for full viewport depth, bumpiness penalty for column spread)
 -->
 
 ## Required reading before building
@@ -241,13 +241,14 @@ function useReveal(duration) {
 
 ### Game
 - `TetrisGame` - single-player 180-degree Tetris. P2, wind, and boundary shift stripped. Clean foundation for rebuilding 2P mechanics.
-  - ROWS=30, COLS=10, CELL=40, BOARD_PX=400. Frame 402px wide, BOARD_LEFT=1. Boundary fixed at 12.
+  - ROWS=33, COLS=10, CELL=40, BOARD_PX=400. Frame 402px wide, BOARD_LEFT=1. Boundary fixed at 12.
+  - ROWS=33: rows 0-29 are visible (20-row viewport at rows 10-29), rows 30-32 are off-screen spawn buffer. Spawn at ROWS-4=29 fills full visible height.
   - P1 territory = rows boundary..ROWS-1. Boundary is FIXED (no territory shifts on clear).
   - P1 spawns at row ROWS-4=26 (bottom), floats UP (y-1 per tick), stacks near boundary (row 12).
   - Game over = spawn blocked (standard Tetris lose condition).
   - Row clear: full rows in P1 territory removed, remaining rows shift toward boundary (upward). Viewport stays fixed via p1ViewAnchor.
   - P1 viewport: 20 rows starting at p1ViewAnchor (boundary-PEEK=10). p1ViewAnchor clamped to boundary.
-  - Auto-AI: board-evaluating smart AI. Evaluates all (rot, x) combos via getLandingY + clearRows simulation. Scores by: line clear bonus (500/line) + quadratic row density (filled^2) + height penalty (keep stack near boundary) + hole penalty (30 per buried empty cell). Moves one step/tick toward best target. AI_PERIOD=1. Clears ~1 row per 20-25 seconds at normal speed.
+  - Auto-AI: board-evaluating smart AI. Evaluates all (rot, x) combos via getLandingY + clearRows simulation. Scores by: line clear bonus (500/line) + quadratic row density (filled^2) + height penalty + hole penalty (30 per buried empty cell) + bumpiness penalty (2 per adjacent column height diff). SCORE_MAX_R=ROWS-4 caps scoring to visible rows only. Moves one step/tick toward best target. AI_PERIOD=1. Clears ~5+ rows per 60s at normal speed. All 10 columns stay active.
   - AI difficulty: AI_DIFFICULTY constant ('EASY'|'MEDIUM'|'HARD'). EASY: 33% chance of random move. MEDIUM/HARD: always optimal.
   - TEST_SPEED: TEST_SPEED=true sets TICK_MS=110 (5x speed). TEST_SPEED=false (default) sets TICK_MS=550. ALWAYS false before push.
   - Controls: arrow keys (left/right/up=rotate/down=drop). No on-screen HUD buttons.

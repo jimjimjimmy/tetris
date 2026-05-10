@@ -122,7 +122,7 @@ const AI_PERIOD     = 1;    // P1 auto-AI: move every tick
 
 const CELL      = 40;
 const COLS      = 10;
-const ROWS      = 30;
+const ROWS      = 33;  // 30 visible rows (10-29) + 3-row spawn buffer below viewport
 
 const FRAME_W    = 402;
 const BOARD_PX   = COLS * CELL;            // 400
@@ -514,6 +514,7 @@ function TetrisGame() {
             return -1; // no valid landing
           };
           // Score: line clears + row density + height penalty (stay close to boundary)
+          const SCORE_MAX_R = ROWS - 4; // = spawn row = bottom of visible viewport (row 29)
           const scorePos = (type, rot, x) => {
             const ly = getLandingY(type, rot, x);
             if (ly < 0) return -Infinity;
@@ -524,7 +525,8 @@ function TetrisGame() {
             let score = 0;
             const [simAfter, linesCleared] = clearRows(sim, boundary, 1);
             score += linesCleared * 500;
-            for (let r = boundary; r < ROWS; r++) {
+            // Only score visible rows (boundary..SCORE_MAX_R), not off-screen spawn buffer
+            for (let r = boundary; r <= SCORE_MAX_R; r++) {
               const filled = simAfter[r].filter(c => c !== null).length;
               score += filled * filled; // quadratic favors dense rows
             }
@@ -534,7 +536,7 @@ function TetrisGame() {
             let holes = 0;
             for (let c = 0; c < COLS; c++) {
               let hasFillBelow = false;
-              for (let r = ROWS - 1; r >= boundary; r--) {
+              for (let r = SCORE_MAX_R; r >= boundary; r--) {
                 if (simAfter[r][c] !== null) {
                   hasFillBelow = true;
                 } else if (hasFillBelow) {
@@ -543,6 +545,17 @@ function TetrisGame() {
               }
             }
             score -= holes * 30;
+            // Penalize bumpiness (sum of adjacent column height differences) -- spreads
+            // pieces across all columns, discourages jagged surfaces
+            const colH = Array(COLS).fill(0);
+            for (let c = 0; c < COLS; c++) {
+              for (let r = boundary; r <= SCORE_MAX_R; r++) {
+                if (simAfter[r][c] !== null) colH[c] = r - boundary + 1;
+              }
+            }
+            let bumpiness = 0;
+            for (let c = 1; c < COLS; c++) bumpiness += Math.abs(colH[c] - colH[c-1]);
+            score -= bumpiness * 2;
             return score;
           };
           // Find best (rot, x) across all rotations and columns
