@@ -5,7 +5,7 @@
   Whichever machine (MacFQ or Gandalf) adds a component, updates a file,
   or makes a structural change: update this file before ending the session.
   Both machines depend on this as the single source of truth.
-  Last updated: 2026-05-10 - Gandalf (ROWS=33 for full viewport depth, bumpiness penalty for column spread)
+  Last updated: 2026-05-10 - Gandalf (P2 standalone component added: standard gravity, falls down, stack from bottom)
 -->
 
 ## Required reading before building
@@ -259,6 +259,18 @@ function useReveal(duration) {
 
 ### Components
 - `NextPieceDisplay` - renders upcoming P1 piece using 18px cells. Shows "NEXT" label above.
+
+### P2 Standalone
+- `TetrisGameP2` - standard gravity Tetris (P2 perspective, for independent testing alongside TetrisGame).
+  - P2_FLOOR=20, P2_SPAWN_Y=3, P2_VP_START=1, P2_VIEWPORT_H=20. Mirrors P1 exactly from the other end.
+  - P2_FLOOR = ROWS-1-12 = 20 (mirror of P1 boundary=12). P2 territory: rows 3..20 (18 rows, same as P1).
+  - Pieces spawn at row 3 (top), fall DOWN (y+1 per tick), stack from row 20 upward.
+  - Row clear: `clearRowsP2()` removes full rows in 0..P2_FLOOR, prepends empty rows at top (pieces shift DOWN). Mirror of P1 clearRows.
+  - isValidP2: r >= 0 && r <= P2_FLOOR && c within COLS && cell null. No boundary arg.
+  - AI: same scoring structure as P1 but flipped. Height penalty: penalize landing far from P2_FLOOR. Hole penalty: empty cell with fill ABOVE (unreachable in standard gravity). Bumpiness: same formula.
+  - Viewport: fixed [P2_VP_START, P2_VP_START+P2_VIEWPORT_H) = rows 1..20, 800px. Same GAME_H=874.
+  - AI only (no keyboard/touch controls). Debug key "0" resets.
+  - Verified: 10+ lines in 60s at 5x speed, all 10 cols active, collapse direction correct, zero errors.
 
 ---
 

@@ -132,6 +132,12 @@ const P1_VP_Y   = 0;
 const NEXT_Y    = P1_VP_Y + P1_VIEWPORT_H * CELL;   // 800
 const GAME_H    = NEXT_Y + 74;                       // 874
 
+// P2 standalone constants -- mirror of P1 from the other end of the board
+const P2_VIEWPORT_H = P1_VIEWPORT_H;            // 20 rows visible (same as P1)
+const P2_FLOOR      = ROWS - 1 - 12;            // = 20, mirror of P1 boundary=12
+const P2_SPAWN_Y    = 3;                         // mirror of P1 spawn ROWS-4=29
+const P2_VP_START   = P2_SPAWN_Y - PEEK;         // = 1, mirror of P1 p1ViewAnchor=10
+
 // Button centers within frame (absolute Y, absolute X in 402px frame)
 const CTRL_DROP_CY  = 552;   // center Y of ^ button (Figma: Y=544, H=16, center=552)
 const CTRL_ROW_CY   = 652;   // center Y of < ↻ > row (Figma: Y=640, H=24, center=652)
@@ -263,6 +269,19 @@ function clearRows(board, boundary, player) {
   }
 }
 
+// P2 standalone row clear: standard gravity.
+// Full rows in rows 0..P2_FLOOR are removed, remaining rows shift DOWN
+// (empty rows are prepended at the top -- pieces above gaps fall down to fill them).
+function clearRowsP2(board) {
+  const terr  = board.slice(0, P2_FLOOR + 1);
+  const below = board.slice(P2_FLOOR + 1);
+  const kept  = terr.filter(row => row.includes(null));
+  const n     = terr.length - kept.length;
+  if (n === 0) return [board, 0];
+  const fill = Array.from({length: n}, () => Array(COLS).fill(null));
+  return [[...fill, ...kept, ...below], n];
+}
+
 // P1 viewport: boundary near the TOP of P1's view (spawn zone).
 // P1 sees: PEEK rows into P2 territory above boundary, then full P1 territory below.
 // endRow may exceed ROWS -- BoardViewport pads those with dark empty cells.
@@ -293,6 +312,17 @@ function makeInitState() {
     winner:      null,
     p1ViewAnchor: boundary - PEEK,
     lines:       0,
+  };
+}
+
+function makeInitStateP2() {
+  return {
+    board:   emptyBoard(),
+    aiTick:  0,
+    p2:      { type: randPiece(), rot: 0, x: 3, y: P2_SPAWN_Y },
+    p2Next:  randPiece(),
+    phase:   "playing",
+    lines:   0,
   };
 }
 
@@ -775,6 +805,214 @@ function TetrisGame() {
 }
 
 // ============================================================
+// TETRIS GAME P2
+// Standalone P2 test: standard gravity. Pieces spawn at top (row P2_SPAWN_Y=3),
+// fall DOWN, stack builds from P2_FLOOR=20 upward. Row clear shifts pieces DOWN.
+// Fully AI-controlled. Mirror of TetrisGame.
+// ============================================================
+
+function TetrisGameP2() {
+  const [state, setState] = React.useState(makeInitStateP2);
+
+  // isValid for P2: cells must be within board and at or above P2_FLOOR
+  const isValidP2 = (cells, board) =>
+    cells.every(([c, r]) =>
+      r >= 0 && r <= P2_FLOOR && c >= 0 && c < COLS && board[r][c] === null
+    );
+
+  // Gravity tick + AI
+  React.useEffect(() => {
+    const id = setInterval(() => {
+      setState(s => {
+        if (s.phase !== "playing") return s;
+        let { board, aiTick, p2, p2Next } = s;
+        let n2 = 0;
+
+        // -- P2 AI: evaluate all placements, move one step toward best
+        aiTick += 1;
+        if (aiTick % AI_PERIOD === 0) {
+          // getLandingYP2: scan down from P2_SPAWN_Y, find largest y where piece fits
+          //   but y+1 is blocked (by floor or filled cell)
+          const getLandingYP2 = (type, rot, x) => {
+            const endY = P2_FLOOR + 4;
+            for (let y = P2_SPAWN_Y; y <= endY; y++) {
+              if (!isValidP2(getCells(type, rot, x, y), board)) continue;
+              if (!isValidP2(getCells(type, rot, x, y + 1), board)) return y;
+            }
+            return -1;
+          };
+          const SCORE_MIN_R = P2_SPAWN_Y;
+          const scorePosP2 = (type, rot, x) => {
+            const ly = getLandingYP2(type, rot, x);
+            if (ly < 0) return -Infinity;
+            const sim = board.map(row => [...row]);
+            for (const [c, r] of getCells(type, rot, x, ly)) {
+              if (r >= 0 && r < ROWS && c >= 0 && c < COLS) sim[r][c] = 'X';
+            }
+            let score = 0;
+            const [simAfter, linesCleared] = clearRowsP2(sim);
+            score += linesCleared * 500;
+            // Density: score visible territory (P2_SPAWN_Y..P2_FLOOR)
+            for (let r = SCORE_MIN_R; r <= P2_FLOOR; r++) {
+              const filled = simAfter[r].filter(c => c !== null).length;
+              score += filled * filled;
+            }
+            // Height penalty: penalize landing too far from floor (too close to spawn = danger)
+            score -= Math.max(0, P2_FLOOR - ly - 2) * 4;
+            // Hole penalty: empty cell with filled cell ABOVE it (unreachable in standard gravity)
+            let holes = 0;
+            for (let c = 0; c < COLS; c++) {
+              let hasFillAbove = false;
+              for (let r = SCORE_MIN_R; r <= P2_FLOOR; r++) {
+                if (simAfter[r][c] !== null) hasFillAbove = true;
+                else if (hasFillAbove) holes++;
+              }
+            }
+            score -= holes * 30;
+            // Bumpiness: sum of adjacent column height differences
+            const colH = Array(COLS).fill(0);
+            for (let c = 0; c < COLS; c++) {
+              for (let r = P2_FLOOR; r >= SCORE_MIN_R; r--) {
+                if (simAfter[r][c] !== null) { colH[c] = P2_FLOOR - r + 1; }
+              }
+            }
+            let bumpiness = 0;
+            for (let c = 1; c < COLS; c++) bumpiness += Math.abs(colH[c] - colH[c-1]);
+            score -= bumpiness * 2;
+            return score;
+          };
+          // Find best (rot, x)
+          let bestScore = -Infinity, bestRot = p2.rot, bestX = p2.x;
+          for (let rot = 0; rot < 4; rot++) {
+            for (let x = -1; x < COLS + 1; x++) {
+              const sc = scorePosP2(p2.type, rot, x);
+              if (sc > bestScore) { bestScore = sc; bestRot = rot; bestX = x; }
+            }
+          }
+          // EASY: 33% chance of random move
+          const makeMistake = AI_DIFFICULTY === 'EASY' && Math.random() < 0.33;
+          if (makeMistake) {
+            const r = Math.random();
+            const canL = isValidP2(getCells(p2.type, p2.rot, p2.x - 1, p2.y), board);
+            const canR = isValidP2(getCells(p2.type, p2.rot, p2.x + 1, p2.y), board);
+            if (r < 0.33 && canL) p2 = {...p2, x: p2.x - 1};
+            else if (r < 0.66 && canR) p2 = {...p2, x: p2.x + 1};
+            else {
+              const nr = (p2.rot + 1) % 4;
+              if (isValidP2(getCells(p2.type, nr, p2.x, p2.y), board)) p2 = {...p2, rot: nr};
+            }
+          } else {
+            // MEDIUM / HARD: one step toward optimal
+            if (p2.rot !== bestRot) {
+              const nr = (p2.rot + 1) % 4;
+              if (isValidP2(getCells(p2.type, nr, p2.x, p2.y), board)) p2 = {...p2, rot: nr};
+            } else if (p2.x < bestX) {
+              if (isValidP2(getCells(p2.type, p2.rot, p2.x + 1, p2.y), board)) p2 = {...p2, x: p2.x + 1};
+            } else if (p2.x > bestX) {
+              if (isValidP2(getCells(p2.type, p2.rot, p2.x - 1, p2.y), board)) p2 = {...p2, x: p2.x - 1};
+            }
+          }
+        }
+
+        // -- P2 falls DOWN (y increases, standard gravity)
+        if (isValidP2(getCells(p2.type, p2.rot, p2.x, p2.y + 1), board)) {
+          p2 = {...p2, y: p2.y + 1};
+        } else {
+          // Lock piece, clear full rows, spawn next
+          board = lockPiece(board, getCells(p2.type, p2.rot, p2.x, p2.y), PIECE_COLORS[p2.type]);
+          const [b2, cleared] = clearRowsP2(board);
+          n2 = cleared;
+          board = b2;
+          p2 = { type: p2Next, rot: 0, x: 3, y: P2_SPAWN_Y };
+          p2Next = randPiece();
+          // Game over: new piece can't spawn
+          if (!isValidP2(getCells(p2.type, p2.rot, p2.x, p2.y), board)) {
+            return {...s, board, p2, p2Next, phase: "over"};
+          }
+        }
+
+        return { board, aiTick, p2, p2Next, phase: "playing", lines: (s.lines||0) + n2 };
+      });
+    }, TICK_MS);
+    return () => clearInterval(id);
+  }, []);
+
+  const { board, p2, phase, p2Next, lines = 0 } = state;
+
+  // Overlay active piece onto grid
+  const grid = board.map(row => [...row]);
+  getCells(p2.type, p2.rot, p2.x, p2.y).forEach(([c, r]) => {
+    if (r >= 0 && r < ROWS && c >= 0 && c < COLS) grid[r][c] = PIECE_COLORS[p2.type];
+  });
+
+  const vpStart = P2_VP_START;
+  const vpEnd   = P2_VP_START + P2_VIEWPORT_H;
+
+  return (
+    <div style={{
+      width: FRAME_W, height: GAME_H,
+      background: "#0a0a0a",
+      position: "relative",
+      overflow: "hidden",
+      fontFamily: "monospace",
+      userSelect: "none",
+      WebkitUserSelect: "none",
+    }}>
+
+      {/* P2 viewport -- P2_FLOOR near BOTTOM, pieces fall from top */}
+      <div style={{position: "absolute", top: P1_VP_Y, left: BOARD_LEFT}}>
+        <BoardViewport
+          grid={grid} boundary={P2_FLOOR}
+          startRow={vpStart} endRow={vpEnd}
+        />
+      </div>
+
+      {/* NEXT piece strip */}
+      <div style={{
+        position: "absolute", top: NEXT_Y, left: 0, right: 0,
+        height: 114,
+        background: "#080808",
+        display: "flex", alignItems: "center", justifyContent: "center",
+      }}>
+        <NextPieceDisplay type={p2Next} />
+        <div style={{
+          position: "absolute", top: 4, right: 8,
+          fontSize: 10, letterSpacing: 2, color: "rgba(255,255,255,0.35)",
+        }}>LINES {lines}</div>
+      </div>
+
+      {/* Game over overlay */}
+      {phase === "over" && (
+        <div style={{
+          position: "absolute", inset: 0,
+          background: "rgba(0,0,0,0.88)",
+          display: "flex", flexDirection: "column",
+          alignItems: "center", justifyContent: "center",
+        }}>
+          <div style={{
+            fontSize: 36, fontWeight: 900, letterSpacing: 6,
+            color: "#fff", marginBottom: 8,
+          }}>GAME OVER</div>
+          <div style={{
+            fontSize: 11, letterSpacing: 2, marginBottom: 36,
+            color: "rgba(255,255,255,0.35)",
+          }}>stack overflow</div>
+          <div
+            onPointerDown={() => setState(makeInitStateP2())}
+            style={{
+              padding: "12px 36px", background: "#ff3333",
+              color: "#fff", borderRadius: 6,
+              fontSize: 13, fontWeight: 700, letterSpacing: 3,
+              cursor: "pointer",
+            }}
+          >REMATCH</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
 // COMPONENT REGISTRY
 // ============================================================
 
@@ -784,9 +1022,15 @@ const SECTIONS = [
     items: [
       {
         id: "TetrisGame",
-        label: "Tetris Game",
-        desc: "Single-player test mode. P1 (arrows, bottom 75%) floats UP toward boundary. P2 (auto, top 25%) falls DOWN toward boundary. Clear rows to push boundary into opponent territory.",
+        label: "P1 - Floats Up",
+        desc: "P1 standalone: 180-degree Tetris. Pieces spawn at bottom (row 29), float UP, stack near boundary (row 12). AI auto-plays.",
         component: TetrisGame,
+      },
+      {
+        id: "TetrisGameP2",
+        label: "P2 - Falls Down",
+        desc: "P2 standalone: standard gravity. Pieces spawn at top (row 3), fall DOWN, stack from floor (row 20) upward. Mirror of P1. AI auto-plays.",
+        component: TetrisGameP2,
       },
     ],
   },
@@ -802,7 +1046,7 @@ function ComponentCard({ item }) {
   const [key, setKey] = useState(0);
   const Comp = item.component;
   const isAnimated = ANIMATED_IDS.has(item.id);
-  const noWrap = item.id === "TetrisGame";
+  const noWrap = item.id === "TetrisGame" || item.id === "TetrisGameP2";
   return (
     <div style={{ marginBottom: 48 }}>
       <div className="component-header">
