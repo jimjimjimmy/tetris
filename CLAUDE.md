@@ -5,7 +5,7 @@
   Whichever machine (MacFQ or Gandalf) adds a component, updates a file,
   or makes a structural change: update this file before ending the session.
   Both machines depend on this as the single source of truth.
-  Last updated: 2026-05-06 - MacFQ (P1 HUD overlay: ∧ drop + < ↺ > controls overlaid on board, NEXT piece strip, death line, pause)
+  Last updated: 2026-05-06 - Gandalf (CELL=40 from Figma, single piece color #B1B2B3, removed grid borders + death line, exact HUD positions from Figma nodes)
 -->
 
 ## Required reading before building
@@ -240,19 +240,22 @@ function useReveal(duration) {
 ## Current components
 
 ### Game
-- `TetrisGame` - single-player test mode (P2_PAUSED=true). P1 arrow keys + on-screen HUD controls. P2 frozen. Wind every 4 ticks. Clearing rows moves boundary. Win = push opponent to 0 rows, or P1 stack reaches death row. Game-over overlay with REMATCH. Pause with "p" key.
-  - ROWS=30, COLS=10, CELL=30, BOARD_PX=300. Initial boundary=12. P1_DEATH_ROW=25.
-  - P1 viewport: 20 rows, startRow = boundary-PEEK. P2 viewport: 6 rows, endRow = boundary+PEEK.
-  - P1 territory = rows boundary..ROWS-1. P2 territory = rows 0..boundary-1.
-  - P1 spawns at row ROWS-4=26 (bottom), floats UP (y-1 per tick), stacks near boundary.
-  - P2 spawns at row 0 (top), falls DOWN (y+1 per tick), stacks near boundary.
-  - Layout constants: P2_VP_Y=0, DIV_Y=180, P1_VP_Y=196, NEXT_Y=796, GAME_H=874.
-  - HUD: ∧ overlaid at P1_VP_Y+390, < ↺ > row at P1_VP_Y+450. NEXT piece strip at NEXT_Y (78px, #080808).
-  - Death line: white dashed, drawn at P1_DEATH_ROW position inside P1 BoardViewport.
+- `TetrisGame` - single-player 180-degree Tetris. P2, wind, and boundary shift stripped. Clean foundation for rebuilding 2P mechanics.
+  - ROWS=30, COLS=10, CELL=40, BOARD_PX=400. Frame 402px wide, BOARD_LEFT=1. Boundary fixed at 12.
+  - P1 territory = rows boundary..ROWS-1. Boundary is FIXED (no territory shifts on clear).
+  - P1 spawns at row ROWS-4=26 (bottom), floats UP (y-1 per tick), stacks near boundary (row 12).
+  - Game over = spawn blocked (standard Tetris lose condition).
+  - Row clear: full rows in P1 territory removed, remaining rows shift toward boundary (upward). Viewport stays fixed via p1ViewAnchor.
+  - P1 viewport: 20 rows starting at p1ViewAnchor (boundary-PEEK=10). p1ViewAnchor clamped to boundary.
+  - Auto-AI: random left/right/rotate every AI_PERIOD=3 ticks (used for testing).
+  - Controls: arrow keys (left/right/up=rotate/down=drop). No on-screen HUD buttons.
+  - Cheat keys: "1" fill+clear boundary row, "2" clear full rows, "3" staircase fill, "0" reset.
+  - Layout: P1_VP_Y=0, NEXT_Y=800, GAME_H=874. NEXT strip = 74px (#080808).
+  - Cells: 34x34px visible (CELL=40 - 3px padding each side), color #B1B2B3. No grid borders.
+  - Boundary visual: 2px semi-transparent white line at boundary row inside BoardViewport.
 
 ### Components
 - `NextPieceDisplay` - renders upcoming P1 piece using 18px cells. Shows "NEXT" label above.
-- `CtrlBtn` - minimal 56x56 touch button, no border/background. Props: children, onPress.
 
 ---
 

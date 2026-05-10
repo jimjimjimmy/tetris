@@ -105,7 +105,7 @@ function useReveal(duration = 800) {
 // Cell:  38px  (10 cols × 38 = 380px board, 11px margin each side)
 // Layout (top to bottom):
 //   P1 viewport: 20*38 = 760px  (P1_VP_Y = 0)  -- controls overlaid inside
-//   NEXT strip:       114px     (NEXT_Y = 760)
+//   NEXT strip:       74px      (NEXT_Y = 800)
 //   Total: 874px
 //
 // Button centers in frame (X):  < = 53,  ^/↻ = 201,  > = 349
@@ -113,29 +113,25 @@ function useReveal(duration = 800) {
 // ============================================================
 
 const P1_VIEWPORT_H = 20;   // rows P1 sees
-const P2_VIEWPORT_H = 6;    // rows P2 sees (game logic only)
-const PEEK          = 2;    // rows of opponent territory visible in each viewport
+const PEEK          = 2;    // P2 territory peek rows shown above boundary
 const TICK_MS       = 550;
-const WIND_EVERY    = 4;
-const AI_PERIOD     = 2;    // P2 makes an AI move every N ticks
-const P2_PAUSED     = true; // DEV: freeze P2 to focus on P1 experience
+const AI_PERIOD     = 3;    // P1 auto-AI: move every N ticks
 
-const CELL      = 38;
+const CELL      = 40;
 const COLS      = 10;
 const ROWS      = 30;
-const P1_DEATH_ROW = ROWS - 5; // white dashed line; P1 loses if stack reaches here
 
 const FRAME_W    = 402;
-const BOARD_PX   = COLS * CELL;            // 380
-const BOARD_LEFT = (FRAME_W - BOARD_PX) / 2;  // 11
+const BOARD_PX   = COLS * CELL;            // 400
+const BOARD_LEFT = (FRAME_W - BOARD_PX) / 2;  // 1
 
 const P1_VP_Y   = 0;
-const NEXT_Y    = P1_VP_Y + P1_VIEWPORT_H * CELL;   // 760
-const GAME_H    = NEXT_Y + 114;                      // 874
+const NEXT_Y    = P1_VP_Y + P1_VIEWPORT_H * CELL;   // 800
+const GAME_H    = NEXT_Y + 74;                       // 874
 
 // Button centers within frame (absolute Y, absolute X in 402px frame)
-const CTRL_DROP_CY  = 527;   // center Y of ^ button
-const CTRL_ROW_CY   = 621;   // center Y of < ↻ > row
+const CTRL_DROP_CY  = 552;   // center Y of ^ button (Figma: Y=544, H=16, center=552)
+const CTRL_ROW_CY   = 652;   // center Y of < ↻ > row (Figma: Y=640, H=24, center=652)
 const CTRL_LEFT_CX  = 53;    // center X of < button
 const CTRL_MID_CX   = 201;   // center X of ^ and ↻ (frame center)
 const CTRL_RIGHT_CX = 349;   // center X of > button
@@ -191,9 +187,11 @@ const SHAPES = {
   ],
 };
 
+// All pieces use the same gray per Figma design (#B1B2B3)
+const PIECE_COLOR = "#B1B2B3";
 const PIECE_COLORS = {
-  I: "#4dd0e1", O: "#ffd54f", T: "#ce93d8",
-  S: "#81c784", Z: "#ef9a9a", J: "#90caf9", L: "#ffb74d",
+  I: PIECE_COLOR, O: PIECE_COLOR, T: PIECE_COLOR,
+  S: PIECE_COLOR, Z: PIECE_COLOR, J: PIECE_COLOR, L: PIECE_COLOR,
 };
 
 // ============================================================
@@ -265,8 +263,8 @@ function clearRows(board, boundary, player) {
 // P1 viewport: boundary near the TOP of P1's view (spawn zone).
 // P1 sees: PEEK rows into P2 territory above boundary, then full P1 territory below.
 // endRow may exceed ROWS -- BoardViewport pads those with dark empty cells.
-function getP1ViewRange(boundary) {
-  const startRow = Math.max(0, boundary - PEEK);
+function getP1ViewRange(p1ViewAnchor) {
+  const startRow = Math.max(0, p1ViewAnchor);
   const endRow   = startRow + P1_VIEWPORT_H;
   return [startRow, endRow];
 }
@@ -283,17 +281,14 @@ function getP2ViewRange(boundary) {
 function makeInitState() {
   const boundary = 12;
   return {
-    board:    emptyBoard(),
+    board:       emptyBoard(),
     boundary,
-    wind:     Math.random() < 0.5 ? -1 : 1,
-    windTick: 0,
-    aiTick:   0,
-    p1:       { type: randPiece(), rot: 0, x: 3, y: ROWS - 4 },
-    p2:       { type: randPiece(), rot: 0, x: 3, y: 0 },
-    p1Next:   randPiece(),
-    p2Next:   randPiece(),
-    phase:    "playing",
-    winner:   null,
+    aiTick:      0,
+    p1:          { type: randPiece(), rot: 0, x: 3, y: ROWS - 4 },
+    p1Next:      randPiece(),
+    phase:       "playing",
+    winner:      null,
+    p1ViewAnchor: boundary - PEEK,
   };
 }
 
@@ -303,18 +298,8 @@ function makeInitState() {
 // Rows outside [0, ROWS) render as empty dark cells (padding).
 // ============================================================
 
-function BoardViewport({ grid, boundary, startRow, endRow, deathRow }) {
+function BoardViewport({ grid, boundary, startRow, endRow }) {
   const visRows = endRow - startRow;
-
-  // Red boundary line
-  const boundaryScreenY = (boundary > startRow && boundary <= endRow)
-    ? (boundary - startRow) * CELL - 1
-    : null;
-
-  // White dashed death line (P1 only)
-  const deathScreenY = (deathRow !== undefined && deathRow >= startRow && deathRow < endRow)
-    ? (deathRow - startRow) * CELL
-    : null;
 
   return (
     <div style={{
@@ -322,31 +307,32 @@ function BoardViewport({ grid, boundary, startRow, endRow, deathRow }) {
       width: BOARD_PX,
       height: visRows * CELL,
       overflow: "hidden",
+      background: "#0a0a0a",
     }}>
       {Array.from({length: visRows}, (_, ri) => {
         const r = startRow + ri;
         return Array.from({length: COLS}, (_, c) => {
           const color = (r >= 0 && r < ROWS) ? grid[r][c] : null;
-          const inP2  = r < boundary;  // P2 zone shading (top, slightly different tone)
+          if (!color) return null;
           return (
             <div key={ri * COLS + c} style={{
               position: "absolute",
-              left: c * CELL, top: ri * CELL,
-              width: CELL - 1, height: CELL - 1,
-              background: color || (inP2 ? "#0e0e0e" : "#111111"),
-              border: color ? "none" : ("1px solid " + (inP2 ? "#181818" : "#1c1c1c")),
-              borderRadius: color ? 2 : 0,
+              left: c * CELL + 3, top: ri * CELL + 3,
+              width: CELL - 6, height: CELL - 6,
+              background: color,
             }} />
           );
         });
       })}
 
-      {deathScreenY !== null && (
+      {/* Boundary line - shows where P2/P1 territory divides */}
+      {boundary >= startRow && boundary <= endRow && (
         <div style={{
-          position: "absolute", left: 0, right: 0,
-          top: deathScreenY, height: 1,
-          backgroundImage: "repeating-linear-gradient(to right, rgba(255,255,255,0.5) 0px, rgba(255,255,255,0.5) 6px, transparent 6px, transparent 12px)",
-          zIndex: 10,
+          position: "absolute",
+          left: 0, right: 0,
+          top: (boundary - startRow) * CELL - 1,
+          height: 2,
+          background: "rgba(255,255,255,0.18)",
           pointerEvents: "none",
         }} />
       )}
@@ -408,6 +394,7 @@ function HudBtn({ cx, cy, onPress, children }) {
   const half = CTRL_HIT / 2;
   return (
     <div
+      data-hud="1"
       onPointerDown={(e) => { e.preventDefault(); onPress(); }}
       style={{
         position: "absolute",
@@ -447,80 +434,85 @@ function TetrisGame() {
     });
   }, []);
 
+  // ── Gesture detection ──────────────────────────────────────
+  const touchRef = useRef(null);
+
+  const handleTouchStart = useCallback((e) => {
+    const t = e.touches[0];
+    touchRef.current = { x: t.clientX, y: t.clientY, time: Date.now(), target: e.target };
+  }, []);
+
+  const handleTouchEnd = useCallback((e) => {
+    if (!touchRef.current) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - touchRef.current.x;
+    const dy = t.clientY - touchRef.current.y;
+    const dt = Date.now() - touchRef.current.time;
+    const dist = Math.hypot(dx, dy);
+    const onBtn = touchRef.current.target && touchRef.current.target.closest('[data-hud]');
+    touchRef.current = null;
+
+    if (dist < 18 && dt < 300 && !onBtn) {
+      // Tap on board (not a button) → rotate
+      moveP1(0, 0, true);
+      return;
+    }
+    const absDx = Math.abs(dx), absDy = Math.abs(dy);
+    if (absDx > 30 && absDx > absDy * 1.2) {
+      // Horizontal swipe → move left/right (1-3 cells based on distance)
+      const steps = absDx > 160 ? 3 : absDx > 80 ? 2 : 1;
+      const dir = dx > 0 ? 1 : -1;
+      for (let i = 0; i < steps; i++) moveP1(dir, 0, false);
+    } else if (dy < -50 && absDy > absDx * 1.2) {
+      // Swipe up → drop (accelerate toward boundary)
+      moveP1(0, -1, false);
+    }
+  }, [moveP1]);
+
   // Gravity / buoyancy tick + P2 AI
   useEffect(() => {
     const id = setInterval(() => {
       setState(s => {
         if (s.phase !== "playing") return s;
-        let { board, boundary, wind, windTick, aiTick, p1, p2, p1Next, p2Next } = s;
+        let { board, boundary, aiTick, p1, p1Next } = s;
 
-        // -- P1 floats UP (y decreases, toward boundary)
+        // -- P1 floats UP (y decreases, toward boundary) - 180 degree Tetris
         if (isValid(getCells(p1.type, p1.rot, p1.x, p1.y - 1), board, boundary, 1)) {
           p1 = {...p1, y: p1.y - 1};
         } else {
+          // Lock piece, clear full rows, spawn next piece
           board = lockPiece(board, getCells(p1.type, p1.rot, p1.x, p1.y), PIECE_COLORS[p1.type]);
-          const [b1, n1] = clearRows(board, boundary, 1);
+          const [b1] = clearRows(board, boundary, 1);
           board = b1;
-          boundary -= n1;  // P1 gains territory; boundary moves up
+          // Boundary is fixed - no territory shift
           p1 = { type: p1Next, rot: 0, x: 3, y: ROWS - 4 };
           p1Next = randPiece();
-          // P1 loses when the stack grows down to the death row
-          const p1Dead = board.slice(P1_DEATH_ROW, ROWS).some(row => row.some(c => c !== null));
-          if (p1Dead) {
-            return {...s, board, boundary, p1, p2, p1Next, p2Next, aiTick, phase: "over", winner: 2};
+          // Game over: new piece can't spawn (stack full)
+          if (!isValid(getCells(p1.type, p1.rot, p1.x, p1.y), board, boundary, 1)) {
+            return {...s, board, p1, p1Next, phase: "over", winner: null};
           }
         }
 
-        // -- P2 falls DOWN (y increases, toward boundary)
-        if (!P2_PAUSED) {
-          if (isValid(getCells(p2.type, p2.rot, p2.x, p2.y + 1), board, boundary, 2)) {
-            p2 = {...p2, y: p2.y + 1};
-          } else {
-            board = lockPiece(board, getCells(p2.type, p2.rot, p2.x, p2.y), PIECE_COLORS[p2.type]);
-            const [b2, n2] = clearRows(board, boundary, 2);
-            board = b2;
-            boundary += n2;  // P2 gains territory; boundary moves down
-            p2 = { type: p2Next, rot: 0, x: 3, y: 0 };
-            p2Next = randPiece();
-            if (!isValid(getCells(p2.type, p2.rot, p2.x, p2.y), board, boundary, 2)) {
-              return {...s, board, boundary, p1, p2, p1Next, p2Next, aiTick, phase: "over", winner: 1};
-            }
-          }
-        }
-
-        // -- Wind nudge every WIND_EVERY ticks (P1 only when P2 paused)
-        windTick += 1;
-        if (windTick >= WIND_EVERY) {
-          windTick = 0;
-          if (isValid(getCells(p1.type, p1.rot, p1.x + wind, p1.y), board, boundary, 1))
-            p1 = {...p1, x: p1.x + wind};
-          if (!P2_PAUSED && isValid(getCells(p2.type, p2.rot, p2.x + wind, p2.y), board, boundary, 2))
-            p2 = {...p2, x: p2.x + wind};
-        }
-
-        // -- P2 AI: random horizontal move or rotate every AI_PERIOD ticks
+        // -- P1 auto-AI: random horizontal move or rotate every AI_PERIOD ticks
         aiTick += 1;
-        if (!P2_PAUSED && aiTick % AI_PERIOD === 0) {
+        if (aiTick % AI_PERIOD === 0) {
           const r = Math.random();
-          const canL = isValid(getCells(p2.type, p2.rot, p2.x - 1, p2.y), board, boundary, 2);
-          const canR = isValid(getCells(p2.type, p2.rot, p2.x + 1, p2.y), board, boundary, 2);
+          const canL = isValid(getCells(p1.type, p1.rot, p1.x - 1, p1.y), board, boundary, 1);
+          const canR = isValid(getCells(p1.type, p1.rot, p1.x + 1, p1.y), board, boundary, 1);
           if (r < 0.3 && canL) {
-            p2 = {...p2, x: p2.x - 1};
+            p1 = {...p1, x: p1.x - 1};
           } else if (r < 0.6 && canR) {
-            p2 = {...p2, x: p2.x + 1};
+            p1 = {...p1, x: p1.x + 1};
           } else if (r < 0.75) {
-            const nr = (p2.rot + 1) % 4;
-            if (isValid(getCells(p2.type, nr, p2.x, p2.y), board, boundary, 2))
-              p2 = {...p2, rot: nr};
+            const nr = (p1.rot + 1) % 4;
+            if (isValid(getCells(p1.type, nr, p1.x, p1.y), board, boundary, 1))
+              p1 = {...p1, rot: nr};
           }
         }
 
-        // -- Boundary win check
-        let phase = "playing", winner = null;
-        if (boundary <= 0)    { phase = "over"; winner = 1; } // P1 pushed P2 to 0 rows
-        if (boundary >= ROWS) { phase = "over"; winner = 2; } // P2 pushed P1 to 0 rows
-
-        return { board, boundary, wind, windTick, aiTick, p1, p2, p1Next, p2Next, phase, winner };
+        // Clamp p1ViewAnchor: viewport always includes boundary
+        const p1ViewAnchor = Math.min(s.p1ViewAnchor, boundary);
+        return { board, boundary, aiTick, p1, p1Next, phase: "playing", winner: null, p1ViewAnchor };
       });
     }, TICK_MS);
     return () => clearInterval(id);
@@ -541,79 +533,97 @@ function TetrisGame() {
       if (e.key === "ArrowRight") moveP1( 1, 0, false);
       if (e.key === "ArrowUp")    moveP1( 0, 0, true);
       if (e.key === "ArrowDown")  moveP1( 0, -1, false);
+
+      // DEBUG / CHEAT KEYS
+      // "1" - fill the topmost partial P1 row to full, then clear it
+      //       if no blocks exist yet, fills the boundary row
+      //       pauses after so you can see the shift
+      if (e.key === "1") {
+        setState(s => {
+          if (s.phase !== "playing" && s.phase !== "paused") return s;
+          const filled = s.board.map(row => [...row]);
+          // Find topmost row in P1 zone that has at least one block
+          let targetRow = s.boundary;
+          for (let r = s.boundary; r < ROWS; r++) {
+            if (s.board[r].some(c => c !== null)) { targetRow = r; break; }
+          }
+          // Fill that row completely
+          for (let c = 0; c < COLS; c++) filled[targetRow][c] = PIECE_COLOR;
+          const [b2, n] = clearRows(filled, s.boundary, 1);
+          return {...s, board: b2, boundary: Math.max(0, s.boundary - n), phase: "paused"};
+        });
+      }
+      // "2" - clear any currently full rows in P1 zone (works while paused)
+      if (e.key === "2") {
+        setState(s => {
+          if (s.phase !== "playing" && s.phase !== "paused") return s;
+          const [b2, n] = clearRows(s.board, s.boundary, 1);
+          return {...s, board: b2, boundary: Math.max(0, s.boundary - n)};
+        });
+      }
+      // "3" - stack 8 partial rows near boundary (staircase fill 3-8 cols), auto-pauses
+      //       different fill per row makes shifts visually obvious
+      //       press "p" to resume, "1" to fill+clear boundary row, "0" to reset
+      if (e.key === "3") {
+        setState(s => {
+          if (s.phase !== "playing") return s;
+          const filled = s.board.map(row => [...row]);
+          for (let i = 0; i < 8; i++) {
+            const r = s.boundary + i;
+            if (r >= ROWS) break;
+            const cols = 3 + i;  // row 0: 3 cols, row 1: 4 cols, ..., row 7: 10 cols
+            for (let c = 0; c < cols; c++) filled[r][c] = PIECE_COLOR;
+          }
+          return {...s, board: filled, phase: "paused"};
+        });
+      }
+      // "0" - reset board to empty (clean slate, boundary back to 12, resume)
+      if (e.key === "0") {
+        setState(s => ({...s, board: emptyBoard(), boundary: 12, phase: "playing"}));
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [moveP1]);
 
-  const { board, boundary, p1, p2, phase, winner } = state;
+  const { board, boundary, p1, phase, winner, p1ViewAnchor = boundary - PEEK } = state;
 
   // Overlay active pieces onto render grid
   const grid = board.map(row => [...row]);
   getCells(p1.type, p1.rot, p1.x, p1.y).forEach(([c, r]) => {
     if (r >= 0 && r < ROWS && c >= 0 && c < COLS) grid[r][c] = PIECE_COLORS[p1.type];
   });
-  getCells(p2.type, p2.rot, p2.x, p2.y).forEach(([c, r]) => {
-    if (r >= 0 && r < ROWS && c >= 0 && c < COLS) grid[r][c] = PIECE_COLORS[p2.type];
-  });
-
-  const [p1Start, p1End] = getP1ViewRange(boundary);
+  const [p1Start, p1End] = getP1ViewRange(p1ViewAnchor);
 
   return (
-    <div style={{
-      width: FRAME_W, height: GAME_H,
-      background: "#0a0a0a",
-      position: "relative",
-      overflow: "hidden",
-      fontFamily: "monospace",
-      userSelect: "none",
-      WebkitUserSelect: "none",
-    }}>
+    <div
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      style={{
+        width: FRAME_W, height: GAME_H,
+        background: "#0a0a0a",
+        position: "relative",
+        overflow: "hidden",
+        fontFamily: "monospace",
+        userSelect: "none",
+        WebkitUserSelect: "none",
+        touchAction: "none",
+      }}>
 
       {/* P1 viewport -- boundary near TOP, P1 territory stretches down */}
       <div style={{position: "absolute", top: P1_VP_Y, left: BOARD_LEFT}}>
         <BoardViewport
           grid={grid} boundary={boundary}
           startRow={p1Start} endRow={p1End}
-          deathRow={P1_DEATH_ROW}
         />
       </div>
-
-      {/* ^ (drop up): centered at CTRL_MID_CX, CTRL_DROP_CY */}
-      <HudBtn cx={CTRL_MID_CX} cy={CTRL_DROP_CY} onPress={() => moveP1(0, -1, false)}>
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <polyline points="2 11 8 5 14 11"/>
-        </svg>
-      </HudBtn>
-
-      {/* < (left) */}
-      <HudBtn cx={CTRL_LEFT_CX} cy={CTRL_ROW_CY} onPress={() => moveP1(-1, 0, false)}>
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <polyline points="11 2 5 8 11 14"/>
-        </svg>
-      </HudBtn>
-
-      {/* rotate */}
-      <HudBtn cx={CTRL_MID_CX} cy={CTRL_ROW_CY} onPress={() => moveP1(0, 0, true)}>
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <polyline points="1 4 1 10 7 10"/>
-          <path d="M3.51 15a9 9 0 1 0 .49-4.5"/>
-        </svg>
-      </HudBtn>
-
-      {/* > (right) */}
-      <HudBtn cx={CTRL_RIGHT_CX} cy={CTRL_ROW_CY} onPress={() => moveP1(1, 0, false)}>
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <polyline points="5 2 11 8 5 14"/>
-        </svg>
-      </HudBtn>
 
       {/* NEXT piece strip */}
       <div style={{
         position: "absolute", top: NEXT_Y, left: 0, right: 0,
         height: 114,
         background: "#080808",
-        borderTop: "1px solid #1a1a1a",
+
         display: "flex", alignItems: "center", justifyContent: "center",
       }}>
         <NextPieceDisplay type={state.p1Next} />
@@ -648,13 +658,13 @@ function TetrisGame() {
             fontSize: 36, fontWeight: 900, letterSpacing: 6,
             color: "#fff", marginBottom: 8,
           }}>
-            {"P" + winner + " WINS"}
+            {winner ? "P" + winner + " WINS" : "GAME OVER"}
           </div>
           <div style={{
             fontSize: 11, letterSpacing: 2, marginBottom: 36,
             color: "rgba(255,255,255,0.35)",
           }}>
-            {winner === 1 ? "gravity" : "buoyancy"} prevailed
+            {winner === 1 ? "gravity wins" : winner === 2 ? "buoyancy wins" : "stack overflow"}
           </div>
           <div
             onPointerDown={() => setState(makeInitState())}
