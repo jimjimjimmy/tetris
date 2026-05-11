@@ -5,7 +5,7 @@
   Whichever machine (MacFQ or Gandalf) adds a component, updates a file,
   or makes a structural change: update this file before ending the session.
   Both machines depend on this as the single source of truth.
-  Last updated: 2026-05-10 - Gandalf (TetrisGame2P added: shared board, both players AI-controlled, P2 dark top half, P1 light bottom half)
+  Last updated: 2026-05-10 - Gandalf (TetrisGame2P AI fixed: P2 spawn y=0, while-loop repositioning, SCORE_MIN_2=0 - verified P2: 45+ clears, P1: 14+ clears at 5x speed)
 -->
 
 ## Required reading before building
@@ -261,9 +261,10 @@ function useReveal(duration) {
 - `TetrisGame2P` - shared board with P1 (bottom half, floats UP, #B1B2B3) and P2 (top half, falls DOWN, #4a4a4a).
   - Layout: NEXT_2P_H=37px P2-NEXT + 800px board (20 rows) + 37px P1-NEXT = GAME_2P_H=874px.
   - BDY_2P=10 (fixed boundary, exact midpoint of 20 visible rows 0-19). P2 territory: rows 0-9. P1 territory: rows 10-19 (visible) + rows 20-32 (spawn buffer).
-  - P1 spawns at ROWS-4=29 (off-screen), floats UP to boundary. P2 spawns at row 2, falls DOWN to row 9.
+  - P1 spawns at ROWS-4=29 (off-screen), floats UP to boundary. P2 spawns at row 0 (top of P2 zone), falls DOWN to row ~8-9.
   - Row clear: clearP1_2P() removes full rows in P1 zone, appends empty at bottom. clearP2_2P() removes full rows in P2 zone, prepends empty at top. Boundary stays FIXED.
-  - Both AI-controlled. AI uses same 4-component scoring (line clears + density + height penalty + holes + bumpiness). SCORE_MAX_1=19 (last visible P1 row). SCORE_MAX_2=9 (P2 floor).
+  - Both AI-controlled. AI uses same 4-component scoring (line clears + density + height penalty + holes + bumpiness). SCORE_MAX_1=19 (last visible P1 row). SCORE_MIN_2=0, SCORE_MAX_2=9 (P2 full territory scored).
+  - P2 AI executes all repositioning steps in a single tick (while-loop) to handle the shallow ~9-row fall distance. P1 uses 1-step-per-tick (19 fall rows = sufficient).
   - P2 pieces color #4a4a4a (dark gray). P1 pieces #B1B2B3 (light gray). Boundary: 2px white line at row 10.
   - CompactNext component: 7px cells, no label, used for both 37px NEXT strips.
   - Debug key "0" resets.
