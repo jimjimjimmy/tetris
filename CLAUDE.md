@@ -264,7 +264,8 @@ function useReveal(duration) {
   - P1 spawns at ROWS-4=29 (off-screen), floats UP to boundary. P2 spawns at row 0 (top of P2 zone), falls DOWN to row ~8-9.
   - Row clear: clearP1_2P() removes full rows in P1 zone, appends empty at bottom. clearP2_2P() removes full rows in P2 zone, prepends empty at top. Boundary stays FIXED.
   - Both AI-controlled. AI uses same 4-component scoring (line clears + density + height penalty + holes + bumpiness). SCORE_MAX_1=19 (last visible P1 row). SCORE_MIN_2=0, SCORE_MAX_2=9 (P2 full territory scored).
-  - P2 AI executes all repositioning steps in a single tick (while-loop) to handle the shallow ~9-row fall distance. P1 uses 1-step-per-tick (19 fall rows = sufficient).
+  - P1 height penalty formula: `Math.max(0, ly - BDY_2P - 2) * 4` (rewards landings near boundary, no offset bias). Earlier `+2` form over-penalized boundary landings by 8 pts.
+  - Both P1 and P2 AIs execute all repositioning steps in a single tick (while-loop) to maximize lock-in opportunity per cycle. Verified balance at TEST_SPEED=true over 60s: P1=7, P2=20 clears (ratio 2.86:1, close to expected 2:1 from P2's ~2x cycle rate).
   - P2 pieces color #4a4a4a (dark gray). P1 pieces #B1B2B3 (light gray). Boundary: 2px white line at row 10.
   - CompactNext component: 7px cells, no label, used for both 37px NEXT strips.
   - Debug key "0" resets.
