@@ -226,6 +226,21 @@ function getCells(type, rot, px, py) {
   return SHAPES[type][rot].map(([dc, dr]) => [px + dc, py + dr]);
 }
 
+// Max row-offset of a piece body for a given rotation (body extends DOWN from origin,
+// so max_dr = body height - 1). Used for symmetric P1 spawn in TetrisGame2P.
+function pieceMaxDr(type, rot) {
+  let m = 0;
+  for (const [, dr] of SHAPES[type][rot]) if (dr > m) m = dr;
+  return m;
+}
+
+// Symmetric P1 spawn origin for TetrisGame2P: bottom of piece body sits at the
+// far edge of P1's visible territory (row P1_VIEWPORT_H - 1), mirroring P2 which
+// spawns with body top at row 0. Travel distance matches P2 per piece.
+function p1SpawnY2P(type) {
+  return P1_VIEWPORT_H - 1 - pieceMaxDr(type, 0);
+}
+
 function emptyBoard() {
   return Array.from({length: ROWS}, () => Array(COLS).fill(null));
 }
@@ -364,12 +379,14 @@ function clearP2_2P(board, bdy) {
 }
 
 function makeInitState2P() {
+  const p1Type = randPiece();
+  const p2Type = randPiece();
   return {
     board:    emptyBoard(),
     aiTick:   0,
-    p1:       { type: randPiece(), rot: 0, x: 3, y: ROWS - 4 }, // spawns at row 29 (off-screen)
+    p1:       { type: p1Type, rot: 0, x: 3, y: p1SpawnY2P(p1Type) }, // body bottom at row P1_VIEWPORT_H-1=19
     p1Next:   randPiece(),
-    p2:       { type: randPiece(), rot: 0, x: 3, y: 0 },        // spawns at row 0 (top of P2 zone)
+    p2:       { type: p2Type, rot: 0, x: 3, y: 0 },                  // body top at row 0
     p2Next:   randPiece(),
     p1Lines:  0,
     p2Lines:  0,
@@ -1280,7 +1297,7 @@ function TetrisGame2P() {
           board = lockPiece(board, getCells(p1.type, p1.rot, p1.x, p1.y), PIECE_COLOR);
           const [b1, c1] = clearP1_2P(board, boundary);
           n1 = c1; board = b1;
-          p1 = { type: p1Next, rot: 0, x: 3, y: ROWS - 4 };
+          p1 = { type: p1Next, rot: 0, x: 3, y: p1SpawnY2P(p1Next) };
           p1Next = randPiece();
           if (!isValid(getCells(p1.type, p1.rot, p1.x, p1.y), board, boundary, 1)) {
             return { ...s, board, p1, p1Next, p2, p2Next, phase: "over", winner: 2 };

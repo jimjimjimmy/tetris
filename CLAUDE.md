@@ -266,11 +266,12 @@ function useReveal(duration) {
   - Pieces already placed are NOT moved by the boundary shift -- only the boundary index changes and rows reassign territory.
   - Boundary line: 2px white line, animated with `transition: top 260ms cubic-bezier(0.22, 1, 0.36, 1)`. Glow via boxShadow when animateBoundary=true.
   - BoardViewport extended with `animateBoundary` prop. TetrisGame (single-player) passes false (default); TetrisGame2P passes true.
-  - P1 spawns at ROWS-4=29 (off-screen), floats UP. P2 spawns at row 0 (top), falls DOWN.
+  - Symmetric spawn: P1 spawns at `y = P1_VIEWPORT_H - 1 - pieceMaxDr(type, 0)` (body bottom at row 19, far edge of P1 visible territory). P2 spawns at `y = 0` (body top at row 0, far edge of P2 territory). Travel distance per piece = `boundary - 1 - pieceMaxDr` for both players. Helpers: `pieceMaxDr(type, rot)`, `p1SpawnY2P(type)`. Previously P1 spawned at `ROWS-4=29` which gave it a 19-tick fall vs P2's 6-8 ticks (~2.86:1 cycle-rate asymmetry).
   - Row clear helpers `clearP1_2P(board, bdy)` / `clearP2_2P(board, bdy)` now take dynamic bdy parameter.
   - Both AI-controlled. AI uses 4-component scoring (line clears + density + height penalty + holes + bumpiness) parameterized on the current dynamic boundary. SCORE_MAX_1=19 fixed (last visible row). SCORE_MAX_2 = boundary - 1 (P2 territory upper bound).
   - P1 height penalty: `Math.max(0, ly - boundary - 2) * 4`. Both P1 and P2 use while-loop repositioning.
   - Verified decay at TEST_SPEED=true (60s): early P2 clears each pushed ~1 row, later clears took ~2 P2 clears per row of shift. Game ended at 35s with P2=15 clears, P1=2 (vs 24.6s / P2=10 / P1=0 pre-decay) -- 42% longer match, no death spiral, P1 had time to score. "P2 WINS" overlay triggered correctly. Zero console errors.
+  - Verified P1/P2 symmetry at TEST_SPEED=true across 4 games: P1=51 total clears, P2=49 total clears (ratio 1.04:1, was 2.86:1 pre-fix). Winner distribution: 3 P1 wins, 1 P2 win. Boundary stayed near midline in early-game, drift driven by piece RNG rather than systemic asymmetry. Zero console errors.
   - P2 color #4a4a4a (dark gray). P1 color #B1B2B3 (light gray).
   - CompactNext: 7px cells, no label, both 37px NEXT strips.
   - Debug key "0" resets.
