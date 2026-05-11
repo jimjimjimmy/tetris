@@ -258,16 +258,21 @@ function useReveal(duration) {
   - Boundary visual: 2px semi-transparent white line at boundary row inside BoardViewport.
 
 ### 2P Shared Board
-- `TetrisGame2P` - shared board with P1 (bottom half, floats UP, #B1B2B3) and P2 (top half, falls DOWN, #4a4a4a).
+- `TetrisGame2P` - shared board with P1 (bottom half, floats UP, #B1B2B3) and P2 (top half, falls DOWN, #4a4a4a). Territorial tug-of-war via boundary shift.
   - Layout: NEXT_2P_H=37px P2-NEXT + 800px board (20 rows) + 37px P1-NEXT = GAME_2P_H=874px.
-  - BDY_2P=10 (fixed boundary, exact midpoint of 20 visible rows 0-19). P2 territory: rows 0-9. P1 territory: rows 10-19 (visible) + rows 20-32 (spawn buffer).
-  - P1 spawns at ROWS-4=29 (off-screen), floats UP to boundary. P2 spawns at row 0 (top of P2 zone), falls DOWN to row ~8-9.
-  - Row clear: clearP1_2P() removes full rows in P1 zone, appends empty at bottom. clearP2_2P() removes full rows in P2 zone, prepends empty at top. Boundary stays FIXED.
-  - Both AI-controlled. AI uses same 4-component scoring (line clears + density + height penalty + holes + bumpiness). SCORE_MAX_1=19 (last visible P1 row). SCORE_MIN_2=0, SCORE_MAX_2=9 (P2 full territory scored).
-  - P1 height penalty formula: `Math.max(0, ly - BDY_2P - 2) * 4` (rewards landings near boundary, no offset bias). Earlier `+2` form over-penalized boundary landings by 8 pts.
-  - Both P1 and P2 AIs execute all repositioning steps in a single tick (while-loop) to maximize lock-in opportunity per cycle. Verified balance at TEST_SPEED=true over 60s: P1=7, P2=20 clears (ratio 2.86:1, close to expected 2:1 from P2's ~2x cycle rate).
-  - P2 pieces color #4a4a4a (dark gray). P1 pieces #B1B2B3 (light gray). Boundary: 2px white line at row 10.
-  - CompactNext component: 7px cells, no label, used for both 37px NEXT strips.
+  - BDY_2P=10 is the INITIAL boundary only. Actual boundary is dynamic state, tracked as `boundary` in component state.
+  - Territory shift mechanic: when P1 clears N rows, `boundary -= N` (boundary moves UP, P1 gains N rows from P2's bottom). When P2 clears N rows, `boundary += N` (boundary moves DOWN, P2 gains N rows from P1's top). Net per tick = `n2 - n1`.
+  - Win condition: `boundary <= 0` -> P1 WINS (P2 squeezed out). `boundary >= P1_VIEWPORT_H` (20) -> P2 WINS (P1 squeezed out of visible area). GAME OVER overlay shows "P1 WINS" / "P2 WINS" with "territory claimed" subtitle.
+  - Pieces already placed are NOT moved by the boundary shift -- only the boundary index changes and rows reassign territory.
+  - Boundary line: 2px white line, animated with `transition: top 260ms cubic-bezier(0.22, 1, 0.36, 1)`. Glow via boxShadow when animateBoundary=true.
+  - BoardViewport extended with `animateBoundary` prop. TetrisGame (single-player) passes false (default); TetrisGame2P passes true.
+  - P1 spawns at ROWS-4=29 (off-screen), floats UP. P2 spawns at row 0 (top), falls DOWN.
+  - Row clear helpers `clearP1_2P(board, bdy)` / `clearP2_2P(board, bdy)` now take dynamic bdy parameter.
+  - Both AI-controlled. AI uses 4-component scoring (line clears + density + height penalty + holes + bumpiness) parameterized on the current dynamic boundary. SCORE_MAX_1=19 fixed (last visible row). SCORE_MAX_2 = boundary - 1 (P2 territory upper bound).
+  - P1 height penalty: `Math.max(0, ly - boundary - 2) * 4`. Both P1 and P2 use while-loop repositioning.
+  - Verified at TEST_SPEED=true: boundary shifted smoothly 10 -> 20 over 10 P2 clears in ~24.6s, "P2 WINS" triggered correctly. Zero console errors.
+  - P2 color #4a4a4a (dark gray). P1 color #B1B2B3 (light gray).
+  - CompactNext: 7px cells, no label, both 37px NEXT strips.
   - Debug key "0" resets.
   - TEST_SPEED: same global flag. ALWAYS false before push.
 

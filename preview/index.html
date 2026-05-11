@@ -337,39 +337,41 @@ function makeInitStateP2() {
 // 2P SHARED BOARD HELPERS
 // ============================================================
 
-// P1 row clear (2P mode): boundary FIXED at BDY_2P. Filled rows in P1 territory
-// (rows BDY_2P..ROWS-1) are removed; empty rows appended at bottom of P1 zone.
-function clearP1_2P(board) {
-  const terr = board.slice(BDY_2P);
+// P1 row clear (2P mode): operates on current dynamic boundary `bdy`.
+// Filled rows in P1 territory (rows bdy..ROWS-1) are removed; empty rows appended at bottom.
+function clearP1_2P(board, bdy) {
+  const terr = board.slice(bdy);
   const kept = terr.filter(row => row.includes(null));
   const n    = terr.length - kept.length;
   if (n === 0) return [board, 0];
   const fill = Array.from({length: n}, () => Array(COLS).fill(null));
-  return [[...board.slice(0, BDY_2P), ...kept, ...fill], n];
+  return [[...board.slice(0, bdy), ...kept, ...fill], n];
 }
 
-// P2 row clear (2P mode): boundary FIXED at BDY_2P. Filled rows in P2 territory
-// (rows 0..BDY_2P-1) are removed; empty rows prepended at top of P2 zone.
-function clearP2_2P(board) {
-  const terr = board.slice(0, BDY_2P);
+// P2 row clear (2P mode): operates on current dynamic boundary `bdy`.
+// Filled rows in P2 territory (rows 0..bdy-1) are removed; empty rows prepended at top.
+function clearP2_2P(board, bdy) {
+  const terr = board.slice(0, bdy);
   const kept = terr.filter(row => row.includes(null));
   const n    = terr.length - kept.length;
   if (n === 0) return [board, 0];
   const fill = Array.from({length: n}, () => Array(COLS).fill(null));
-  return [[...fill, ...kept, ...board.slice(BDY_2P)], n];
+  return [[...fill, ...kept, ...board.slice(bdy)], n];
 }
 
 function makeInitState2P() {
   return {
-    board:   emptyBoard(),
-    aiTick:  0,
-    p1:      { type: randPiece(), rot: 0, x: 3, y: ROWS - 4 }, // spawns at row 29 (off-screen)
-    p1Next:  randPiece(),
-    p2:      { type: randPiece(), rot: 0, x: 3, y: 0 },        // spawns at row 0 (top of P2 zone)
-    p2Next:  randPiece(),
-    p1Lines: 0,
-    p2Lines: 0,
-    phase:   "playing",
+    board:    emptyBoard(),
+    aiTick:   0,
+    p1:       { type: randPiece(), rot: 0, x: 3, y: ROWS - 4 }, // spawns at row 29 (off-screen)
+    p1Next:   randPiece(),
+    p2:       { type: randPiece(), rot: 0, x: 3, y: 0 },        // spawns at row 0 (top of P2 zone)
+    p2Next:   randPiece(),
+    p1Lines:  0,
+    p2Lines:  0,
+    boundary: BDY_2P,  // dynamic: shifts on row clear (P1 clear -> bdy-=n1, P2 clear -> bdy+=n2)
+    winner:   null,
+    phase:    "playing",
   };
 }
 
@@ -379,7 +381,7 @@ function makeInitState2P() {
 // Rows outside [0, ROWS) render as empty dark cells (padding).
 // ============================================================
 
-function BoardViewport({ grid, boundary, startRow, endRow }) {
+function BoardViewport({ grid, boundary, startRow, endRow, animateBoundary }) {
   const visRows = endRow - startRow;
 
   return (
@@ -413,7 +415,9 @@ function BoardViewport({ grid, boundary, startRow, endRow }) {
           left: 0, right: 0,
           top: (boundary - startRow) * CELL - 1,
           height: 2,
-          background: "rgba(255,255,255,0.18)",
+          background: animateBoundary ? "rgba(255,255,255,0.55)" : "rgba(255,255,255,0.18)",
+          boxShadow: animateBoundary ? "0 0 8px rgba(255,255,255,0.35)" : "none",
+          transition: animateBoundary ? "top 260ms cubic-bezier(0.22, 1, 0.36, 1)" : "none",
           pointerEvents: "none",
         }} />
       )}
@@ -1089,7 +1093,7 @@ function TetrisGameP2() {
 // TETRIS GAME 2P
 // Shared board: P1 floats UP (bottom half, #B1B2B3),
 //               P2 falls DOWN (top half, #4a4a4a).
-// Static boundary at row BDY_2P=10 (midpoint of 20 visible rows 0-19).
+// Dynamic boundary (initial BDY_2P=10): shifts on row clear -- P1 clear pushes UP, P2 clear pushes DOWN.
 // Both AI-controlled. Layout: 37px P2-NEXT + 800px board + 37px P1-NEXT = 874.
 // ============================================================
 
@@ -1100,22 +1104,22 @@ function TetrisGame2P() {
     const id = setInterval(() => {
       setState(s => {
         if (s.phase !== "playing") return s;
-        let { board, aiTick, p1, p1Next, p2, p2Next, p1Lines, p2Lines } = s;
+        let { board, aiTick, p1, p1Next, p2, p2Next, p1Lines, p2Lines, boundary } = s;
         let n1 = 0, n2 = 0;
 
         aiTick += 1;
 
-        // ── P1 AI (floats UP, territory rows BDY_2P..ROWS-1) ──────────────
+        // ── P1 AI (floats UP, territory rows boundary..ROWS-1) ─────────────
         if (aiTick % AI_PERIOD === 0) {
           const getLandingY1 = (type, rot, x) => {
-            const startY = Math.max(0, BDY_2P - 4);
+            const startY = Math.max(0, boundary - 4);
             for (let y = startY; y < ROWS; y++) {
-              if (!isValid(getCells(type, rot, x, y), board, BDY_2P, 1)) continue;
-              if (!isValid(getCells(type, rot, x, y - 1), board, BDY_2P, 1)) return y;
+              if (!isValid(getCells(type, rot, x, y), board, boundary, 1)) continue;
+              if (!isValid(getCells(type, rot, x, y - 1), board, boundary, 1)) return y;
             }
             return -1;
           };
-          const SCORE_MAX_1 = P1_VIEWPORT_H - 1; // = 19, last visible P1 row
+          const SCORE_MAX_1 = P1_VIEWPORT_H - 1; // = 19, last visible row
           const scoreP1 = (type, rot, x) => {
             const ly = getLandingY1(type, rot, x);
             if (ly < 0) return -Infinity;
@@ -1124,17 +1128,17 @@ function TetrisGame2P() {
               if (r >= 0 && r < ROWS && c >= 0 && c < COLS) sim[r][c] = 'X';
             }
             let score = 0;
-            const [simAfter, cleared] = clearP1_2P(sim);
+            const [simAfter, cleared] = clearP1_2P(sim, boundary);
             score += cleared * 500;
-            for (let r = BDY_2P; r <= SCORE_MAX_1; r++) {
+            for (let r = boundary; r <= SCORE_MAX_1; r++) {
               const filled = simAfter[r].filter(c => c !== null).length;
               score += filled * filled;
             }
-            score -= Math.max(0, ly - BDY_2P - 2) * 4;
+            score -= Math.max(0, ly - boundary - 2) * 4;
             let holes = 0;
             for (let c = 0; c < COLS; c++) {
               let hasFillBelow = false;
-              for (let r = SCORE_MAX_1; r >= BDY_2P; r--) {
+              for (let r = SCORE_MAX_1; r >= boundary; r--) {
                 if (simAfter[r][c] !== null) hasFillBelow = true;
                 else if (hasFillBelow) holes++;
               }
@@ -1142,8 +1146,8 @@ function TetrisGame2P() {
             score -= holes * 30;
             const colH = Array(COLS).fill(0);
             for (let c = 0; c < COLS; c++) {
-              for (let r = BDY_2P; r <= SCORE_MAX_1; r++) {
-                if (simAfter[r][c] !== null) colH[c] = r - BDY_2P + 1;
+              for (let r = boundary; r <= SCORE_MAX_1; r++) {
+                if (simAfter[r][c] !== null) colH[c] = r - boundary + 1;
               }
             }
             let bumpiness = 0;
@@ -1158,37 +1162,36 @@ function TetrisGame2P() {
               if (sc > best1) { best1 = sc; bestRot1 = rot; bestX1 = x; }
             }
           }
-          // P1 has 19 fall rows - execute all repositioning steps in one tick
           let p1moved = true;
           while (p1moved) {
             p1moved = false;
             if (p1.rot !== bestRot1) {
               const nr = (p1.rot + 1) % 4;
-              if (isValid(getCells(p1.type, nr, p1.x, p1.y), board, BDY_2P, 1)) {
+              if (isValid(getCells(p1.type, nr, p1.x, p1.y), board, boundary, 1)) {
                 p1 = { ...p1, rot: nr }; p1moved = true;
               }
             } else if (p1.x < bestX1) {
-              if (isValid(getCells(p1.type, p1.rot, p1.x + 1, p1.y), board, BDY_2P, 1)) {
+              if (isValid(getCells(p1.type, p1.rot, p1.x + 1, p1.y), board, boundary, 1)) {
                 p1 = { ...p1, x: p1.x + 1 }; p1moved = true;
               }
             } else if (p1.x > bestX1) {
-              if (isValid(getCells(p1.type, p1.rot, p1.x - 1, p1.y), board, BDY_2P, 1)) {
+              if (isValid(getCells(p1.type, p1.rot, p1.x - 1, p1.y), board, boundary, 1)) {
                 p1 = { ...p1, x: p1.x - 1 }; p1moved = true;
               }
             }
           }
         }
 
-        // ── P2 AI (falls DOWN, territory rows 0..BDY_2P-1) ────────────────
+        // ── P2 AI (falls DOWN, territory rows 0..boundary-1) ──────────────
         if (aiTick % AI_PERIOD === 0) {
           const getLandingY2 = (type, rot, x) => {
-            for (let y = 0; y <= BDY_2P + 4; y++) {
-              if (!isValid(getCells(type, rot, x, y), board, BDY_2P, 2)) continue;
-              if (!isValid(getCells(type, rot, x, y + 1), board, BDY_2P, 2)) return y;
+            for (let y = 0; y <= boundary + 4; y++) {
+              if (!isValid(getCells(type, rot, x, y), board, boundary, 2)) continue;
+              if (!isValid(getCells(type, rot, x, y + 1), board, boundary, 2)) return y;
             }
             return -1;
           };
-          const SCORE_MIN_2 = 0, SCORE_MAX_2 = BDY_2P - 1; // = 9
+          const SCORE_MIN_2 = 0, SCORE_MAX_2 = boundary - 1;
           const scoreP2 = (type, rot, x) => {
             const ly = getLandingY2(type, rot, x);
             if (ly < 0) return -Infinity;
@@ -1197,7 +1200,7 @@ function TetrisGame2P() {
               if (r >= 0 && r < ROWS && c >= 0 && c < COLS) sim[r][c] = 'X';
             }
             let score = 0;
-            const [simAfter, cleared] = clearP2_2P(sim);
+            const [simAfter, cleared] = clearP2_2P(sim, boundary);
             score += cleared * 500;
             for (let r = SCORE_MIN_2; r <= SCORE_MAX_2; r++) {
               const filled = simAfter[r].filter(c => c !== null).length;
@@ -1231,21 +1234,20 @@ function TetrisGame2P() {
               if (sc > best2) { best2 = sc; bestRot2 = rot; bestX2 = x; }
             }
           }
-          // P2 has only ~9 fall rows - execute all repositioning steps in one tick
           let p2moved = true;
           while (p2moved) {
             p2moved = false;
             if (p2.rot !== bestRot2) {
               const nr = (p2.rot + 1) % 4;
-              if (isValid(getCells(p2.type, nr, p2.x, p2.y), board, BDY_2P, 2)) {
+              if (isValid(getCells(p2.type, nr, p2.x, p2.y), board, boundary, 2)) {
                 p2 = { ...p2, rot: nr }; p2moved = true;
               }
             } else if (p2.x < bestX2) {
-              if (isValid(getCells(p2.type, p2.rot, p2.x + 1, p2.y), board, BDY_2P, 2)) {
+              if (isValid(getCells(p2.type, p2.rot, p2.x + 1, p2.y), board, boundary, 2)) {
                 p2 = { ...p2, x: p2.x + 1 }; p2moved = true;
               }
             } else if (p2.x > bestX2) {
-              if (isValid(getCells(p2.type, p2.rot, p2.x - 1, p2.y), board, BDY_2P, 2)) {
+              if (isValid(getCells(p2.type, p2.rot, p2.x - 1, p2.y), board, boundary, 2)) {
                 p2 = { ...p2, x: p2.x - 1 }; p2moved = true;
               }
             }
@@ -1253,36 +1255,47 @@ function TetrisGame2P() {
         }
 
         // ── P1 physics: floats UP ──────────────────────────────────────────
-        if (isValid(getCells(p1.type, p1.rot, p1.x, p1.y - 1), board, BDY_2P, 1)) {
+        if (isValid(getCells(p1.type, p1.rot, p1.x, p1.y - 1), board, boundary, 1)) {
           p1 = { ...p1, y: p1.y - 1 };
         } else {
           board = lockPiece(board, getCells(p1.type, p1.rot, p1.x, p1.y), PIECE_COLOR);
-          const [b1, c1] = clearP1_2P(board);
+          const [b1, c1] = clearP1_2P(board, boundary);
           n1 = c1; board = b1;
           p1 = { type: p1Next, rot: 0, x: 3, y: ROWS - 4 };
           p1Next = randPiece();
-          if (!isValid(getCells(p1.type, p1.rot, p1.x, p1.y), board, BDY_2P, 1)) {
-            return { ...s, board, p1, p1Next, p2, p2Next, phase: "over" };
+          if (!isValid(getCells(p1.type, p1.rot, p1.x, p1.y), board, boundary, 1)) {
+            return { ...s, board, p1, p1Next, p2, p2Next, phase: "over", winner: 2 };
           }
         }
 
         // ── P2 physics: falls DOWN ─────────────────────────────────────────
-        if (isValid(getCells(p2.type, p2.rot, p2.x, p2.y + 1), board, BDY_2P, 2)) {
+        if (isValid(getCells(p2.type, p2.rot, p2.x, p2.y + 1), board, boundary, 2)) {
           p2 = { ...p2, y: p2.y + 1 };
         } else {
           board = lockPiece(board, getCells(p2.type, p2.rot, p2.x, p2.y), P2_COLOR_2P);
-          const [b2, c2] = clearP2_2P(board);
+          const [b2, c2] = clearP2_2P(board, boundary);
           n2 = c2; board = b2;
           p2 = { type: p2Next, rot: 0, x: 3, y: 0 };
           p2Next = randPiece();
-          if (!isValid(getCells(p2.type, p2.rot, p2.x, p2.y), board, BDY_2P, 2)) {
-            return { ...s, board, p1, p1Next, p2, p2Next, phase: "over" };
+          if (!isValid(getCells(p2.type, p2.rot, p2.x, p2.y), board, boundary, 2)) {
+            return { ...s, board, p1, p1Next, p2, p2Next, phase: "over", winner: 1 };
           }
         }
 
+        // ── Territory shift: P1 clears push boundary UP, P2 clears push it DOWN.
+        // Net delta = (P2 cleared) − (P1 cleared). Existing locked cells unchanged.
+        let newBdy = boundary - n1 + n2;
+        let winner = null, phase = "playing";
+        if (newBdy <= 0) {
+          newBdy = 0; winner = 1; phase = "over";          // P2 squeezed out
+        } else if (newBdy >= P1_VIEWPORT_H) {
+          newBdy = P1_VIEWPORT_H; winner = 2; phase = "over"; // P1 squeezed out
+        }
+
         return {
-          board, aiTick, p1, p1Next, p2, p2Next, phase: "playing",
+          board, aiTick, p1, p1Next, p2, p2Next, phase,
           p1Lines: p1Lines + n1, p2Lines: p2Lines + n2,
+          boundary: newBdy, winner,
         };
       });
     }, TICK_MS);
@@ -1298,7 +1311,7 @@ function TetrisGame2P() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const { board, p1, p2, p1Next, p2Next, p1Lines, p2Lines, phase } = state;
+  const { board, p1, p2, p1Next, p2Next, p1Lines, p2Lines, phase, boundary, winner } = state;
 
   // Overlay both active pieces onto render grid
   const grid = board.map(row => [...row]);
@@ -1339,9 +1352,10 @@ function TetrisGame2P() {
       <div style={{position: "absolute", top: BOARD_2P_TOP, left: BOARD_LEFT}}>
         <BoardViewport
           grid={grid}
-          boundary={BDY_2P}
+          boundary={boundary}
           startRow={0}
           endRow={P1_VIEWPORT_H}
+          animateBoundary={true}
         />
       </div>
 
@@ -1372,8 +1386,12 @@ function TetrisGame2P() {
         }}>
           <div style={{
             fontSize: 36, fontWeight: 900, letterSpacing: 6,
-            color: "#fff", marginBottom: 24,
-          }}>GAME OVER</div>
+            color: "#fff", marginBottom: 8,
+          }}>{winner ? "P" + winner + " WINS" : "GAME OVER"}</div>
+          <div style={{
+            fontSize: 11, letterSpacing: 2, marginBottom: 28,
+            color: "rgba(255,255,255,0.4)",
+          }}>{winner === 1 ? "territory claimed" : winner === 2 ? "territory claimed" : "stack overflow"}</div>
           <div
             onPointerDown={() => setState(makeInitState2P())}
             style={{
@@ -1400,7 +1418,7 @@ const SECTIONS = [
       {
         id: "TetrisGame2P",
         label: "2P - Shared Board",
-        desc: "2P shared board: P1 floats UP (light, bottom half), P2 falls DOWN (dark, top half). Boundary fixed at row 10. Both AI-controlled.",
+        desc: "2P shared board: P1 floats UP, P2 falls DOWN. Each row cleared shifts the boundary (P1 push UP, P2 push DOWN). Win by squeezing opponent's territory to zero.",
         component: TetrisGame2P,
       },
       {
