@@ -378,19 +378,6 @@ function clearP2_2P(board, bdy) {
   return [[...fill, ...kept, ...board.slice(bdy)], n];
 }
 
-// Hard-wall enforcement: after a boundary shift, locked cells whose color
-// identifies them as an opponent's piece (P1 cell at r < bdy, or P2 cell at r >= bdy)
-// are cleared. Keeps the boundary acting as a solid collision barrier for both
-// active AND locked pieces.
-function enforceBoundary2P(board, bdy) {
-  return board.map((row, r) => row.map(cell => {
-    if (cell === null) return null;
-    if (r <  bdy && cell === PIECE_COLOR)  return null; // P1 cell in P2 territory
-    if (r >= bdy && cell === P2_COLOR_2P) return null; // P2 cell in P1 territory
-    return cell;
-  }));
-}
-
 function makeInitState2P() {
   const p1Type = randPiece();
   const p2Type = randPiece();
@@ -1338,6 +1325,22 @@ function TetrisGame2P() {
         p2ShiftAcc -= p2IntShift;
 
         let newBdy = boundary - p1IntShift + p2IntShift;
+
+        // Preventive boundary clamp: the boundary is a physical wall that
+        // cannot move past existing cells. P2 cells require r < bdy, so bdy
+        // must be > max(P2 cell row). P1 cells require r >= bdy, so bdy must
+        // be <= min(P1 cell row). Scan board once and clamp.
+        let maxP2Row = -1, minP1Row = ROWS;
+        for (let r = 0; r < ROWS; r++) {
+          for (let c = 0; c < COLS; c++) {
+            const cell = board[r][c];
+            if (cell === P2_COLOR_2P && r > maxP2Row) maxP2Row = r;
+            if (cell === PIECE_COLOR  && r < minP1Row) minP1Row = r;
+          }
+        }
+        if (newBdy <= maxP2Row) newBdy = maxP2Row + 1;
+        if (newBdy >  minP1Row) newBdy = minP1Row;
+
         let winner = null, phase = "playing";
         if (newBdy <= 0) {
           newBdy = 0; winner = 1; phase = "over";              // P2 squeezed out
@@ -1345,9 +1348,11 @@ function TetrisGame2P() {
           newBdy = P1_VIEWPORT_H; winner = 2; phase = "over";  // P1 squeezed out
         }
 
-        // Hard-wall sweep: if the boundary moved, evict any opponent's locked
-        // cells from the newly-acquired rows so the boundary stays solid.
-        if (newBdy !== boundary) board = enforceBoundary2P(board, newBdy);
+        // Preventive enforcement: every active-piece move is gated by isValid,
+        // which treats the boundary as a wall. The clamp above ensures the
+        // boundary itself cannot advance past existing cells. No reactive
+        // sweep needed -- by construction, no cell can ever be on the wrong
+        // side of the boundary.
 
         return {
           board, aiTick, p1, p1Next, p2, p2Next, phase,
