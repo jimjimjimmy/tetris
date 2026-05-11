@@ -143,6 +143,10 @@ const BDY_2P       = 10;           // boundary: P2 rows 0-9, P1 rows 10..ROWS-1 
 const P2_COLOR_2P  = "#4a4a4a";    // P2 piece color in 2P mode (darker gray)
 const NEXT_2P_H    = 37;           // compact NEXT strip height (37+800+37=874)
 const BOARD_2P_TOP = NEXT_2P_H;    // board viewport y-offset = 37
+// Demo countdown timer length for TetrisGame2P. Used by the demo HUD and
+// pause/resume UI. Pure UI, no effect on game mechanics.
+const DEMO_DURATION_S = 60;
+
 // Territorial decay: each cleared row's shift value = max(MIN_SHIFT, 1 / (1 + DECAY_RATE * priorClears)).
 // Lower DECAY_RATE = gentler taper. MIN_SHIFT = floor value, ensures clears always matter.
 const DECAY_RATE   = 0.05;         // gentle taper -- floor reached around ~60 clears at MIN_SHIFT=0.25
@@ -446,6 +450,9 @@ function makeInitState2P() {
     p2ShiftAcc:  0,       // fractional pending boundary shift for P2
     winner:      null,
     phase:       "playing",
+    paused:      false,           // UI pause toggle (P key)
+    demoLeft:    DEMO_DURATION_S, // demo countdown in seconds
+    summary:     null,            // end-of-demo summary { p1Lines, p2Lines, boundary, winning }
   };
 }
 
@@ -1191,6 +1198,7 @@ function TetrisGame2P() {
     const id = setInterval(() => {
       setState(s => {
         if (s.phase !== "playing") return s;
+        if (s.paused || s.summary) return s;  // UI-frozen: skip tick entirely
         let { board, aiTick, p1, p1Next, p2, p2Next, p1Lines, p2Lines, boundary, p1ShiftAcc, p2ShiftAcc } = s;
         let n1 = 0, n2 = 0;
 
@@ -1390,6 +1398,7 @@ function TetrisGame2P() {
         // cell can ever exist on the wrong side of the boundary.
 
         return {
+          ...s,
           board, aiTick, p1, p1Next, p2, p2Next, phase,
           p1Lines: p1Lines + n1, p2Lines: p2Lines + n2,
           boundary: newBdy, p1ShiftAcc, p2ShiftAcc, winner,
@@ -1399,16 +1408,39 @@ function TetrisGame2P() {
     return () => clearInterval(id);
   }, []);
 
-  // "0" key to reset
+  // Key handlers: "0" resets, "p"/"P" toggles pause.
   React.useEffect(() => {
     const onKey = (e) => {
       if (e.key === "0") setState(makeInitState2P());
+      else if (e.key === "p" || e.key === "P") setState(s => ({...s, paused: !s.paused}));
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const { board, p1, p2, p1Next, p2Next, p1Lines, p2Lines, phase, boundary, winner } = state;
+  // Demo countdown: decrement demoLeft once per second, unless paused or
+  // summary already set. When it hits zero, freeze the game and emit the
+  // summary overlay. Pure UI -- no game mechanic touched.
+  React.useEffect(() => {
+    const id = setInterval(() => {
+      setState(s => {
+        if (s.paused || s.summary || s.phase !== "playing") return s;
+        const next = s.demoLeft - 1;
+        if (next <= 0) {
+          const winning = s.p1Lines > s.p2Lines ? 1 : s.p2Lines > s.p1Lines ? 2 : 0;
+          return {...s, demoLeft: 0, summary: {p1Lines: s.p1Lines, p2Lines: s.p2Lines, boundary: s.boundary, winning}};
+        }
+        return {...s, demoLeft: next};
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const { board, p1, p2, p1Next, p2Next, p1Lines, p2Lines, phase, boundary, winner, paused, demoLeft, summary } = state;
+  // Format demoLeft as M:SS for the HUD timer.
+  const mm = Math.floor(demoLeft / 60);
+  const ss = String(demoLeft % 60).padStart(2, "0");
+  const timerText = `${mm}:${ss}`;
 
   // Map enum cell values to colors for BoardViewport, then overlay both
   // active pieces. CELL_EMPTY -> null, CELL_P1 -> light gray, CELL_P2 ->
@@ -1443,6 +1475,9 @@ function TetrisGame2P() {
         justifyContent: "space-between",
       }}>
         <CompactNext type={p2Next} color={P2_COLOR_2P} />
+        <div style={{fontSize: 11, letterSpacing: 2, color: "rgba(255,255,255,0.7)", fontVariantNumeric: "tabular-nums"}}>
+          {timerText}
+        </div>
         <div style={{fontSize: 9, letterSpacing: 2, color: "rgba(255,255,255,0.3)"}}>
           P2 {p2Lines}
         </div>
@@ -1475,6 +1510,54 @@ function TetrisGame2P() {
           P1 {p1Lines}
         </div>
       </div>
+
+      {/* PAUSED overlay -- shown only while paused and not in game over / summary */}
+      {paused && !summary && phase === "playing" && (
+        <div style={{
+          position: "absolute", inset: 0,
+          background: "rgba(0,0,0,0.55)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          pointerEvents: "none",
+        }}>
+          <div style={{
+            fontSize: 32, fontWeight: 900, letterSpacing: 8,
+            color: "#fff",
+          }}>PAUSED</div>
+        </div>
+      )}
+
+      {/* DEMO COMPLETE summary overlay -- timer reached 0:00 */}
+      {summary && (
+        <div style={{
+          position: "absolute", inset: 0,
+          background: "rgba(0,0,0,0.88)",
+          display: "flex", flexDirection: "column",
+          alignItems: "center", justifyContent: "center",
+        }}>
+          <div style={{
+            fontSize: 26, fontWeight: 900, letterSpacing: 5,
+            color: "#fff", marginBottom: 18,
+          }}>DEMO COMPLETE</div>
+          <div style={{fontSize: 11, letterSpacing: 2, color: "rgba(255,255,255,0.55)", marginBottom: 4}}>
+            P1 {summary.p1Lines}  /  P2 {summary.p2Lines}
+          </div>
+          <div style={{fontSize: 11, letterSpacing: 2, color: "rgba(255,255,255,0.55)", marginBottom: 4}}>
+            boundary {summary.boundary}
+          </div>
+          <div style={{fontSize: 11, letterSpacing: 2, color: "rgba(255,255,255,0.55)", marginBottom: 24}}>
+            {summary.winning === 1 ? "P1 leading" : summary.winning === 2 ? "P2 leading" : "tied"}
+          </div>
+          <div
+            onPointerDown={() => setState(makeInitState2P())}
+            style={{
+              padding: "12px 36px", background: "#ff3333",
+              color: "#fff", borderRadius: 6,
+              fontSize: 13, fontWeight: 700, letterSpacing: 3,
+              cursor: "pointer",
+            }}
+          >REMATCH</div>
+        </div>
+      )}
 
       {/* Game over overlay */}
       {phase === "over" && (
