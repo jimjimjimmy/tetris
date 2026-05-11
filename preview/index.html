@@ -1211,22 +1211,20 @@ function TetrisGame2P() {
               if (sc > best1) { best1 = sc; bestRot1 = rot; bestX1 = x; }
             }
           }
-          let p1moved = true;
-          while (p1moved) {
-            p1moved = false;
-            if (p1.rot !== bestRot1) {
-              const nr = (p1.rot + 1) % 4;
-              if (isValid(getCells(p1.type, nr, p1.x, p1.y), board, boundary, 1)) {
-                p1 = { ...p1, rot: nr }; p1moved = true;
-              }
-            } else if (p1.x < bestX1) {
-              if (isValid(getCells(p1.type, p1.rot, p1.x + 1, p1.y), board, boundary, 1)) {
-                p1 = { ...p1, x: p1.x + 1 }; p1moved = true;
-              }
-            } else if (p1.x > bestX1) {
-              if (isValid(getCells(p1.type, p1.rot, p1.x - 1, p1.y), board, boundary, 1)) {
-                p1 = { ...p1, x: p1.x - 1 }; p1moved = true;
-              }
+          // Single step per tick (rotate OR slide one cell), so the visual is
+          // incremental. Symmetric with P2 single-step block below.
+          if (p1.rot !== bestRot1) {
+            const nr = (p1.rot + 1) % 4;
+            if (isValid(getCells(p1.type, nr, p1.x, p1.y), board, boundary, 1)) {
+              p1 = { ...p1, rot: nr };
+            }
+          } else if (p1.x < bestX1) {
+            if (isValid(getCells(p1.type, p1.rot, p1.x + 1, p1.y), board, boundary, 1)) {
+              p1 = { ...p1, x: p1.x + 1 };
+            }
+          } else if (p1.x > bestX1) {
+            if (isValid(getCells(p1.type, p1.rot, p1.x - 1, p1.y), board, boundary, 1)) {
+              p1 = { ...p1, x: p1.x - 1 };
             }
           }
         }
@@ -1283,22 +1281,19 @@ function TetrisGame2P() {
               if (sc > best2) { best2 = sc; bestRot2 = rot; bestX2 = x; }
             }
           }
-          let p2moved = true;
-          while (p2moved) {
-            p2moved = false;
-            if (p2.rot !== bestRot2) {
-              const nr = (p2.rot + 1) % 4;
-              if (isValid(getCells(p2.type, nr, p2.x, p2.y), board, boundary, 2)) {
-                p2 = { ...p2, rot: nr }; p2moved = true;
-              }
-            } else if (p2.x < bestX2) {
-              if (isValid(getCells(p2.type, p2.rot, p2.x + 1, p2.y), board, boundary, 2)) {
-                p2 = { ...p2, x: p2.x + 1 }; p2moved = true;
-              }
-            } else if (p2.x > bestX2) {
-              if (isValid(getCells(p2.type, p2.rot, p2.x - 1, p2.y), board, boundary, 2)) {
-                p2 = { ...p2, x: p2.x - 1 }; p2moved = true;
-              }
+          // Single step per tick (rotate OR slide one cell). Mirrors P1.
+          if (p2.rot !== bestRot2) {
+            const nr = (p2.rot + 1) % 4;
+            if (isValid(getCells(p2.type, nr, p2.x, p2.y), board, boundary, 2)) {
+              p2 = { ...p2, rot: nr };
+            }
+          } else if (p2.x < bestX2) {
+            if (isValid(getCells(p2.type, p2.rot, p2.x + 1, p2.y), board, boundary, 2)) {
+              p2 = { ...p2, x: p2.x + 1 };
+            }
+          } else if (p2.x > bestX2) {
+            if (isValid(getCells(p2.type, p2.rot, p2.x - 1, p2.y), board, boundary, 2)) {
+              p2 = { ...p2, x: p2.x - 1 };
             }
           }
         }
