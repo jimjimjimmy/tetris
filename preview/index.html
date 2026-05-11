@@ -139,7 +139,12 @@ const P2_SPAWN_Y    = 3;                         // mirror of P1 spawn ROWS-4=29
 const P2_VP_START   = P2_SPAWN_Y - PEEK;         // = 1, mirror of P1 p1ViewAnchor=10
 
 // 2P shared board constants
-const BDY_2P       = 10;           // boundary: P2 rows 0-9, P1 rows 10..ROWS-1 (visible: 10-19)
+// ROWS_2P must be EVEN so BDY_2P = ROWS_2P / 2 sits at the exact midpoint
+// and both players own identical territory (ROWS_2P / 2 rows each).
+// P2 owns rows 0 .. ROWS_2P/2 - 1 (top half). P1 owns rows ROWS_2P/2 .. ROWS_2P - 1 (bottom half).
+// No spawn buffer -- every row is visible and playable.
+const ROWS_2P      = 20;           // visible+playable rows for the 2P game (even, no buffer)
+const BDY_2P       = ROWS_2P / 2;  // exact midpoint -- P2 rows 0..9, P1 rows 10..19
 const P2_COLOR_2P  = "#4a4a4a";    // P2 piece color in 2P mode (darker gray)
 const NEXT_2P_H    = 37;           // compact NEXT strip height (37+800+37=874)
 const BOARD_2P_TOP = NEXT_2P_H;    // board viewport y-offset = 37
@@ -255,12 +260,11 @@ function pieceMaxDr(type, rot) {
   return m;
 }
 
-// Symmetric P1 spawn origin for TetrisGame2P. With the wall row occupying
-// row=boundary, P1's lock row is now boundary+1 (one further from the
-// boundary than P2's lock). Shift P1's spawn down by 1 to compensate so
-// per-piece travel matches P2.
+// Symmetric P1 spawn origin for TetrisGame2P. Piece origin is placed so the
+// BOTTOM cell of the piece body sits on row ROWS_2P-1 (the visible floor).
+// With ROWS_2P=20 this means I-rot-0 spawns at y=19, O spawns at y=18, etc.
 function p1SpawnY2P(type) {
-  return P1_VIEWPORT_H - pieceMaxDr(type, 0);
+  return ROWS_2P - 1 - pieceMaxDr(type, 0);
 }
 
 function emptyBoard() {
@@ -385,18 +389,20 @@ function makeInitStateP2() {
 // Initial 2P board: all CELL_EMPTY. No wall row -- the boundary is a
 // separate state variable, not a row in the board.
 function initBoard2P() {
-  return Array.from({length: ROWS}, () => Array(COLS).fill(CELL_EMPTY));
+  return Array.from({length: ROWS_2P}, () => Array(COLS).fill(CELL_EMPTY));
 }
 
 // 2P validation: rejects out-of-bounds, non-empty cells, and cells on the
-// wrong side of the boundary. P1 may only occupy rows STRICTLY greater
-// than `boundary`; P2 may only occupy rows STRICTLY less than `boundary`.
-// The boundary row itself belongs to neither player.
+// wrong side of the boundary. Asymmetric rule so the boundary row belongs
+// to exactly ONE player (P1) -- this guarantees equal-sized territories
+// when ROWS_2P is even and BDY_2P = ROWS_2P / 2:
+//   P1 valid: r >= boundary (P1 owns boundary row and everything below)
+//   P2 valid: r <  boundary (P2 owns everything strictly above boundary)
 function isValid2P(cells, board, boundary, player) {
   for (const [c, r] of cells) {
-    if (c < 0 || c >= COLS || r < 0 || r >= ROWS) return false;
+    if (c < 0 || c >= COLS || r < 0 || r >= ROWS_2P) return false;
     if (board[r][c] !== CELL_EMPTY) return false;
-    if (player === 1 && r <= boundary) return false;
+    if (player === 1 && r <  boundary) return false;
     if (player === 2 && r >= boundary) return false;
   }
   return true;
@@ -406,24 +412,26 @@ function isValid2P(cells, board, boundary, player) {
 function lockPiece2P(board, cells, value) {
   const next = board.map(row => [...row]);
   for (const [c, r] of cells) {
-    if (r >= 0 && r < ROWS && c >= 0 && c < COLS) next[r][c] = value;
+    if (r >= 0 && r < ROWS_2P && c >= 0 && c < COLS) next[r][c] = value;
   }
   return next;
 }
 
-// P1 row clear: filled rows in P1 territory (rows bdy+1..ROWS-1) removed;
-// empty rows appended at bottom of P1 zone. Wall row at `bdy` untouched.
+// P1 row clear: filled rows in P1 territory (rows bdy..ROWS_2P-1) removed;
+// remaining (non-full) rows rise toward boundary; empty rows appended at
+// bottom of P1 zone (near the floor / spawn). Boundary row IS P1's.
 function clearP1_2P(board, bdy) {
-  const terr = board.slice(bdy + 1);
+  const terr = board.slice(bdy);
   const kept = terr.filter(row => row.includes(CELL_EMPTY));
   const n    = terr.length - kept.length;
   if (n === 0) return [board, 0];
   const fill = Array.from({length: n}, () => Array(COLS).fill(CELL_EMPTY));
-  return [[...board.slice(0, bdy + 1), ...kept, ...fill], n];
+  return [[...board.slice(0, bdy), ...kept, ...fill], n];
 }
 
 // P2 row clear: filled rows in P2 territory (rows 0..bdy-1) removed;
-// empty rows prepended at top of P2 zone. Wall row at `bdy` untouched.
+// remaining rows fall toward boundary; empty rows prepended at top of P2
+// zone (near the ceiling / spawn). Boundary row belongs to P1, not P2.
 function clearP2_2P(board, bdy) {
   const terr = board.slice(0, bdy);
   const kept = terr.filter(row => row.includes(CELL_EMPTY));
@@ -1204,24 +1212,24 @@ function TetrisGame2P() {
 
         aiTick += 1;
 
-        // ── P1 AI (floats UP, territory rows boundary+1..ROWS-1) ──────────
+        // ── P1 AI (floats UP, territory rows boundary..ROWS_2P-1) ─────────
         if (aiTick % AI_PERIOD === 0) {
           const getLandingY1 = (type, rot, x) => {
             const startY = Math.max(0, boundary - 4);
-            for (let y = startY; y < ROWS; y++) {
+            for (let y = startY; y < ROWS_2P; y++) {
               if (!isValid2P(getCells(type, rot, x, y), board, boundary, 1)) continue;
               if (!isValid2P(getCells(type, rot, x, y - 1), board, boundary, 1)) return y;
             }
             return -1;
           };
-          const SCORE_MIN_1 = boundary + 1; // P1 starts one row past the wall
-          const SCORE_MAX_1 = P1_VIEWPORT_H - 1;
+          const SCORE_MIN_1 = boundary;      // P1 owns boundary row -- top of P1's stack zone
+          const SCORE_MAX_1 = ROWS_2P - 1;   // floor (bottom of board)
           const scoreP1 = (type, rot, x) => {
             const ly = getLandingY1(type, rot, x);
             if (ly < 0) return -Infinity;
             const sim = board.map(row => [...row]);
             for (const [c, r] of getCells(type, rot, x, ly)) {
-              if (r >= 0 && r < ROWS && c >= 0 && c < COLS) sim[r][c] = CELL_P1;
+              if (r >= 0 && r < ROWS_2P && c >= 0 && c < COLS) sim[r][c] = CELL_P1;
             }
             let score = 0;
             const [simAfter, cleared] = clearP1_2P(sim, boundary);
@@ -1283,7 +1291,7 @@ function TetrisGame2P() {
             if (ly < 0) return -Infinity;
             const sim = board.map(row => [...row]);
             for (const [c, r] of getCells(type, rot, x, ly)) {
-              if (r >= 0 && r < ROWS && c >= 0 && c < COLS) sim[r][c] = CELL_P2;
+              if (r >= 0 && r < ROWS_2P && c >= 0 && c < COLS) sim[r][c] = CELL_P2;
             }
             let score = 0;
             const [simAfter, cleared] = clearP2_2P(sim, boundary);
@@ -1370,12 +1378,12 @@ function TetrisGame2P() {
         let newBdy = boundary - p1IntShift + p2IntShift;
 
         // Preventive clamp: the boundary, being a hard wall, cannot slide
-        // through existing cells. P1 cells require r > newBdy; P2 cells
-        // require r < newBdy. Scan the board and clamp newBdy so the
-        // strict rule is preserved for every locked cell. The board cells
-        // themselves are unchanged; only the boundary value is constrained.
-        let maxP2Row = -1, minP1Row = ROWS;
-        for (let r = 0; r < ROWS; r++) {
+        // through existing cells. With the asymmetric rule (P1 owns boundary
+        // row), P1 cells require r >= newBdy and P2 cells require r < newBdy.
+        // Scan the board and clamp newBdy so the rule holds for every
+        // locked cell. The board cells themselves are unchanged.
+        let maxP2Row = -1, minP1Row = ROWS_2P;
+        for (let r = 0; r < ROWS_2P; r++) {
           for (let c = 0; c < COLS; c++) {
             const cell = board[r][c];
             if (cell === CELL_P2 && r > maxP2Row) maxP2Row = r;
@@ -1383,13 +1391,13 @@ function TetrisGame2P() {
           }
         }
         if (newBdy <= maxP2Row) newBdy = maxP2Row + 1;
-        if (newBdy >= minP1Row) newBdy = minP1Row - 1;
+        if (newBdy >  minP1Row) newBdy = minP1Row;
 
         let winner = null, phase = "playing";
         if (newBdy <= 0) {
-          newBdy = 0; winner = 1; phase = "over";              // P2 squeezed out
-        } else if (newBdy >= P1_VIEWPORT_H) {
-          newBdy = P1_VIEWPORT_H; winner = 2; phase = "over";  // P1 squeezed out
+          newBdy = 0; winner = 1; phase = "over";        // P2 squeezed out
+        } else if (newBdy >= ROWS_2P) {
+          newBdy = ROWS_2P; winner = 2; phase = "over";  // P1 squeezed out
         }
 
         // Boundary is a separate state variable, not stored in the board.
@@ -1437,9 +1445,12 @@ function TetrisGame2P() {
   }, []);
 
   const { board, p1, p2, p1Next, p2Next, p1Lines, p2Lines, phase, boundary, winner, paused, demoLeft, summary } = state;
-  // Format demoLeft as M:SS for the HUD timer.
-  const mm = Math.floor(demoLeft / 60);
-  const ss = String(demoLeft % 60).padStart(2, "0");
+  // Format demoLeft as M:SS for the HUD timer. Defensive: if demoLeft is
+  // ever missing or non-numeric, fall back to DEMO_DURATION_S so the timer
+  // shows the initial value (e.g. "1:00") instead of "NaN:NaN".
+  const dl = (typeof demoLeft === "number" && !isNaN(demoLeft)) ? demoLeft : DEMO_DURATION_S;
+  const mm = Math.floor(dl / 60);
+  const ss = String(dl % 60).padStart(2, "0");
   const timerText = `${mm}:${ss}`;
 
   // Map enum cell values to colors for BoardViewport, then overlay both
@@ -1448,10 +1459,10 @@ function TetrisGame2P() {
   // BoardViewport, not as board cells.
   const grid = board.map(row => row.map(v => CELL_TO_COLOR_2P[v]));
   getCells(p1.type, p1.rot, p1.x, p1.y).forEach(([c, r]) => {
-    if (r >= 0 && r < ROWS && c >= 0 && c < COLS) grid[r][c] = PIECE_COLOR;
+    if (r >= 0 && r < ROWS_2P && c >= 0 && c < COLS) grid[r][c] = PIECE_COLOR;
   });
   getCells(p2.type, p2.rot, p2.x, p2.y).forEach(([c, r]) => {
-    if (r >= 0 && r < ROWS && c >= 0 && c < COLS) grid[r][c] = P2_COLOR_2P;
+    if (r >= 0 && r < ROWS_2P && c >= 0 && c < COLS) grid[r][c] = P2_COLOR_2P;
   });
 
   return (

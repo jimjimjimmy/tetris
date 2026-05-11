@@ -5,7 +5,7 @@
   Whichever machine (MacFQ or Gandalf) adds a component, updates a file,
   or makes a structural change: update this file before ending the session.
   Both machines depend on this as the single source of truth.
-  Last updated: 2026-05-10 - Gandalf (TetrisGame2P AI fixed: P2 spawn y=0, while-loop repositioning, SCORE_MIN_2=0 - verified P2: 45+ clears, P1: 14+ clears at 5x speed)
+  Last updated: 2026-05-11 - MacFQ (TetrisGame2P symmetric territory: ROWS_2P=20, BDY_2P=ROWS_2P/2=10, asymmetric isValid rule so boundary row belongs to P1, exactly 10/10 territory split, NaN:NaN timer defensively guarded, verified 60s TEST_SPEED=true with 2249 samples / 0 boundary violations)
 -->
 
 ## Required reading before building
@@ -260,10 +260,11 @@ function useReveal(duration) {
 ### 2P Shared Board
 - `TetrisGame2P` - shared board with P1 (bottom half, floats UP, #B1B2B3) and P2 (top half, falls DOWN, #4a4a4a). Territorial tug-of-war via boundary shift.
   - Layout: NEXT_2P_H=37px P2-NEXT + 800px board (20 rows) + 37px P1-NEXT = GAME_2P_H=874px.
-  - BDY_2P=10 is the INITIAL boundary only. Actual boundary is dynamic state, tracked as `boundary` in component state.
+  - ROWS_2P=20 (the 2P-specific row count). EVEN, so boundary = ROWS_2P / 2 = 10 sits at the exact midpoint and both players own identical territory of ROWS_2P/2 = 10 rows each. No spawn buffer -- every row is visible and playable. (The legacy 1P standalone games keep ROWS=33 with their old layout; ROWS_2P is a separate constant just for TetrisGame2P.)
+  - BDY_2P = ROWS_2P / 2 = 10 is the INITIAL boundary only. Actual boundary is dynamic state, tracked as `boundary` in component state.
   - Territory shift mechanic with decay: each cleared row contributes `max(MIN_SHIFT, 1 / (1 + DECAY_RATE * priorClears))` to that player's fractional accumulator (`p1ShiftAcc`/`p2ShiftAcc`). Each tick the integer portion drains into the boundary (P1 push UP, P2 push DOWN); fractional remainder persists. Constants live in the top block: `DECAY_RATE = 0.05`, `MIN_SHIFT = 0.25`. Decay floor reached around 60 clears. Helpers: `decayShiftAt(priorClears)`, `sumDecayShift(startIdx, n)`.
-  - Win condition: `boundary <= 0` -> P1 WINS (P2 squeezed out). `boundary >= P1_VIEWPORT_H` (20) -> P2 WINS (P1 squeezed out of visible area). GAME OVER overlay shows "P1 WINS" / "P2 WINS" with "territory claimed" subtitle.
-  - Board cells store only `CELL_EMPTY=0`, `CELL_P1=1`, `CELL_P2=2`. The boundary is NOT stored in the board -- it lives in state as a separate variable. `isValid2P(cells, board, boundary, player)` applies the strict rule: P1 rejects cells at `r <= boundary`, P2 rejects cells at `r >= boundary`. The boundary row itself belongs to neither player. The boundary line is a 2px CSS overlay rendered by `BoardViewport`, not board cells. Helpers: `initBoard2P` (all zeros), `isValid2P`, `lockPiece2P`. Preventive boundary clamp keeps the line from sliding past locked cells: `maxP2Row < newBdy < minP1Row`. P1 spawn formula `P1_VIEWPORT_H - pieceMaxDr(type, 0)` (= 20 - max_dr) gives identical travel ticks per piece to P2 under the strict rule.
+  - Win condition: `boundary <= 0` -> P1 WINS (P2 squeezed out). `boundary >= ROWS_2P` (20) -> P2 WINS (P1 squeezed out). GAME OVER overlay shows "P1 WINS" / "P2 WINS" with "territory claimed" subtitle.
+  - Board cells store only `CELL_EMPTY=0`, `CELL_P1=1`, `CELL_P2=2`. The boundary is NOT stored in the board -- it lives in state as a separate variable. `isValid2P(cells, board, boundary, player)` applies the asymmetric rule so the boundary row belongs to exactly ONE player (P1): P1 rejects cells at `r < boundary`, P2 rejects cells at `r >= boundary`. This guarantees equal-sized territories when ROWS_2P is even and BDY_2P = ROWS_2P / 2: P2 owns rows 0..ROWS_2P/2-1 (top half), P1 owns rows ROWS_2P/2..ROWS_2P-1 (bottom half). The boundary line is a 2px CSS overlay rendered by `BoardViewport`, not board cells. Helpers: `initBoard2P` (all zeros), `isValid2P`, `lockPiece2P`. Preventive boundary clamp keeps the line from sliding past locked cells: `maxP2Row < newBdy <= minP1Row`. P1 spawn formula `ROWS_2P - 1 - pieceMaxDr(type, 0)` places the piece bottom on the visible floor (row ROWS_2P-1).
   - Demo HUD (pure UI):
     - `P` key toggles pause. While paused, both players freeze (tick callback early-returns when `s.paused`). PAUSED overlay shown at center.
     - Countdown timer (`DEMO_DURATION_S = 60` constant). Wall-clock setInterval decrements `demoLeft` once per second unless paused or summary is set. When it hits 0, `summary = {p1Lines, p2Lines, boundary, winning}` is stored, the tick freezes, and a DEMO COMPLETE overlay appears with the stats and a REMATCH button.
