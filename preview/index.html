@@ -143,6 +143,10 @@ const BDY_2P       = 10;           // boundary: P2 rows 0-9, P1 rows 10..ROWS-1 
 const P2_COLOR_2P  = "#4a4a4a";    // P2 piece color in 2P mode (darker gray)
 const NEXT_2P_H    = 37;           // compact NEXT strip height (37+800+37=874)
 const BOARD_2P_TOP = NEXT_2P_H;    // board viewport y-offset = 37
+// Territorial decay: each cleared row's shift value = max(MIN_SHIFT, 1 / (1 + DECAY_RATE * priorClears)).
+// Lower DECAY_RATE = gentler taper. MIN_SHIFT = floor value, ensures clears always matter.
+const DECAY_RATE   = 0.05;         // gentle taper -- floor reached around ~60 clears at MIN_SHIFT=0.25
+const MIN_SHIFT    = 0.25;         // minimum boundary shift per cleared row (never zero)
 const GAME_2P_H    = NEXT_2P_H + P1_VIEWPORT_H * CELL + NEXT_2P_H; // 874
 
 // Button centers within frame (absolute Y, absolute X in 402px frame)
@@ -369,10 +373,25 @@ function makeInitState2P() {
     p2Next:   randPiece(),
     p1Lines:  0,
     p2Lines:  0,
-    boundary: BDY_2P,  // dynamic: shifts on row clear (P1 clear -> bdy-=n1, P2 clear -> bdy+=n2)
-    winner:   null,
-    phase:    "playing",
+    boundary:    BDY_2P,  // dynamic: shifts on row clear (P1 clear -> bdy-=Δ, P2 clear -> bdy+=Δ)
+    p1ShiftAcc:  0,       // fractional pending boundary shift for P1 (drains integer parts each tick)
+    p2ShiftAcc:  0,       // fractional pending boundary shift for P2
+    winner:      null,
+    phase:       "playing",
   };
+}
+
+// Territorial decay helper: returns the boundary-shift contribution for a single cleared row
+// given how many lifetime clears the player had before this row. Curve: 1 / (1 + DECAY_RATE * k),
+// floored at MIN_SHIFT so clears always nudge the boundary.
+function decayShiftAt(priorClears) {
+  return Math.max(MIN_SHIFT, 1 / (1 + DECAY_RATE * priorClears));
+}
+// Sum of decay shifts for N consecutive clears starting at lifetime index `startIdx`.
+function sumDecayShift(startIdx, n) {
+  let sum = 0;
+  for (let i = 0; i < n; i++) sum += decayShiftAt(startIdx + i);
+  return sum;
 }
 
 // ============================================================
@@ -1104,7 +1123,7 @@ function TetrisGame2P() {
     const id = setInterval(() => {
       setState(s => {
         if (s.phase !== "playing") return s;
-        let { board, aiTick, p1, p1Next, p2, p2Next, p1Lines, p2Lines, boundary } = s;
+        let { board, aiTick, p1, p1Next, p2, p2Next, p1Lines, p2Lines, boundary, p1ShiftAcc, p2ShiftAcc } = s;
         let n1 = 0, n2 = 0;
 
         aiTick += 1;
@@ -1282,20 +1301,29 @@ function TetrisGame2P() {
           }
         }
 
-        // ── Territory shift: P1 clears push boundary UP, P2 clears push it DOWN.
-        // Net delta = (P2 cleared) − (P1 cleared). Existing locked cells unchanged.
-        let newBdy = boundary - n1 + n2;
+        // ── Territory shift with decay: each cleared row contributes
+        //    max(MIN_SHIFT, 1/(1 + DECAY_RATE * priorClears)) to that player's
+        //    fractional accumulator. Integer parts drain into the boundary
+        //    (P1 pushes UP, P2 pushes DOWN); remainders persist across ticks.
+        if (n1 > 0) p1ShiftAcc += sumDecayShift(p1Lines, n1);
+        if (n2 > 0) p2ShiftAcc += sumDecayShift(p2Lines, n2);
+        const p1IntShift = Math.floor(p1ShiftAcc);
+        const p2IntShift = Math.floor(p2ShiftAcc);
+        p1ShiftAcc -= p1IntShift;
+        p2ShiftAcc -= p2IntShift;
+
+        let newBdy = boundary - p1IntShift + p2IntShift;
         let winner = null, phase = "playing";
         if (newBdy <= 0) {
-          newBdy = 0; winner = 1; phase = "over";          // P2 squeezed out
+          newBdy = 0; winner = 1; phase = "over";              // P2 squeezed out
         } else if (newBdy >= P1_VIEWPORT_H) {
-          newBdy = P1_VIEWPORT_H; winner = 2; phase = "over"; // P1 squeezed out
+          newBdy = P1_VIEWPORT_H; winner = 2; phase = "over";  // P1 squeezed out
         }
 
         return {
           board, aiTick, p1, p1Next, p2, p2Next, phase,
           p1Lines: p1Lines + n1, p2Lines: p2Lines + n2,
-          boundary: newBdy, winner,
+          boundary: newBdy, p1ShiftAcc, p2ShiftAcc, winner,
         };
       });
     }, TICK_MS);

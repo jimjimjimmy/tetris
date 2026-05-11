@@ -261,7 +261,7 @@ function useReveal(duration) {
 - `TetrisGame2P` - shared board with P1 (bottom half, floats UP, #B1B2B3) and P2 (top half, falls DOWN, #4a4a4a). Territorial tug-of-war via boundary shift.
   - Layout: NEXT_2P_H=37px P2-NEXT + 800px board (20 rows) + 37px P1-NEXT = GAME_2P_H=874px.
   - BDY_2P=10 is the INITIAL boundary only. Actual boundary is dynamic state, tracked as `boundary` in component state.
-  - Territory shift mechanic: when P1 clears N rows, `boundary -= N` (boundary moves UP, P1 gains N rows from P2's bottom). When P2 clears N rows, `boundary += N` (boundary moves DOWN, P2 gains N rows from P1's top). Net per tick = `n2 - n1`.
+  - Territory shift mechanic with decay: each cleared row contributes `max(MIN_SHIFT, 1 / (1 + DECAY_RATE * priorClears))` to that player's fractional accumulator (`p1ShiftAcc`/`p2ShiftAcc`). Each tick the integer portion drains into the boundary (P1 push UP, P2 push DOWN); fractional remainder persists. Constants live in the top block: `DECAY_RATE = 0.05`, `MIN_SHIFT = 0.25`. Decay floor reached around 60 clears. Helpers: `decayShiftAt(priorClears)`, `sumDecayShift(startIdx, n)`.
   - Win condition: `boundary <= 0` -> P1 WINS (P2 squeezed out). `boundary >= P1_VIEWPORT_H` (20) -> P2 WINS (P1 squeezed out of visible area). GAME OVER overlay shows "P1 WINS" / "P2 WINS" with "territory claimed" subtitle.
   - Pieces already placed are NOT moved by the boundary shift -- only the boundary index changes and rows reassign territory.
   - Boundary line: 2px white line, animated with `transition: top 260ms cubic-bezier(0.22, 1, 0.36, 1)`. Glow via boxShadow when animateBoundary=true.
@@ -270,7 +270,7 @@ function useReveal(duration) {
   - Row clear helpers `clearP1_2P(board, bdy)` / `clearP2_2P(board, bdy)` now take dynamic bdy parameter.
   - Both AI-controlled. AI uses 4-component scoring (line clears + density + height penalty + holes + bumpiness) parameterized on the current dynamic boundary. SCORE_MAX_1=19 fixed (last visible row). SCORE_MAX_2 = boundary - 1 (P2 territory upper bound).
   - P1 height penalty: `Math.max(0, ly - boundary - 2) * 4`. Both P1 and P2 use while-loop repositioning.
-  - Verified at TEST_SPEED=true: boundary shifted smoothly 10 -> 20 over 10 P2 clears in ~24.6s, "P2 WINS" triggered correctly. Zero console errors.
+  - Verified decay at TEST_SPEED=true (60s): early P2 clears each pushed ~1 row, later clears took ~2 P2 clears per row of shift. Game ended at 35s with P2=15 clears, P1=2 (vs 24.6s / P2=10 / P1=0 pre-decay) -- 42% longer match, no death spiral, P1 had time to score. "P2 WINS" overlay triggered correctly. Zero console errors.
   - P2 color #4a4a4a (dark gray). P1 color #B1B2B3 (light gray).
   - CompactNext: 7px cells, no label, both 37px NEXT strips.
   - Debug key "0" resets.
