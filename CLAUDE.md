@@ -5,7 +5,7 @@
   Whichever machine (MacFQ or Gandalf) adds a component, updates a file,
   or makes a structural change: update this file before ending the session.
   Both machines depend on this as the single source of truth.
-  Last updated: 2026-05-11 - MacFQ (game.html P1 human controls: removed P1 AI block; added applyP1 dispatcher; touch gestures - tap rotates, swipeL/R moves, swipeUp hard-drops up - buoyancy boost, swipeDown pushes +1y; arrows + space keyboard parallel; P2 still AI; index.html untouched)
+  Last updated: 2026-05-11 - MacFQ (game.html safe-area: env(safe-area-inset-top/bottom) padding on body, #root flows inside content box, FullscreenGame scale reads root.clientWidth/Height so game respects iOS notch + home indicator while staying edge-to-edge horizontally; viewport-fit=cover was already set; index.html untouched)
 -->
 
 ## Required reading before building
