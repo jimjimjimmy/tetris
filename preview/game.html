@@ -309,69 +309,8 @@ function TetrisGame2P() {
 
         aiTick += 1;
 
-        // P1 AI (floats UP)
-        if (aiTick % AI_PERIOD === 0) {
-          const getLandingY1 = (type, rot, x) => {
-            const startY = Math.max(0, boundary - 4);
-            for (let y = startY; y < ROWS_2P; y++) {
-              if (!isValid2P(getCells(type, rot, x, y), board, boundary, 1)) continue;
-              if (!isValid2P(getCells(type, rot, x, y - 1), board, boundary, 1)) return y;
-            }
-            return -1;
-          };
-          const SCORE_MIN_1 = boundary;
-          const SCORE_MAX_1 = ROWS_2P - 1;
-          const scoreP1 = (type, rot, x) => {
-            const ly = getLandingY1(type, rot, x);
-            if (ly < 0) return -Infinity;
-            const sim = board.map(row => [...row]);
-            for (const [c, r] of getCells(type, rot, x, ly)) {
-              if (r >= 0 && r < ROWS_2P && c >= 0 && c < COLS) sim[r][c] = CELL_P1;
-            }
-            let score = 0;
-            const [simAfter, cleared] = clearP1_2P(sim, boundary);
-            score += cleared * 500;
-            for (let r = SCORE_MIN_1; r <= SCORE_MAX_1; r++) {
-              const filled = simAfter[r].filter(c => c !== CELL_EMPTY).length;
-              score += filled * filled;
-            }
-            score -= Math.max(0, ly - SCORE_MIN_1 - 2) * 4;
-            let holes = 0;
-            for (let c = 0; c < COLS; c++) {
-              let hasFillBelow = false;
-              for (let r = SCORE_MAX_1; r >= SCORE_MIN_1; r--) {
-                if (simAfter[r][c] !== CELL_EMPTY) hasFillBelow = true;
-                else if (hasFillBelow) holes++;
-              }
-            }
-            score -= holes * 30;
-            const colH = Array(COLS).fill(0);
-            for (let c = 0; c < COLS; c++) {
-              for (let r = SCORE_MIN_1; r <= SCORE_MAX_1; r++) {
-                if (simAfter[r][c] !== CELL_EMPTY) colH[c] = r - boundary;
-              }
-            }
-            let bumpiness = 0;
-            for (let c = 1; c < COLS; c++) bumpiness += Math.abs(colH[c] - colH[c - 1]);
-            score -= bumpiness * 2;
-            return score;
-          };
-          let best1 = -Infinity, bestRot1 = p1.rot, bestX1 = p1.x;
-          for (let rot = 0; rot < 4; rot++) {
-            for (let x = -1; x < COLS + 1; x++) {
-              const sc = scoreP1(p1.type, rot, x);
-              if (sc > best1) { best1 = sc; bestRot1 = rot; bestX1 = x; }
-            }
-          }
-          if (p1.rot !== bestRot1) {
-            const nr = (p1.rot + 1) % 4;
-            if (isValid2P(getCells(p1.type, nr, p1.x, p1.y), board, boundary, 1)) p1 = { ...p1, rot: nr };
-          } else if (p1.x < bestX1) {
-            if (isValid2P(getCells(p1.type, p1.rot, p1.x + 1, p1.y), board, boundary, 1)) p1 = { ...p1, x: p1.x + 1 };
-          } else if (p1.x > bestX1) {
-            if (isValid2P(getCells(p1.type, p1.rot, p1.x - 1, p1.y), board, boundary, 1)) p1 = { ...p1, x: p1.x - 1 };
-          }
-        }
+        // P1 is HUMAN-controlled in game.html (touch + keyboard via applyP1).
+        // No AI scoring/rotation/slide here -- only physics (float UP) runs below.
 
         // P2 AI (falls DOWN)
         if (aiTick % AI_PERIOD === 0) {
@@ -503,15 +442,92 @@ function TetrisGame2P() {
     return () => clearInterval(id);
   }, []);
 
-  // Keys: "0" reset, "p"/"P" pause
+  // applyP1: human-input dispatcher for the P1 piece. Used by both the
+  // touch-gesture handler (iOS) and the keyboard handler (laptop testing).
+  // Each action mutates only p1.{x,rot,y} after isValid2P passes; if the
+  // game is not in the playing state, the dispatcher is a no-op.
+  //   tap   -> rotate CW
+  //   left  -> p1.x - 1
+  //   right -> p1.x + 1
+  //   up    -> hard drop UP (buoyancy boost: slide to highest valid y)
+  //   down  -> p1.y + 1 (push against the float, one row at a time)
+  const applyP1 = React.useCallback((action) => {
+    setState(s => {
+      if (s.phase !== "playing" || s.paused || s.summary) return s;
+      const { p1, board, boundary } = s;
+      if (action === "tap") {
+        const nr = (p1.rot + 1) % 4;
+        if (isValid2P(getCells(p1.type, nr, p1.x, p1.y), board, boundary, 1)) {
+          return { ...s, p1: { ...p1, rot: nr } };
+        }
+      } else if (action === "left") {
+        if (isValid2P(getCells(p1.type, p1.rot, p1.x - 1, p1.y), board, boundary, 1)) {
+          return { ...s, p1: { ...p1, x: p1.x - 1 } };
+        }
+      } else if (action === "right") {
+        if (isValid2P(getCells(p1.type, p1.rot, p1.x + 1, p1.y), board, boundary, 1)) {
+          return { ...s, p1: { ...p1, x: p1.x + 1 } };
+        }
+      } else if (action === "up") {
+        // Hard drop UP: keep moving until invalid. P1 floats UP so smallest
+        // valid y is the lock position. Tick physics will lock on next frame.
+        let y = p1.y;
+        while (isValid2P(getCells(p1.type, p1.rot, p1.x, y - 1), board, boundary, 1)) {
+          y--;
+        }
+        if (y !== p1.y) return { ...s, p1: { ...p1, y } };
+      } else if (action === "down") {
+        if (isValid2P(getCells(p1.type, p1.rot, p1.x, p1.y + 1), board, boundary, 1)) {
+          return { ...s, p1: { ...p1, y: p1.y + 1 } };
+        }
+      }
+      return s;
+    });
+  }, []);
+
+  // Keyboard: "0" reset, "p"/"P" pause, arrows + space drive P1.
   React.useEffect(() => {
     const onKey = (e) => {
       if (e.key === "0") setState(makeInitState2P());
       else if (e.key === "p" || e.key === "P") setState(s => ({...s, paused: !s.paused}));
+      else if (e.key === "ArrowLeft")  applyP1("left");
+      else if (e.key === "ArrowRight") applyP1("right");
+      else if (e.key === "ArrowUp")    applyP1("up");
+      else if (e.key === "ArrowDown")  applyP1("down");
+      else if (e.key === " ")          applyP1("tap");
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [applyP1]);
+
+  // Touch gestures: tap rotates, swipe (>=20px) moves. Tap window is <10px.
+  // Distances in between are ignored (dead zone) so a wobbly tap does not
+  // accidentally swipe. Attaches to document so the entire screen accepts
+  // input -- the FullscreenGame wrapper already blocks default scroll/zoom.
+  React.useEffect(() => {
+    let startX = 0, startY = 0;
+    const onStart = (e) => {
+      if (e.touches.length !== 1) return;
+      startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
+    };
+    const onEnd = (e) => {
+      if (e.changedTouches.length !== 1) return;
+      const dx = e.changedTouches[0].clientX - startX;
+      const dy = e.changedTouches[0].clientY - startY;
+      const adx = Math.abs(dx), ady = Math.abs(dy);
+      if (adx < 10 && ady < 10) { applyP1("tap"); return; }
+      if (adx < 20 && ady < 20) return; // dead zone between tap and swipe
+      if (adx > ady) applyP1(dx > 0 ? "right" : "left");
+      else           applyP1(dy > 0 ? "down"  : "up");
+    };
+    document.addEventListener("touchstart", onStart, { passive: true });
+    document.addEventListener("touchend",   onEnd,   { passive: true });
+    return () => {
+      document.removeEventListener("touchstart", onStart);
+      document.removeEventListener("touchend",   onEnd);
+    };
+  }, [applyP1]);
 
   // Demo countdown
   React.useEffect(() => {

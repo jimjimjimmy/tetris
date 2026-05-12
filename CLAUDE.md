@@ -5,7 +5,7 @@
   Whichever machine (MacFQ or Gandalf) adds a component, updates a file,
   or makes a structural change: update this file before ending the session.
   Both machines depend on this as the single source of truth.
-  Last updated: 2026-05-11 - MacFQ (Added preview/game.html: standalone fullscreen entry point for TetrisGame2P. PWA meta tags, viewport-fit=cover, touch-action: none, JS scale-to-fit wrapper preserves 402x874 aspect ratio. For Xcode Simulator and eventual Capacitor wrap. No changes to preview/index.html)
+  Last updated: 2026-05-11 - MacFQ (game.html P1 human controls: removed P1 AI block; added applyP1 dispatcher; touch gestures - tap rotates, swipeL/R moves, swipeUp hard-drops up - buoyancy boost, swipeDown pushes +1y; arrows + space keyboard parallel; P2 still AI; index.html untouched)
 -->
 
 ## Required reading before building
@@ -36,8 +36,13 @@ preview/game.html    <- Standalone fullscreen entry point that renders ONLY
                             TetrisGame2P. For mobile testing (Xcode Simulator)
                             and the eventual Capacitor wrapper. Has its own
                             inlined copy of TetrisGame2P + dependencies.
-                            EXCEPTION to the rule above: never add other
-                            components here. Keep it minimal.
+                            P1 is HUMAN-controlled here (no AI scoring block):
+                              tap   = rotate CW (Space key parallel)
+                              swipeL/R = move horizontally (Arrow keys)
+                              swipeUp  = hard-drop UP / buoyancy boost (ArrowUp)
+                              swipeDown = +1 row toward floor (ArrowDown)
+                            P2 still AI. EXCEPTION to the rule above: never
+                            add other components here. Keep it minimal.
 ```
 
 Live URLs:
