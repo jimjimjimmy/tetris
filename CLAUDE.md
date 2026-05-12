@@ -5,7 +5,7 @@
   Whichever machine (MacFQ or Gandalf) adds a component, updates a file,
   or makes a structural change: update this file before ending the session.
   Both machines depend on this as the single source of truth.
-  Last updated: 2026-05-11 - MacFQ (TetrisGame2P symmetric territory: ROWS_2P=20, BDY_2P=ROWS_2P/2=10, asymmetric isValid rule so boundary row belongs to P1, exactly 10/10 territory split, NaN:NaN timer defensively guarded, verified 60s TEST_SPEED=true with 2249 samples / 0 boundary violations)
+  Last updated: 2026-05-11 - MacFQ (Added preview/game.html: standalone fullscreen entry point for TetrisGame2P. PWA meta tags, viewport-fit=cover, touch-action: none, JS scale-to-fit wrapper preserves 402x874 aspect ratio. For Xcode Simulator and eventual Capacitor wrap. No changes to preview/index.html)
 -->
 
 ## Required reading before building
@@ -32,9 +32,17 @@ No bundler, no build step. Single HTML file rendered by Babel CDN in the browser
 ```
 preview/index.html   <- THE file. All components live here.
                             Never create separate standalone preview files.
+preview/game.html    <- Standalone fullscreen entry point that renders ONLY
+                            TetrisGame2P. For mobile testing (Xcode Simulator)
+                            and the eventual Capacitor wrapper. Has its own
+                            inlined copy of TetrisGame2P + dependencies.
+                            EXCEPTION to the rule above: never add other
+                            components here. Keep it minimal.
 ```
 
-Live URL: https://jimjimjimmy.github.io/tetris/preview/index.html
+Live URLs:
+- Storybook (all components): https://jimjimjimmy.github.io/tetris/preview/index.html
+- Fullscreen game (mobile/Capacitor): https://jimjimjimmy.github.io/tetris/preview/game.html
 
 ---
 

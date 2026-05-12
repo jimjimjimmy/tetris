@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#000000" />
+  <title>Tetris</title>
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.23.9/babel.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%; height: 100%;
+      background: #000;
+      overflow: hidden;
+      overscroll-behavior: none;
+      touch-action: none;
+      -webkit-user-select: none; user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-touch-callout: none;
+      font-family: monospace;
+    }
+    #root {
+      position: fixed; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      background: #000;
+    }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useRef } = React;
+
+// ============================================================
+// CONSTANTS  (extracted subset used by TetrisGame2P)
+// ============================================================
+
+const TEST_SPEED    = false; // set true for 5x speed during development -- ALWAYS false before push
+const AI_DIFFICULTY = 'MEDIUM';
+
+const P1_VIEWPORT_H = 20;
+const TICK_MS       = TEST_SPEED ? 110 : 550;
+const AI_PERIOD     = 1;
+
+const CELL      = 40;
+const COLS      = 10;
+
+const FRAME_W    = 402;
+const BOARD_PX   = COLS * CELL;            // 400
+const BOARD_LEFT = (FRAME_W - BOARD_PX) / 2;  // 1
+
+// 2P shared board constants. ROWS_2P EVEN so BDY_2P = ROWS_2P / 2 is the
+// exact midpoint and both players own ROWS_2P/2 rows each.
+const ROWS_2P      = 20;
+const BDY_2P       = ROWS_2P / 2;
+const P2_COLOR_2P  = "#4a4a4a";
+const NEXT_2P_H    = 37;
+const BOARD_2P_TOP = NEXT_2P_H;
+const DEMO_DURATION_S = 60;
+const DECAY_RATE   = 0.05;
+const MIN_SHIFT    = 0.25;
+const GAME_2P_H    = NEXT_2P_H + P1_VIEWPORT_H * CELL + NEXT_2P_H; // 874
+
+const PIECE_TYPES = ["I","O","T","S","Z","J","L"];
+
+const SHAPES = {
+  I: [
+    [[0,1],[1,1],[2,1],[3,1]],
+    [[2,0],[2,1],[2,2],[2,3]],
+    [[0,2],[1,2],[2,2],[3,2]],
+    [[1,0],[1,1],[1,2],[1,3]],
+  ],
+  O: [
+    [[0,0],[1,0],[0,1],[1,1]],
+    [[0,0],[1,0],[0,1],[1,1]],
+    [[0,0],[1,0],[0,1],[1,1]],
+    [[0,0],[1,0],[0,1],[1,1]],
+  ],
+  T: [
+    [[1,0],[0,1],[1,1],[2,1]],
+    [[1,0],[1,1],[2,1],[1,2]],
+    [[0,1],[1,1],[2,1],[1,2]],
+    [[1,0],[0,1],[1,1],[1,2]],
+  ],
+  S: [
+    [[1,0],[2,0],[0,1],[1,1]],
+    [[1,0],[1,1],[2,1],[2,2]],
+    [[1,1],[2,1],[0,2],[1,2]],
+    [[0,0],[0,1],[1,1],[1,2]],
+  ],
+  Z: [
+    [[0,0],[1,0],[1,1],[2,1]],
+    [[2,0],[1,1],[2,1],[1,2]],
+    [[0,1],[1,1],[1,2],[2,2]],
+    [[1,0],[0,1],[1,1],[0,2]],
+  ],
+  J: [
+    [[0,0],[0,1],[1,1],[2,1]],
+    [[1,0],[2,0],[1,1],[1,2]],
+    [[0,1],[1,1],[2,1],[2,2]],
+    [[1,0],[1,1],[0,2],[1,2]],
+  ],
+  L: [
+    [[2,0],[0,1],[1,1],[2,1]],
+    [[1,0],[1,1],[1,2],[2,2]],
+    [[0,1],[1,1],[2,1],[0,2]],
+    [[0,0],[1,0],[1,1],[1,2]],
+  ],
+};
+
+const PIECE_COLOR = "#B1B2B3";
+
+const CELL_EMPTY = 0;
+const CELL_P1    = 1;
+const CELL_P2    = 2;
+const CELL_TO_COLOR_2P = {
+  [CELL_EMPTY]: null,
+  [CELL_P1]:    PIECE_COLOR,
+  [CELL_P2]:    P2_COLOR_2P,
+};
+
+// ============================================================
+// PURE HELPERS
+// ============================================================
+
+function randPiece() {
+  return PIECE_TYPES[Math.floor(Math.random() * PIECE_TYPES.length)];
+}
+function getCells(type, rot, px, py) {
+  return SHAPES[type][rot].map(([dc, dr]) => [px + dc, py + dr]);
+}
+function pieceMaxDr(type, rot) {
+  let m = 0;
+  for (const [, dr] of SHAPES[type][rot]) if (dr > m) m = dr;
+  return m;
+}
+function p1SpawnY2P(type) {
+  return ROWS_2P - 1 - pieceMaxDr(type, 0);
+}
+
+// ============================================================
+// TETRISGAME2P HELPERS
+// ============================================================
+
+function initBoard2P() {
+  return Array.from({length: ROWS_2P}, () => Array(COLS).fill(CELL_EMPTY));
+}
+
+// Asymmetric rule: P1 owns boundary row.
+//   P1 valid: r >= boundary,  P2 valid: r < boundary
+function isValid2P(cells, board, boundary, player) {
+  for (const [c, r] of cells) {
+    if (c < 0 || c >= COLS || r < 0 || r >= ROWS_2P) return false;
+    if (board[r][c] !== CELL_EMPTY) return false;
+    if (player === 1 && r <  boundary) return false;
+    if (player === 2 && r >= boundary) return false;
+  }
+  return true;
+}
+
+function lockPiece2P(board, cells, value) {
+  const next = board.map(row => [...row]);
+  for (const [c, r] of cells) {
+    if (r >= 0 && r < ROWS_2P && c >= 0 && c < COLS) next[r][c] = value;
+  }
+  return next;
+}
+
+function clearP1_2P(board, bdy) {
+  const terr = board.slice(bdy);
+  const kept = terr.filter(row => row.includes(CELL_EMPTY));
+  const n    = terr.length - kept.length;
+  if (n === 0) return [board, 0];
+  const fill = Array.from({length: n}, () => Array(COLS).fill(CELL_EMPTY));
+  return [[...board.slice(0, bdy), ...kept, ...fill], n];
+}
+
+function clearP2_2P(board, bdy) {
+  const terr = board.slice(0, bdy);
+  const kept = terr.filter(row => row.includes(CELL_EMPTY));
+  const n    = terr.length - kept.length;
+  if (n === 0) return [board, 0];
+  const fill = Array.from({length: n}, () => Array(COLS).fill(CELL_EMPTY));
+  return [[...fill, ...kept, ...board.slice(bdy)], n];
+}
+
+function makeInitState2P() {
+  const p1Type = randPiece();
+  const p2Type = randPiece();
+  return {
+    board:    initBoard2P(),
+    aiTick:   0,
+    p1:       { type: p1Type, rot: 0, x: 3, y: p1SpawnY2P(p1Type) },
+    p1Next:   randPiece(),
+    p2:       { type: p2Type, rot: 0, x: 3, y: 0 },
+    p2Next:   randPiece(),
+    p1Lines:  0,
+    p2Lines:  0,
+    boundary:    BDY_2P,
+    p1ShiftAcc:  0,
+    p2ShiftAcc:  0,
+    winner:      null,
+    phase:       "playing",
+    paused:      false,
+    demoLeft:    DEMO_DURATION_S,
+    summary:     null,
+  };
+}
+
+function decayShiftAt(priorClears) {
+  return Math.max(MIN_SHIFT, 1 / (1 + DECAY_RATE * priorClears));
+}
+function sumDecayShift(startIdx, n) {
+  let sum = 0;
+  for (let i = 0; i < n; i++) sum += decayShiftAt(startIdx + i);
+  return sum;
+}
+
+// ============================================================
+// BOARD VIEWPORT  (subset: ROWS_2P bound check, not legacy ROWS=33)
+// ============================================================
+
+function BoardViewport({ grid, boundary, startRow, endRow, animateBoundary }) {
+  const visRows = endRow - startRow;
+  return (
+    <div style={{
+      position: "relative",
+      width: BOARD_PX,
+      height: visRows * CELL,
+      overflow: "hidden",
+      background: "#0a0a0a",
+    }}>
+      {Array.from({length: visRows}, (_, ri) => {
+        const r = startRow + ri;
+        return Array.from({length: COLS}, (_, c) => {
+          const color = (r >= 0 && r < ROWS_2P) ? grid[r][c] : null;
+          if (!color) return null;
+          return (
+            <div key={ri * COLS + c} style={{
+              position: "absolute",
+              left: c * CELL + 3, top: ri * CELL + 3,
+              width: CELL - 6, height: CELL - 6,
+              background: color,
+            }} />
+          );
+        });
+      })}
+      {boundary >= startRow && boundary <= endRow && (
+        <div style={{
+          position: "absolute",
+          left: 0, right: 0,
+          top: (boundary - startRow) * CELL - 1,
+          height: 2,
+          background: animateBoundary ? "rgba(255,255,255,0.55)" : "rgba(255,255,255,0.18)",
+          boxShadow: animateBoundary ? "0 0 8px rgba(255,255,255,0.35)" : "none",
+          transition: animateBoundary ? "top 260ms cubic-bezier(0.22, 1, 0.36, 1)" : "none",
+          pointerEvents: "none",
+        }} />
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// COMPACT NEXT DISPLAY
+// ============================================================
+
+function CompactNext({ type, color }) {
+  const cells = SHAPES[type][0];
+  const cs = cells.map(([c]) => c);
+  const rs = cells.map(([, r]) => r);
+  const minC = Math.min(...cs), minR = Math.min(...rs);
+  const S = 7, G = 1;
+  return (
+    <div style={{ position: "relative", width: 4 * (S + G), height: 4 * (S + G) }}>
+      {cells.map(([c, r], i) => (
+        <div key={i} style={{
+          position: "absolute",
+          left: (c - minC) * (S + G), top: (r - minR) * (S + G),
+          width: S, height: S,
+          background: color,
+          borderRadius: 1,
+        }} />
+      ))}
+    </div>
+  );
+}
+
+// ============================================================
+// TETRIS GAME 2P
+// Shared board: P1 floats UP, P2 falls DOWN. Both AI-controlled.
+// ============================================================
+
+function TetrisGame2P() {
+  const [state, setState] = React.useState(makeInitState2P);
+
+  React.useEffect(() => {
+    const id = setInterval(() => {
+      setState(s => {
+        if (s.phase !== "playing") return s;
+        if (s.paused || s.summary) return s;
+        let { board, aiTick, p1, p1Next, p2, p2Next, p1Lines, p2Lines, boundary, p1ShiftAcc, p2ShiftAcc } = s;
+        let n1 = 0, n2 = 0;
+
+        aiTick += 1;
+
+        // P1 AI (floats UP)
+        if (aiTick % AI_PERIOD === 0) {
+          const getLandingY1 = (type, rot, x) => {
+            const startY = Math.max(0, boundary - 4);
+            for (let y = startY; y < ROWS_2P; y++) {
+              if (!isValid2P(getCells(type, rot, x, y), board, boundary, 1)) continue;
+              if (!isValid2P(getCells(type, rot, x, y - 1), board, boundary, 1)) return y;
+            }
+            return -1;
+          };
+          const SCORE_MIN_1 = boundary;
+          const SCORE_MAX_1 = ROWS_2P - 1;
+          const scoreP1 = (type, rot, x) => {
+            const ly = getLandingY1(type, rot, x);
+            if (ly < 0) return -Infinity;
+            const sim = board.map(row => [...row]);
+            for (const [c, r] of getCells(type, rot, x, ly)) {
+              if (r >= 0 && r < ROWS_2P && c >= 0 && c < COLS) sim[r][c] = CELL_P1;
+            }
+            let score = 0;
+            const [simAfter, cleared] = clearP1_2P(sim, boundary);
+            score += cleared * 500;
+            for (let r = SCORE_MIN_1; r <= SCORE_MAX_1; r++) {
+              const filled = simAfter[r].filter(c => c !== CELL_EMPTY).length;
+              score += filled * filled;
+            }
+            score -= Math.max(0, ly - SCORE_MIN_1 - 2) * 4;
+            let holes = 0;
+            for (let c = 0; c < COLS; c++) {
+              let hasFillBelow = false;
+              for (let r = SCORE_MAX_1; r >= SCORE_MIN_1; r--) {
+                if (simAfter[r][c] !== CELL_EMPTY) hasFillBelow = true;
+                else if (hasFillBelow) holes++;
+              }
+            }
+            score -= holes * 30;
+            const colH = Array(COLS).fill(0);
+            for (let c = 0; c < COLS; c++) {
+              for (let r = SCORE_MIN_1; r <= SCORE_MAX_1; r++) {
+                if (simAfter[r][c] !== CELL_EMPTY) colH[c] = r - boundary;
+              }
+            }
+            let bumpiness = 0;
+            for (let c = 1; c < COLS; c++) bumpiness += Math.abs(colH[c] - colH[c - 1]);
+            score -= bumpiness * 2;
+            return score;
+          };
+          let best1 = -Infinity, bestRot1 = p1.rot, bestX1 = p1.x;
+          for (let rot = 0; rot < 4; rot++) {
+            for (let x = -1; x < COLS + 1; x++) {
+              const sc = scoreP1(p1.type, rot, x);
+              if (sc > best1) { best1 = sc; bestRot1 = rot; bestX1 = x; }
+            }
+          }
+          if (p1.rot !== bestRot1) {
+            const nr = (p1.rot + 1) % 4;
+            if (isValid2P(getCells(p1.type, nr, p1.x, p1.y), board, boundary, 1)) p1 = { ...p1, rot: nr };
+          } else if (p1.x < bestX1) {
+            if (isValid2P(getCells(p1.type, p1.rot, p1.x + 1, p1.y), board, boundary, 1)) p1 = { ...p1, x: p1.x + 1 };
+          } else if (p1.x > bestX1) {
+            if (isValid2P(getCells(p1.type, p1.rot, p1.x - 1, p1.y), board, boundary, 1)) p1 = { ...p1, x: p1.x - 1 };
+          }
+        }
+
+        // P2 AI (falls DOWN)
+        if (aiTick % AI_PERIOD === 0) {
+          const getLandingY2 = (type, rot, x) => {
+            for (let y = 0; y <= boundary + 4; y++) {
+              if (!isValid2P(getCells(type, rot, x, y), board, boundary, 2)) continue;
+              if (!isValid2P(getCells(type, rot, x, y + 1), board, boundary, 2)) return y;
+            }
+            return -1;
+          };
+          const SCORE_MIN_2 = 0, SCORE_MAX_2 = boundary - 1;
+          const scoreP2 = (type, rot, x) => {
+            const ly = getLandingY2(type, rot, x);
+            if (ly < 0) return -Infinity;
+            const sim = board.map(row => [...row]);
+            for (const [c, r] of getCells(type, rot, x, ly)) {
+              if (r >= 0 && r < ROWS_2P && c >= 0 && c < COLS) sim[r][c] = CELL_P2;
+            }
+            let score = 0;
+            const [simAfter, cleared] = clearP2_2P(sim, boundary);
+            score += cleared * 500;
+            for (let r = SCORE_MIN_2; r <= SCORE_MAX_2; r++) {
+              const filled = simAfter[r].filter(c => c !== CELL_EMPTY).length;
+              score += filled * filled;
+            }
+            score -= Math.max(0, SCORE_MAX_2 - ly - 2) * 4;
+            let holes = 0;
+            for (let c = 0; c < COLS; c++) {
+              let hasFillAbove = false;
+              for (let r = SCORE_MIN_2; r <= SCORE_MAX_2; r++) {
+                if (simAfter[r][c] !== CELL_EMPTY) hasFillAbove = true;
+                else if (hasFillAbove) holes++;
+              }
+            }
+            score -= holes * 30;
+            const colH = Array(COLS).fill(0);
+            for (let c = 0; c < COLS; c++) {
+              for (let r = SCORE_MAX_2; r >= SCORE_MIN_2; r--) {
+                if (simAfter[r][c] !== CELL_EMPTY) { colH[c] = SCORE_MAX_2 - r + 1; }
+              }
+            }
+            let bumpiness = 0;
+            for (let c = 1; c < COLS; c++) bumpiness += Math.abs(colH[c] - colH[c - 1]);
+            score -= bumpiness * 2;
+            return score;
+          };
+          let best2 = -Infinity, bestRot2 = p2.rot, bestX2 = p2.x;
+          for (let rot = 0; rot < 4; rot++) {
+            for (let x = -1; x < COLS + 1; x++) {
+              const sc = scoreP2(p2.type, rot, x);
+              if (sc > best2) { best2 = sc; bestRot2 = rot; bestX2 = x; }
+            }
+          }
+          if (p2.rot !== bestRot2) {
+            const nr = (p2.rot + 1) % 4;
+            if (isValid2P(getCells(p2.type, nr, p2.x, p2.y), board, boundary, 2)) p2 = { ...p2, rot: nr };
+          } else if (p2.x < bestX2) {
+            if (isValid2P(getCells(p2.type, p2.rot, p2.x + 1, p2.y), board, boundary, 2)) p2 = { ...p2, x: p2.x + 1 };
+          } else if (p2.x > bestX2) {
+            if (isValid2P(getCells(p2.type, p2.rot, p2.x - 1, p2.y), board, boundary, 2)) p2 = { ...p2, x: p2.x - 1 };
+          }
+        }
+
+        // P1 physics
+        if (isValid2P(getCells(p1.type, p1.rot, p1.x, p1.y - 1), board, boundary, 1)) {
+          p1 = { ...p1, y: p1.y - 1 };
+        } else {
+          board = lockPiece2P(board, getCells(p1.type, p1.rot, p1.x, p1.y), CELL_P1);
+          const [b1, c1] = clearP1_2P(board, boundary);
+          n1 = c1; board = b1;
+          p1 = { type: p1Next, rot: 0, x: 3, y: p1SpawnY2P(p1Next) };
+          p1Next = randPiece();
+          if (!isValid2P(getCells(p1.type, p1.rot, p1.x, p1.y), board, boundary, 1)) {
+            return { ...s, board, p1, p1Next, p2, p2Next, phase: "over", winner: 2 };
+          }
+        }
+
+        // P2 physics
+        if (isValid2P(getCells(p2.type, p2.rot, p2.x, p2.y + 1), board, boundary, 2)) {
+          p2 = { ...p2, y: p2.y + 1 };
+        } else {
+          board = lockPiece2P(board, getCells(p2.type, p2.rot, p2.x, p2.y), CELL_P2);
+          const [b2, c2] = clearP2_2P(board, boundary);
+          n2 = c2; board = b2;
+          p2 = { type: p2Next, rot: 0, x: 3, y: 0 };
+          p2Next = randPiece();
+          if (!isValid2P(getCells(p2.type, p2.rot, p2.x, p2.y), board, boundary, 2)) {
+            return { ...s, board, p1, p1Next, p2, p2Next, phase: "over", winner: 1 };
+          }
+        }
+
+        // Territory shift with decay
+        if (n1 > 0) p1ShiftAcc += sumDecayShift(p1Lines, n1);
+        if (n2 > 0) p2ShiftAcc += sumDecayShift(p2Lines, n2);
+        const p1IntShift = Math.floor(p1ShiftAcc);
+        const p2IntShift = Math.floor(p2ShiftAcc);
+        p1ShiftAcc -= p1IntShift;
+        p2ShiftAcc -= p2IntShift;
+
+        let newBdy = boundary - p1IntShift + p2IntShift;
+
+        // Preventive boundary clamp
+        let maxP2Row = -1, minP1Row = ROWS_2P;
+        for (let r = 0; r < ROWS_2P; r++) {
+          for (let c = 0; c < COLS; c++) {
+            const cell = board[r][c];
+            if (cell === CELL_P2 && r > maxP2Row) maxP2Row = r;
+            if (cell === CELL_P1 && r < minP1Row) minP1Row = r;
+          }
+        }
+        if (newBdy <= maxP2Row) newBdy = maxP2Row + 1;
+        if (newBdy >  minP1Row) newBdy = minP1Row;
+
+        let winner = null, phase = "playing";
+        if (newBdy <= 0) {
+          newBdy = 0; winner = 1; phase = "over";
+        } else if (newBdy >= ROWS_2P) {
+          newBdy = ROWS_2P; winner = 2; phase = "over";
+        }
+
+        return {
+          ...s,
+          board, aiTick, p1, p1Next, p2, p2Next, phase,
+          p1Lines: p1Lines + n1, p2Lines: p2Lines + n2,
+          boundary: newBdy, p1ShiftAcc, p2ShiftAcc, winner,
+        };
+      });
+    }, TICK_MS);
+    return () => clearInterval(id);
+  }, []);
+
+  // Keys: "0" reset, "p"/"P" pause
+  React.useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "0") setState(makeInitState2P());
+      else if (e.key === "p" || e.key === "P") setState(s => ({...s, paused: !s.paused}));
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // Demo countdown
+  React.useEffect(() => {
+    const id = setInterval(() => {
+      setState(s => {
+        if (s.paused || s.summary || s.phase !== "playing") return s;
+        const next = s.demoLeft - 1;
+        if (next <= 0) {
+          const winning = s.p1Lines > s.p2Lines ? 1 : s.p2Lines > s.p1Lines ? 2 : 0;
+          return {...s, demoLeft: 0, summary: {p1Lines: s.p1Lines, p2Lines: s.p2Lines, boundary: s.boundary, winning}};
+        }
+        return {...s, demoLeft: next};
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const { board, p1, p2, p1Next, p2Next, p1Lines, p2Lines, phase, boundary, winner, paused, demoLeft, summary } = state;
+  const dl = (typeof demoLeft === "number" && !isNaN(demoLeft)) ? demoLeft : DEMO_DURATION_S;
+  const mm = Math.floor(dl / 60);
+  const ss = String(dl % 60).padStart(2, "0");
+  const timerText = `${mm}:${ss}`;
+
+  const grid = board.map(row => row.map(v => CELL_TO_COLOR_2P[v]));
+  getCells(p1.type, p1.rot, p1.x, p1.y).forEach(([c, r]) => {
+    if (r >= 0 && r < ROWS_2P && c >= 0 && c < COLS) grid[r][c] = PIECE_COLOR;
+  });
+  getCells(p2.type, p2.rot, p2.x, p2.y).forEach(([c, r]) => {
+    if (r >= 0 && r < ROWS_2P && c >= 0 && c < COLS) grid[r][c] = P2_COLOR_2P;
+  });
+
+  return (
+    <div style={{
+      width: FRAME_W, height: GAME_2P_H,
+      background: "#0a0a0a",
+      position: "relative",
+      overflow: "hidden",
+      fontFamily: "monospace",
+      userSelect: "none",
+      WebkitUserSelect: "none",
+    }}>
+
+      {/* P2 NEXT strip - top */}
+      <div style={{
+        position: "absolute", top: 0, left: 0, right: 0,
+        height: NEXT_2P_H,
+        background: "#080808",
+        display: "flex", alignItems: "center",
+        padding: "0 14px",
+        justifyContent: "space-between",
+      }}>
+        <CompactNext type={p2Next} color={P2_COLOR_2P} />
+        <div style={{fontSize: 11, letterSpacing: 2, color: "rgba(255,255,255,0.7)", fontVariantNumeric: "tabular-nums"}}>
+          {timerText}
+        </div>
+        <div style={{fontSize: 9, letterSpacing: 2, color: "rgba(255,255,255,0.3)"}}>
+          P2 {p2Lines}
+        </div>
+      </div>
+
+      {/* Shared board viewport */}
+      <div style={{position: "absolute", top: BOARD_2P_TOP, left: BOARD_LEFT}}>
+        <BoardViewport
+          grid={grid}
+          boundary={boundary}
+          startRow={0}
+          endRow={P1_VIEWPORT_H}
+          animateBoundary={true}
+        />
+      </div>
+
+      {/* P1 NEXT strip - bottom */}
+      <div style={{
+        position: "absolute",
+        top: BOARD_2P_TOP + P1_VIEWPORT_H * CELL,
+        left: 0, right: 0,
+        height: NEXT_2P_H,
+        background: "#080808",
+        display: "flex", alignItems: "center",
+        padding: "0 14px",
+        justifyContent: "space-between",
+      }}>
+        <CompactNext type={p1Next} color={PIECE_COLOR} />
+        <div style={{fontSize: 9, letterSpacing: 2, color: "rgba(255,255,255,0.3)"}}>
+          P1 {p1Lines}
+        </div>
+      </div>
+
+      {/* PAUSED overlay */}
+      {paused && !summary && phase === "playing" && (
+        <div style={{
+          position: "absolute", inset: 0,
+          background: "rgba(0,0,0,0.55)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          pointerEvents: "none",
+        }}>
+          <div style={{fontSize: 32, fontWeight: 900, letterSpacing: 8, color: "#fff"}}>PAUSED</div>
+        </div>
+      )}
+
+      {/* DEMO COMPLETE summary */}
+      {summary && (
+        <div style={{
+          position: "absolute", inset: 0,
+          background: "rgba(0,0,0,0.88)",
+          display: "flex", flexDirection: "column",
+          alignItems: "center", justifyContent: "center",
+        }}>
+          <div style={{fontSize: 26, fontWeight: 900, letterSpacing: 5, color: "#fff", marginBottom: 18}}>DEMO COMPLETE</div>
+          <div style={{fontSize: 11, letterSpacing: 2, color: "rgba(255,255,255,0.55)", marginBottom: 4}}>
+            P1 {summary.p1Lines}  /  P2 {summary.p2Lines}
+          </div>
+          <div style={{fontSize: 11, letterSpacing: 2, color: "rgba(255,255,255,0.55)", marginBottom: 4}}>
+            boundary {summary.boundary}
+          </div>
+          <div style={{fontSize: 11, letterSpacing: 2, color: "rgba(255,255,255,0.55)", marginBottom: 24}}>
+            {summary.winning === 1 ? "P1 leading" : summary.winning === 2 ? "P2 leading" : "tied"}
+          </div>
+          <div
+            onPointerDown={() => setState(makeInitState2P())}
+            style={{
+              padding: "12px 36px", background: "#ff3333",
+              color: "#fff", borderRadius: 6,
+              fontSize: 13, fontWeight: 700, letterSpacing: 3,
+              cursor: "pointer",
+            }}
+          >REMATCH</div>
+        </div>
+      )}
+
+      {/* Game over overlay */}
+      {phase === "over" && (
+        <div style={{
+          position: "absolute", inset: 0,
+          background: "rgba(0,0,0,0.88)",
+          display: "flex", flexDirection: "column",
+          alignItems: "center", justifyContent: "center",
+        }}>
+          <div style={{fontSize: 36, fontWeight: 900, letterSpacing: 6, color: "#fff", marginBottom: 8}}>
+            {winner ? "P" + winner + " WINS" : "GAME OVER"}
+          </div>
+          <div style={{fontSize: 11, letterSpacing: 2, marginBottom: 28, color: "rgba(255,255,255,0.4)"}}>
+            {winner === 1 ? "territory claimed" : winner === 2 ? "territory claimed" : "stack overflow"}
+          </div>
+          <div
+            onPointerDown={() => setState(makeInitState2P())}
+            style={{
+              padding: "12px 36px", background: "#ff3333",
+              color: "#fff", borderRadius: 6,
+              fontSize: 13, fontWeight: 700, letterSpacing: 3,
+              cursor: "pointer",
+            }}
+          >REMATCH</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// FULLSCREEN WRAPPER
+// Scales TetrisGame2P (402x874 native) to fit the viewport while
+// preserving aspect ratio. Black letterboxing if aspect mismatch.
+// ============================================================
+
+function FullscreenGame() {
+  const [scale, setScale] = useState(1);
+
+  useEffect(() => {
+    const recalc = () => {
+      const sx = window.innerWidth / FRAME_W;
+      const sy = window.innerHeight / GAME_2P_H;
+      setScale(Math.min(sx, sy));
+    };
+    recalc();
+    window.addEventListener("resize", recalc);
+    window.addEventListener("orientationchange", recalc);
+    return () => {
+      window.removeEventListener("resize", recalc);
+      window.removeEventListener("orientationchange", recalc);
+    };
+  }, []);
+
+  // Block default touch behaviors (scroll, double-tap zoom, pull-to-refresh).
+  useEffect(() => {
+    const prevent = (e) => { e.preventDefault(); };
+    document.addEventListener("touchmove", prevent, { passive: false });
+    document.addEventListener("gesturestart", prevent, { passive: false });
+    return () => {
+      document.removeEventListener("touchmove", prevent);
+      document.removeEventListener("gesturestart", prevent);
+    };
+  }, []);
+
+  return (
+    <div style={{
+      transform: `scale(${scale})`,
+      transformOrigin: "center center",
+      width: FRAME_W,
+      height: GAME_2P_H,
+    }}>
+      <TetrisGame2P />
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<FullscreenGame />);
+</script>
+</body>
+</html>
