@@ -732,6 +732,20 @@ function TetrisGame2P() {
         pointerEvents: "none",
       }} />
 
+      {/* Right Panel background -- the slightly-darker sidebar column.
+          Figma 124:1829: bg rgba(17,18,19,0.5), border-l 1px solid
+          rgba(49,50,51,0.5). Sits BELOW the icons/pause/NEXT content
+          but ABOVE the gradients + grid so the right side reads as a
+          distinct panel. */}
+      <div style={{
+        position: "absolute",
+        left: SIDEBAR_X, top: 0,
+        width: SIDEBAR_W, height: GAME_2P_H,
+        background: "rgba(17, 18, 19, 0.5)",
+        borderLeft: "1px solid rgba(49, 50, 51, 0.5)",
+        pointerEvents: "none",
+      }} />
+
       {/* Play area: 200x400 at (61, 237). Centered vertically with
           breathing room above and below for future territory animations. */}
       <div

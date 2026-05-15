@@ -5,7 +5,7 @@
   Whichever machine (MacFQ or Gandalf) adds a component, updates a file,
   or makes a structural change: update this file before ending the session.
   Both machines depend on this as the single source of truth.
-  Last updated: 2026-05-14 - MacFQ (game.html v4 pixel-match: cells aligned to Figma grid (backgroundPosition "1px -3px" so lines sit at x=1,21,41,61... and y=-3,17,37... matching Figma offsets); cell INSET 1->2 (16x16 visible in 20x20 slot per Figma p-[2px]); added 2 radial gradient background layers from Figma 124:1448 (circle r=663 at (201,211)) and 124:1450 (circle r=496 at (201,437)) both rgba(17,18,19,0.5); single base color #b1b2b3 used everywhere with OPACITY differentiating: P1 locked = 1.0, P2 locked = 0.2 (rgba(177,178,179,0.2)), active pieces both players = 0.5; mechanics untouched; index.html untouched)
+  Last updated: 2026-05-14 - MacFQ (game.html v5: added missing Right Panel background -- Figma 124:1829 specifies bg rgba(17,18,19,0.5) with border-left 1px rgba(49,50,51,0.5) which creates the visibly-darker sidebar column. Now sits below icons/pause/NEXT and above the gradients+grid; previously the right side blended with the play area. Mechanics untouched; index.html untouched)
 -->
 
 ## Required reading before building
