@@ -8,6 +8,7 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="theme-color" content="#000000" />
   <title>Tetris</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
   <script src="https://unpkg.com/@babel/standalone@7.23.9/babel.min.js"></script>
@@ -54,22 +55,22 @@ const AI_DIFFICULTY = 'MEDIUM';
 const TICK_MS       = TEST_SPEED ? 110 : 550;
 const AI_PERIOD     = 1;
 
-// Figma 124-1377 layout: cells are 20px (NOT 40 like the storybook).
-// Frame stays 402x874. The play area is 200x400, positioned at (61, 237)
-// so it is centered vertically with 237px of "territory reaction space"
-// above and below for future animations (reserved, empty for now).
+// Figma 124-1377 layout. Frame is 402x874. Cells are 20px. The play area
+// is 200x840 (10 cols x 42 rows), centered vertically at PLAY_Y=17 so the
+// boundary line lands exactly on the frame's vertical midpoint (y=437)
+// and pieces span almost the full screen height -- matching the Figma.
 const CELL       = 20;
 const COLS       = 10;
 const FRAME_W    = 402;
 const GAME_2P_H  = 874;
-const PLAY_X     = 61;                  // play-area left edge
-const PLAY_W     = COLS * CELL;          // 200
-const PLAY_Y     = (GAME_2P_H - 20 * CELL) / 2;  // 237 -- centered vertically
 
-// 2P shared board constants. ROWS_2P EVEN so BDY_2P = ROWS_2P / 2 is the
-// exact midpoint and both players own ROWS_2P/2 rows each.
-const ROWS_2P      = 20;
-const BDY_2P       = ROWS_2P / 2;
+// 2P shared board. ROWS_2P must be EVEN so BDY_2P = ROWS_2P/2 is the exact
+// midpoint and both players own ROWS_2P/2 rows each.
+const ROWS_2P      = 42;
+const BDY_2P       = ROWS_2P / 2;          // = 21
+const PLAY_X       = 61;                    // play-area left edge
+const PLAY_W       = COLS * CELL;           // 200
+const PLAY_Y       = (GAME_2P_H - ROWS_2P * CELL) / 2; // 17 -- centers play area
 const P2_COLOR_2P  = "#4a4a4a";
 const DEMO_DURATION_S = 60;
 const DECAY_RATE   = 0.05;
@@ -96,8 +97,11 @@ const NEXT_PIECE_CELL  = 10;
 const NEXT_PIECE_Y1    = NEXT_Y + 28;  // top of upper piece
 const NEXT_PIECE_Y2    = NEXT_Y + 64;  // top of lower piece (newer-on-top is at Y2)
 
-// Foreground "chrome" color: icons, pause bars, NEXT label.
-const CHROME_COLOR     = "rgba(255,255,255,0.35)";
+// Foreground chrome colors (matched to Figma): icons + NEXT label use
+// white at opacity 0.3; pause bars use the exact Figma fill #d9d9d9.
+const CHROME_OPACITY   = 0.3;
+const PAUSE_COLOR      = "#d9d9d9";
+const NEXT_PIECE_COLOR = "#b1b2b3";   // matches PIECE_COLOR exactly
 // Subtle grid line color for the background.
 const GRID_LINE_COLOR  = "rgba(255,255,255,0.04)";
 
@@ -312,15 +316,18 @@ function BoardViewport({ grid, boundary, startRow, endRow, animateBoundary }) {
 // COMPACT NEXT DISPLAY
 // ============================================================
 
-// NEXT-piece preview. Cells are NEXT_PIECE_CELL px (10 per Figma), no gap.
-// Container is sized to the piece's bounding box.
-function CompactNext({ type, color }) {
+// NEXT-piece preview. Each cell is a 10x10 slot with 1px padding on every
+// side, leaving an 8x8 visible color block (matches Figma 124:1463 spec:
+// the `p-px` inner padding on each Box). Container is sized to the
+// piece's bounding box.
+function CompactNext({ type, color = NEXT_PIECE_COLOR }) {
   const cells = SHAPES[type][0];
   const cs = cells.map(([c]) => c);
   const rs = cells.map(([, r]) => r);
   const minC = Math.min(...cs), maxC = Math.max(...cs);
   const minR = Math.min(...rs), maxR = Math.max(...rs);
-  const S = NEXT_PIECE_CELL;
+  const S = NEXT_PIECE_CELL;        // 10
+  const PAD = 1;                    // p-px on each side -> 8x8 visible
   const w = (maxC - minC + 1) * S;
   const h = (maxR - minR + 1) * S;
   return (
@@ -328,8 +335,8 @@ function CompactNext({ type, color }) {
       {cells.map(([c, r], i) => (
         <div key={i} style={{
           position: "absolute",
-          left: (c - minC) * S, top: (r - minR) * S,
-          width: S, height: S,
+          left: (c - minC) * S + PAD, top: (r - minR) * S + PAD,
+          width: S - 2 * PAD, height: S - 2 * PAD,
           background: color,
         }} />
       ))}
@@ -338,28 +345,30 @@ function CompactNext({ type, color }) {
 }
 
 // ============================================================
-// CHROME ICONS  (inline SVG, sized 24x24)
+// CHROME ICONS  (Figma node IDs 124:2266 info, 124:2251 settings)
+// SVG paths copied verbatim from the Figma export so the rendering is
+// pixel-identical to the design. Color = currentColor; opacity is set
+// on the wrapper to honor the design system's "opacity-30" pattern.
 // ============================================================
 
-function InfoIcon({ size = ICON_SIZE, color = CHROME_COLOR }) {
+function InfoIcon({ size = ICON_SIZE }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="12" cy="12" r="11" stroke={color} strokeWidth="1.5" />
-      <circle cx="12" cy="7.25" r="1.2" fill={color} />
-      <rect x="11" y="10.25" width="2" height="8" rx="0.5" fill={color} />
+      <path
+        d="M11.25 16.75H12.75V11H11.25V16.75ZM12.573 9.05625C12.7295 8.90142 12.8077 8.70958 12.8077 8.48075C12.8077 8.25192 12.7303 8.06008 12.5755 7.90525C12.4207 7.75058 12.2288 7.67325 12 7.67325C11.7712 7.67325 11.5793 7.75058 11.4245 7.90525C11.2697 8.06008 11.1923 8.25192 11.1923 8.48075C11.1923 8.70958 11.2705 8.90142 11.427 9.05625C11.5833 9.21108 11.7743 9.2885 12 9.2885C12.2257 9.2885 12.4167 9.21108 12.573 9.05625ZM12.0017 21.5C10.6877 21.5 9.45267 21.2507 8.2965 20.752C7.14033 20.2533 6.13467 19.5766 5.2795 18.7218C4.42433 17.8669 3.74725 16.8617 3.24825 15.706C2.74942 14.5503 2.5 13.3156 2.5 12.0017C2.5 10.6877 2.74933 9.45267 3.248 8.2965C3.74667 7.14033 4.42342 6.13467 5.27825 5.2795C6.13308 4.42433 7.13833 3.74725 8.294 3.24825C9.44967 2.74942 10.6844 2.5 11.9982 2.5C13.3122 2.5 14.5473 2.74933 15.7035 3.248C16.8597 3.74667 17.8653 4.42342 18.7205 5.27825C19.5757 6.13308 20.2528 7.13833 20.7518 8.294C21.2506 9.44967 21.5 10.6844 21.5 11.9982C21.5 13.3122 21.2507 14.5473 20.752 15.7035C20.2533 16.8597 19.5766 17.8653 18.7218 18.7205C17.8669 19.5757 16.8617 20.2528 15.706 20.7518C14.5503 21.2506 13.3156 21.5 12.0017 21.5ZM12 20C14.2333 20 16.125 19.225 17.675 17.675C19.225 16.125 20 14.2333 20 12C20 9.76667 19.225 7.875 17.675 6.325C16.125 4.775 14.2333 4 12 4C9.76667 4 7.875 4.775 6.325 6.325C4.775 7.875 4 9.76667 4 12C4 14.2333 4.775 16.125 6.325 17.675C7.875 19.225 9.76667 20 12 20Z"
+        fill="currentColor"
+      />
     </svg>
   );
 }
 
-function GearIcon({ size = ICON_SIZE, color = CHROME_COLOR }) {
-  // 8-tooth cog centered in 24x24. Inner circle = hub, outer star = teeth.
+function GearIcon({ size = ICON_SIZE }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path
-        d="M13.4 2.6l.4 2.3a7 7 0 0 1 1.8.7l1.9-1.3 1.4 1.4-1.3 1.9a7 7 0 0 1 .7 1.8l2.3.4v2l-2.3.4a7 7 0 0 1-.7 1.8l1.3 1.9-1.4 1.4-1.9-1.3a7 7 0 0 1-1.8.7l-.4 2.3h-2l-.4-2.3a7 7 0 0 1-1.8-.7l-1.9 1.3-1.4-1.4 1.3-1.9a7 7 0 0 1-.7-1.8L2.6 13.4v-2l2.3-.4a7 7 0 0 1 .7-1.8L4.3 7.3l1.4-1.4 1.9 1.3a7 7 0 0 1 1.8-.7l.4-2.3h2Z"
-        stroke={color} strokeWidth="1.4" strokeLinejoin="round" fill="none"
+        d="M9.69225 21.5L9.3115 18.4538C9.04367 18.3641 8.769 18.2385 8.4875 18.077C8.20617 17.9153 7.95458 17.7422 7.73275 17.5577L4.9115 18.75L2.604 14.75L5.04425 12.9058C5.02125 12.7571 5.00492 12.6078 4.99525 12.4578C4.98558 12.3078 4.98075 12.1583 4.98075 12.0095C4.98075 11.8673 4.98558 11.7228 4.99525 11.576C5.00492 11.4292 5.02125 11.2686 5.04425 11.0943L2.604 9.25L4.9115 5.26925L7.723 6.452C7.96417 6.261 8.22158 6.08633 8.49525 5.928C8.76892 5.76967 9.03783 5.64242 9.302 5.54625L9.69225 2.5H14.3077L14.6885 5.55575C14.9885 5.66475 15.2599 5.792 15.5027 5.9375C15.7457 6.083 15.991 6.2545 16.2385 6.452L19.0885 5.26925L21.396 9.25L18.9173 11.123C18.9531 11.2845 18.9727 11.4355 18.976 11.576C18.9792 11.7163 18.9807 11.8577 18.9807 12C18.9807 12.1358 18.9775 12.274 18.971 12.4145C18.9647 12.5548 18.9417 12.7154 18.902 12.8963L21.3615 14.75L19.0538 18.75L16.2385 17.548C15.991 17.7455 15.7384 17.9202 15.4807 18.072C15.2231 18.224 14.959 18.3481 14.6885 18.4443L14.3077 21.5H9.69225ZM11 20H12.9655L13.325 17.3212C13.8353 17.1879 14.3017 16.9985 14.724 16.753C15.1465 16.5073 15.5539 16.1916 15.9462 15.8057L18.4307 16.85L19.4155 15.15L17.2462 13.5155C17.3296 13.2565 17.3862 13.0026 17.4162 12.7537C17.4464 12.5051 17.4615 12.2538 17.4615 12C17.4615 11.7397 17.4464 11.4884 17.4162 11.2462C17.3862 11.0039 17.3296 10.7564 17.2462 10.5038L19.4345 8.85L18.45 7.15L15.9365 8.2095C15.6018 7.85183 15.2009 7.53583 14.7337 7.2615C14.2664 6.98717 13.7937 6.79292 13.3155 6.67875L13 4H11.0155L10.6845 6.66925C10.1743 6.78975 9.70325 6.97433 9.27125 7.223C8.83908 7.47183 8.42683 7.79233 8.0345 8.1845L5.55 7.15L4.5655 8.85L6.725 10.4595C6.64167 10.6968 6.58333 10.9437 6.55 11.2C6.51667 11.4563 6.5 11.7262 6.5 12.0095C6.5 12.2698 6.51667 12.525 6.55 12.775C6.58333 13.025 6.6385 13.2718 6.7155 13.5155L4.5655 15.15L5.55 16.85L8.025 15.8C8.4045 16.1897 8.81025 16.5089 9.24225 16.7578C9.67442 17.0064 10.152 17.1974 10.675 17.3307L11 20ZM12.0115 15C12.8435 15 13.5515 14.708 14.1355 14.124C14.7195 13.54 15.0115 12.832 15.0115 12C15.0115 11.168 14.7195 10.46 14.1355 9.876C13.5515 9.292 12.8435 9 12.0115 9C11.1692 9 10.4586 9.292 9.87975 9.876C9.30092 10.46 9.0115 11.168 9.0115 12C9.0115 12.832 9.30092 13.54 9.87975 14.124C10.4586 14.708 11.1692 15 12.0115 15Z"
+        fill="currentColor"
       />
-      <circle cx="12" cy="12" r="3" stroke={color} strokeWidth="1.4" fill="none" />
     </svg>
   );
 }
@@ -680,19 +689,29 @@ function TetrisGame2P() {
         />
       </div>
 
-      {/* Info icon */}
-      <div style={{position: "absolute", left: ICON_INFO_X, top: ICON_INFO_Y, width: ICON_SIZE, height: ICON_SIZE}}>
+      {/* Info icon -- white SVG at opacity 0.3 (Figma 124:2276) */}
+      <div style={{
+        position: "absolute",
+        left: ICON_INFO_X, top: ICON_INFO_Y,
+        width: ICON_SIZE, height: ICON_SIZE,
+        color: "#fff", opacity: CHROME_OPACITY,
+      }}>
         <InfoIcon />
       </div>
 
-      {/* Gear icon */}
-      <div style={{position: "absolute", left: ICON_GEAR_X, top: ICON_GEAR_Y, width: ICON_SIZE, height: ICON_SIZE}}>
+      {/* Gear icon -- white SVG at opacity 0.3 (Figma 124:2233) */}
+      <div style={{
+        position: "absolute",
+        left: ICON_GEAR_X, top: ICON_GEAR_Y,
+        width: ICON_SIZE, height: ICON_SIZE,
+        color: "#fff", opacity: CHROME_OPACITY,
+      }}>
         <GearIcon />
       </div>
 
-      {/* Pause button: two vertical bars at (PAUSE_X, PAUSE_Y). The visible
-          icon is 12x16; a transparent 48x48 hit box centered on the icon
-          enlarges the touch target for ergonomic thumb reach. */}
+      {/* Pause button: two #d9d9d9 bars (Figma 124:2218). The visible icon
+          is 12x16; a transparent 48x48 hit box centered on it enlarges the
+          touch target for ergonomic thumb reach. */}
       <div
         onPointerDown={togglePause}
         onTouchStart={(e) => e.stopPropagation()}
@@ -710,42 +729,50 @@ function TetrisGame2P() {
           left: 24 - (PAUSE_BAR_W + PAUSE_BAR_GAP + PAUSE_BAR_W) / 2,
           top:  24 - PAUSE_BAR_H / 2,
           width: PAUSE_BAR_W, height: PAUSE_BAR_H,
-          background: CHROME_COLOR,
+          background: PAUSE_COLOR,
         }} />
         <div style={{
           position: "absolute",
           left: 24 + PAUSE_BAR_GAP / 2,
           top:  24 - PAUSE_BAR_H / 2,
           width: PAUSE_BAR_W, height: PAUSE_BAR_H,
-          background: CHROME_COLOR,
+          background: PAUSE_COLOR,
         }} />
       </div>
 
-      {/* NEXT block: label + two piece slots, bottom right. Newer pieces
-          enter the TOP slot and shift to the BOTTOM as they get closer
-          to being spawned. */}
-      <div style={{position: "absolute", left: NEXT_X, top: NEXT_Y, width: NEXT_W}}>
+      {/* NEXT block (Figma 124:1463). Label is Inter 600 / 10px / 2px
+          letter-spacing / uppercase, opacity 0.3. Newer pieces enter the
+          TOP slot (opacity 0.5) and shift DOWN to the bottom slot
+          (opacity 0.2) as they get closer to being spawned. */}
+      <div style={{position: "absolute", left: NEXT_X, top: NEXT_Y, width: NEXT_W, color: "#fff"}}>
         <div style={{
           width: NEXT_W, height: NEXT_LABEL_H,
-          color: CHROME_COLOR,
-          fontSize: 10, letterSpacing: 4,
+          fontFamily: "'Inter', sans-serif",
+          fontWeight: 600,
+          fontSize: 10, letterSpacing: 2,
           textAlign: "center",
-        }}>NEXT</div>
+          textTransform: "uppercase",
+          opacity: CHROME_OPACITY,
+        }}>Next</div>
+        {/* TOP slot -- newest piece (most recently added to the queue) */}
         <div style={{
           position: "absolute",
           left: 15, top: 28,
           display: "flex", alignItems: "center", justifyContent: "center",
           width: 30, height: 20,
+          opacity: 0.5,
         }}>
-          <CompactNext type={p1NextNext} color={PIECE_COLOR} />
+          <CompactNext type={p1NextNext} />
         </div>
+        {/* BOTTOM slot -- next piece to spawn */}
         <div style={{
           position: "absolute",
           left: 15, top: 64,
           display: "flex", alignItems: "center", justifyContent: "center",
           width: 30, height: 20,
+          opacity: 0.2,
         }}>
-          <CompactNext type={p1Next} color={PIECE_COLOR} />
+          <CompactNext type={p1Next} />
         </div>
       </div>
 

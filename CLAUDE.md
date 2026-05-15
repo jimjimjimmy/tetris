@@ -5,7 +5,7 @@
   Whichever machine (MacFQ or Gandalf) adds a component, updates a file,
   or makes a structural change: update this file before ending the session.
   Both machines depend on this as the single source of truth.
-  Last updated: 2026-05-14 - MacFQ (game.html Figma reskin to node 124-1377: CELL=20 (was 40), play area 200x400 centered at (61, 237), right sidebar with info+gear icons, ergonomic pause hit box (48x48 around 12x16 visible bars), 2-deep P1 NEXT queue at bottom right, subtle 20x20 grid line background, touch gestures scoped to playRef so sidebar taps do not move P1; mechanics untouched; index.html untouched)
+  Last updated: 2026-05-14 - MacFQ (game.html Figma reskin v2 to node 124-1377: ROWS_2P 20->42 so play area spans nearly full 874 frame (200x840 at (61, 17), boundary lands exactly at frame center y=437); real Figma-extracted SVG paths for Info (124:2266) and Gear (124:2251) icons replacing hand-drawn versions; pause color #d9d9d9 per Figma; NEXT label uses Inter 600 / 10px / 2px tracking / opacity 0.3; NEXT pieces opacity 0.5 (top, newest) / 0.2 (bottom, next-to-spawn); CompactNext cells now have 1px inner padding (8x8 visible in 10x10 slot per Figma p-px); mechanics untouched (asymmetric isValid rule, clamp, decay, gestures); index.html untouched)
 -->
 
 ## Required reading before building
