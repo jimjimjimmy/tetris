@@ -5,7 +5,7 @@
   Whichever machine (MacFQ or Gandalf) adds a component, updates a file,
   or makes a structural change: update this file before ending the session.
   Both machines depend on this as the single source of truth.
-  Last updated: 2026-05-14 - MacFQ (game.html v7 mobile fullscreen + no-backward: removed swipe-down and ArrowDown -- P1 can no longer move backward against its float-up direction (felt confusing); removed body safe-area padding and #root letterboxing -- FullscreenGame now scales to fit WIDTH only (sx = w / FRAME_W) so the canvas runs to the physical screen edges on iOS, with the few pixels of vertical overflow clipped by overflow:hidden on #root; body bg matched to game #0a0a0a. Mechanics untouched; index.html untouched)
+  Last updated: 2026-05-14 - MacFQ (game.html v8 full vertical play: frame height matches play exactly -- GAME_2P_H = ROWS_2P * CELL = 880 (was 874), PLAY_Y = 0 (was -3) so the play area fills the frame top-to-bottom with no clipping; scale changed from width-only to min(sx, sy) = fit-both, so on every device the ENTIRE frame is visible and the play area occupies the full viewport height edge-to-edge; PAUSE_Y 423->426 and NEXT_Y 758->764 re-center for the new 880 frame; gradient 2 center y=437->440. Mechanics untouched; index.html untouched)
 -->
 
 ## Required reading before building
