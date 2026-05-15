@@ -5,7 +5,7 @@
   Whichever machine (MacFQ or Gandalf) adds a component, updates a file,
   or makes a structural change: update this file before ending the session.
   Both machines depend on this as the single source of truth.
-  Last updated: 2026-05-11 - MacFQ (game.html safe-area: env(safe-area-inset-top/bottom) padding on body, #root flows inside content box, FullscreenGame scale reads root.clientWidth/Height so game respects iOS notch + home indicator while staying edge-to-edge horizontally; viewport-fit=cover was already set; index.html untouched)
+  Last updated: 2026-05-14 - MacFQ (game.html Figma reskin to node 124-1377: CELL=20 (was 40), play area 200x400 centered at (61, 237), right sidebar with info+gear icons, ergonomic pause hit box (48x48 around 12x16 visible bars), 2-deep P1 NEXT queue at bottom right, subtle 20x20 grid line background, touch gestures scoped to playRef so sidebar taps do not move P1; mechanics untouched; index.html untouched)
 -->
 
 ## Required reading before building
@@ -41,8 +41,18 @@ preview/game.html    <- Standalone fullscreen entry point that renders ONLY
                               swipeL/R = move horizontally (Arrow keys)
                               swipeUp  = hard-drop UP / buoyancy boost (ArrowUp)
                               swipeDown = +1 row toward floor (ArrowDown)
+                            Gesture handler is scoped to a playRef element
+                            (NOT document) so taps on the right-sidebar
+                            chrome do not trigger P1 inputs.
                             P2 still AI. EXCEPTION to the rule above: never
                             add other components here. Keep it minimal.
+                            Skinned to Figma node 124-1377 (Portfolio-2026):
+                            CELL=20, play area 200x400 centered vertically,
+                            right sidebar (info, gear, pause, NEXT). The
+                            ergonomic pause hit box is 48x48 around the
+                            12x16 visible bars. 2-deep P1 NEXT queue
+                            (p1Next + p1NextNext) -- newer pieces enter
+                            the TOP slot and shift down as they spawn.
 ```
 
 Live URLs:

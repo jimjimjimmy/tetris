@@ -51,28 +51,55 @@ const { useState, useEffect, useRef } = React;
 const TEST_SPEED    = false; // set true for 5x speed during development -- ALWAYS false before push
 const AI_DIFFICULTY = 'MEDIUM';
 
-const P1_VIEWPORT_H = 20;
 const TICK_MS       = TEST_SPEED ? 110 : 550;
 const AI_PERIOD     = 1;
 
-const CELL      = 40;
-const COLS      = 10;
-
+// Figma 124-1377 layout: cells are 20px (NOT 40 like the storybook).
+// Frame stays 402x874. The play area is 200x400, positioned at (61, 237)
+// so it is centered vertically with 237px of "territory reaction space"
+// above and below for future animations (reserved, empty for now).
+const CELL       = 20;
+const COLS       = 10;
 const FRAME_W    = 402;
-const BOARD_PX   = COLS * CELL;            // 400
-const BOARD_LEFT = (FRAME_W - BOARD_PX) / 2;  // 1
+const GAME_2P_H  = 874;
+const PLAY_X     = 61;                  // play-area left edge
+const PLAY_W     = COLS * CELL;          // 200
+const PLAY_Y     = (GAME_2P_H - 20 * CELL) / 2;  // 237 -- centered vertically
 
 // 2P shared board constants. ROWS_2P EVEN so BDY_2P = ROWS_2P / 2 is the
 // exact midpoint and both players own ROWS_2P/2 rows each.
 const ROWS_2P      = 20;
 const BDY_2P       = ROWS_2P / 2;
 const P2_COLOR_2P  = "#4a4a4a";
-const NEXT_2P_H    = 37;
-const BOARD_2P_TOP = NEXT_2P_H;
 const DEMO_DURATION_S = 60;
 const DECAY_RATE   = 0.05;
 const MIN_SHIFT    = 0.25;
-const GAME_2P_H    = NEXT_2P_H + P1_VIEWPORT_H * CELL + NEXT_2P_H; // 874
+
+// Right sidebar (Figma absolute coords inside the 402x874 frame)
+const SIDEBAR_X        = 320;
+const SIDEBAR_W        = 82;
+const ICON_SIZE        = 24;
+const ICON_INFO_X      = 349;
+const ICON_INFO_Y      = 32;
+const ICON_GEAR_X      = 349;
+const ICON_GEAR_Y      = 80;
+const PAUSE_X          = 353;   // first bar left edge
+const PAUSE_Y          = 423;
+const PAUSE_BAR_W      = 4;
+const PAUSE_BAR_H      = 16;
+const PAUSE_BAR_GAP    = 8;     // gap between the two bars
+const NEXT_X           = 331;
+const NEXT_Y           = 758;
+const NEXT_W           = 60;
+const NEXT_LABEL_H     = 12;
+const NEXT_PIECE_CELL  = 10;
+const NEXT_PIECE_Y1    = NEXT_Y + 28;  // top of upper piece
+const NEXT_PIECE_Y2    = NEXT_Y + 64;  // top of lower piece (newer-on-top is at Y2)
+
+// Foreground "chrome" color: icons, pause bars, NEXT label.
+const CHROME_COLOR     = "rgba(255,255,255,0.35)";
+// Subtle grid line color for the background.
+const GRID_LINE_COLOR  = "rgba(255,255,255,0.04)";
 
 const PIECE_TYPES = ["I","O","T","S","Z","J","L"];
 
@@ -204,7 +231,11 @@ function makeInitState2P() {
     board:    initBoard2P(),
     aiTick:   0,
     p1:       { type: p1Type, rot: 0, x: 3, y: p1SpawnY2P(p1Type) },
-    p1Next:   randPiece(),
+    // Two-deep NEXT queue for P1: p1Next is the next-to-spawn piece
+    // (rendered in the BOTTOM slot of the NEXT block), p1NextNext is
+    // the one after that (TOP slot -- newest entry).
+    p1Next:     randPiece(),
+    p1NextNext: randPiece(),
     p2:       { type: p2Type, rot: 0, x: 3, y: 0 },
     p2Next:   randPiece(),
     p1Lines:  0,
@@ -235,13 +266,16 @@ function sumDecayShift(startIdx, n) {
 
 function BoardViewport({ grid, boundary, startRow, endRow, animateBoundary }) {
   const visRows = endRow - startRow;
+  // Cell content (the filled box) is 18x18 inside the 20x20 grid slot --
+  // 1px gap on each side. Background of the play area is transparent so
+  // the global grid lines show through.
+  const INSET = 1;
   return (
     <div style={{
       position: "relative",
-      width: BOARD_PX,
+      width: PLAY_W,
       height: visRows * CELL,
       overflow: "hidden",
-      background: "#0a0a0a",
     }}>
       {Array.from({length: visRows}, (_, ri) => {
         const r = startRow + ri;
@@ -251,8 +285,8 @@ function BoardViewport({ grid, boundary, startRow, endRow, animateBoundary }) {
           return (
             <div key={ri * COLS + c} style={{
               position: "absolute",
-              left: c * CELL + 3, top: ri * CELL + 3,
-              width: CELL - 6, height: CELL - 6,
+              left: c * CELL + INSET, top: ri * CELL + INSET,
+              width: CELL - 2 * INSET, height: CELL - 2 * INSET,
               background: color,
             }} />
           );
@@ -278,24 +312,55 @@ function BoardViewport({ grid, boundary, startRow, endRow, animateBoundary }) {
 // COMPACT NEXT DISPLAY
 // ============================================================
 
+// NEXT-piece preview. Cells are NEXT_PIECE_CELL px (10 per Figma), no gap.
+// Container is sized to the piece's bounding box.
 function CompactNext({ type, color }) {
   const cells = SHAPES[type][0];
   const cs = cells.map(([c]) => c);
   const rs = cells.map(([, r]) => r);
-  const minC = Math.min(...cs), minR = Math.min(...rs);
-  const S = 7, G = 1;
+  const minC = Math.min(...cs), maxC = Math.max(...cs);
+  const minR = Math.min(...rs), maxR = Math.max(...rs);
+  const S = NEXT_PIECE_CELL;
+  const w = (maxC - minC + 1) * S;
+  const h = (maxR - minR + 1) * S;
   return (
-    <div style={{ position: "relative", width: 4 * (S + G), height: 4 * (S + G) }}>
+    <div style={{ position: "relative", width: w, height: h }}>
       {cells.map(([c, r], i) => (
         <div key={i} style={{
           position: "absolute",
-          left: (c - minC) * (S + G), top: (r - minR) * (S + G),
+          left: (c - minC) * S, top: (r - minR) * S,
           width: S, height: S,
           background: color,
-          borderRadius: 1,
         }} />
       ))}
     </div>
+  );
+}
+
+// ============================================================
+// CHROME ICONS  (inline SVG, sized 24x24)
+// ============================================================
+
+function InfoIcon({ size = ICON_SIZE, color = CHROME_COLOR }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="12" cy="12" r="11" stroke={color} strokeWidth="1.5" />
+      <circle cx="12" cy="7.25" r="1.2" fill={color} />
+      <rect x="11" y="10.25" width="2" height="8" rx="0.5" fill={color} />
+    </svg>
+  );
+}
+
+function GearIcon({ size = ICON_SIZE, color = CHROME_COLOR }) {
+  // 8-tooth cog centered in 24x24. Inner circle = hub, outer star = teeth.
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path
+        d="M13.4 2.6l.4 2.3a7 7 0 0 1 1.8.7l1.9-1.3 1.4 1.4-1.3 1.9a7 7 0 0 1 .7 1.8l2.3.4v2l-2.3.4a7 7 0 0 1-.7 1.8l1.3 1.9-1.4 1.4-1.9-1.3a7 7 0 0 1-1.8.7l-.4 2.3h-2l-.4-2.3a7 7 0 0 1-1.8-.7l-1.9 1.3-1.4-1.4 1.3-1.9a7 7 0 0 1-.7-1.8L2.6 13.4v-2l2.3-.4a7 7 0 0 1 .7-1.8L4.3 7.3l1.4-1.4 1.9 1.3a7 7 0 0 1 1.8-.7l.4-2.3h2Z"
+        stroke={color} strokeWidth="1.4" strokeLinejoin="round" fill="none"
+      />
+      <circle cx="12" cy="12" r="3" stroke={color} strokeWidth="1.4" fill="none" />
+    </svg>
   );
 }
 
@@ -312,7 +377,7 @@ function TetrisGame2P() {
       setState(s => {
         if (s.phase !== "playing") return s;
         if (s.paused || s.summary) return s;
-        let { board, aiTick, p1, p1Next, p2, p2Next, p1Lines, p2Lines, boundary, p1ShiftAcc, p2ShiftAcc } = s;
+        let { board, aiTick, p1, p1Next, p1NextNext, p2, p2Next, p1Lines, p2Lines, boundary, p1ShiftAcc, p2ShiftAcc } = s;
         let n1 = 0, n2 = 0;
 
         aiTick += 1;
@@ -390,9 +455,12 @@ function TetrisGame2P() {
           const [b1, c1] = clearP1_2P(board, boundary);
           n1 = c1; board = b1;
           p1 = { type: p1Next, rot: 0, x: 3, y: p1SpawnY2P(p1Next) };
-          p1Next = randPiece();
+          // Shift the 2-deep NEXT queue: p1NextNext becomes the new
+          // next-to-spawn, and a fresh random piece enters the queue.
+          p1Next     = p1NextNext;
+          p1NextNext = randPiece();
           if (!isValid2P(getCells(p1.type, p1.rot, p1.x, p1.y), board, boundary, 1)) {
-            return { ...s, board, p1, p1Next, p2, p2Next, phase: "over", winner: 2 };
+            return { ...s, board, p1, p1Next, p1NextNext, p2, p2Next, phase: "over", winner: 2 };
           }
         }
 
@@ -406,7 +474,7 @@ function TetrisGame2P() {
           p2 = { type: p2Next, rot: 0, x: 3, y: 0 };
           p2Next = randPiece();
           if (!isValid2P(getCells(p2.type, p2.rot, p2.x, p2.y), board, boundary, 2)) {
-            return { ...s, board, p1, p1Next, p2, p2Next, phase: "over", winner: 1 };
+            return { ...s, board, p1, p1Next, p1NextNext, p2, p2Next, phase: "over", winner: 1 };
           }
         }
 
@@ -441,7 +509,7 @@ function TetrisGame2P() {
 
         return {
           ...s,
-          board, aiTick, p1, p1Next, p2, p2Next, phase,
+          board, aiTick, p1, p1Next, p1NextNext, p2, p2Next, phase,
           p1Lines: p1Lines + n1, p2Lines: p2Lines + n2,
           boundary: newBdy, p1ShiftAcc, p2ShiftAcc, winner,
         };
@@ -512,7 +580,10 @@ function TetrisGame2P() {
   // Distances in between are ignored (dead zone) so a wobbly tap does not
   // accidentally swipe. Attaches to document so the entire screen accepts
   // input -- the FullscreenGame wrapper already blocks default scroll/zoom.
+  const playRef = React.useRef(null);
   React.useEffect(() => {
+    const el = playRef.current;
+    if (!el) return;
     let startX = 0, startY = 0;
     const onStart = (e) => {
       if (e.touches.length !== 1) return;
@@ -529,11 +600,13 @@ function TetrisGame2P() {
       if (adx > ady) applyP1(dx > 0 ? "right" : "left");
       else           applyP1(dy > 0 ? "down"  : "up");
     };
-    document.addEventListener("touchstart", onStart, { passive: true });
-    document.addEventListener("touchend",   onEnd,   { passive: true });
+    // Attach to the play area (not document) so taps on the sidebar
+    // chrome -- pause / info / gear / NEXT -- never trigger a P1 gesture.
+    el.addEventListener("touchstart", onStart, { passive: true });
+    el.addEventListener("touchend",   onEnd,   { passive: true });
     return () => {
-      document.removeEventListener("touchstart", onStart);
-      document.removeEventListener("touchend",   onEnd);
+      el.removeEventListener("touchstart", onStart);
+      el.removeEventListener("touchend",   onEnd);
     };
   }, [applyP1]);
 
@@ -553,11 +626,7 @@ function TetrisGame2P() {
     return () => clearInterval(id);
   }, []);
 
-  const { board, p1, p2, p1Next, p2Next, p1Lines, p2Lines, phase, boundary, winner, paused, demoLeft, summary } = state;
-  const dl = (typeof demoLeft === "number" && !isNaN(demoLeft)) ? demoLeft : DEMO_DURATION_S;
-  const mm = Math.floor(dl / 60);
-  const ss = String(dl % 60).padStart(2, "0");
-  const timerText = `${mm}:${ss}`;
+  const { board, p1, p2, p1Next, p1NextNext, p1Lines, p2Lines, phase, boundary, winner, paused, summary } = state;
 
   const grid = board.map(row => row.map(v => CELL_TO_COLOR_2P[v]));
   getCells(p1.type, p1.rot, p1.x, p1.y).forEach(([c, r]) => {
@@ -566,6 +635,15 @@ function TetrisGame2P() {
   getCells(p2.type, p2.rot, p2.x, p2.y).forEach(([c, r]) => {
     if (r >= 0 && r < ROWS_2P && c >= 0 && c < COLS) grid[r][c] = P2_COLOR_2P;
   });
+
+  // Pause toggle for the on-screen pause button. Stops touch from
+  // propagating so the gesture handler does not also fire (the gesture
+  // handler is attached to the play area; the pause button is in the
+  // sidebar so this is defensive but harmless).
+  const togglePause = (e) => {
+    if (e && e.stopPropagation) e.stopPropagation();
+    setState(s => ({...s, paused: !s.paused}));
+  };
 
   return (
     <div style={{
@@ -578,53 +656,100 @@ function TetrisGame2P() {
       WebkitUserSelect: "none",
     }}>
 
-      {/* P2 NEXT strip - top */}
+      {/* Subtle 20x20 grid lines across the whole 402x874 frame. */}
       <div style={{
-        position: "absolute", top: 0, left: 0, right: 0,
-        height: NEXT_2P_H,
-        background: "#080808",
-        display: "flex", alignItems: "center",
-        padding: "0 14px",
-        justifyContent: "space-between",
-      }}>
-        <CompactNext type={p2Next} color={P2_COLOR_2P} />
-        <div style={{fontSize: 11, letterSpacing: 2, color: "rgba(255,255,255,0.7)", fontVariantNumeric: "tabular-nums"}}>
-          {timerText}
-        </div>
-        <div style={{fontSize: 9, letterSpacing: 2, color: "rgba(255,255,255,0.3)"}}>
-          P2 {p2Lines}
-        </div>
-      </div>
+        position: "absolute", inset: 0,
+        backgroundImage: `linear-gradient(${GRID_LINE_COLOR} 1px, transparent 1px), linear-gradient(90deg, ${GRID_LINE_COLOR} 1px, transparent 1px)`,
+        backgroundSize: "20px 20px",
+        backgroundPosition: "0 0",
+        pointerEvents: "none",
+      }} />
 
-      {/* Shared board viewport */}
-      <div style={{position: "absolute", top: BOARD_2P_TOP, left: BOARD_LEFT}}>
+      {/* Play area: 200x400 at (61, 237). Centered vertically with
+          breathing room above and below for future territory animations. */}
+      <div
+        ref={playRef}
+        style={{position: "absolute", top: PLAY_Y, left: PLAY_X, width: PLAY_W, height: ROWS_2P * CELL}}
+      >
         <BoardViewport
           grid={grid}
           boundary={boundary}
           startRow={0}
-          endRow={P1_VIEWPORT_H}
+          endRow={ROWS_2P}
           animateBoundary={true}
         />
       </div>
 
-      {/* P1 NEXT strip - bottom */}
-      <div style={{
-        position: "absolute",
-        top: BOARD_2P_TOP + P1_VIEWPORT_H * CELL,
-        left: 0, right: 0,
-        height: NEXT_2P_H,
-        background: "#080808",
-        display: "flex", alignItems: "center",
-        padding: "0 14px",
-        justifyContent: "space-between",
-      }}>
-        <CompactNext type={p1Next} color={PIECE_COLOR} />
-        <div style={{fontSize: 9, letterSpacing: 2, color: "rgba(255,255,255,0.3)"}}>
-          P1 {p1Lines}
+      {/* Info icon */}
+      <div style={{position: "absolute", left: ICON_INFO_X, top: ICON_INFO_Y, width: ICON_SIZE, height: ICON_SIZE}}>
+        <InfoIcon />
+      </div>
+
+      {/* Gear icon */}
+      <div style={{position: "absolute", left: ICON_GEAR_X, top: ICON_GEAR_Y, width: ICON_SIZE, height: ICON_SIZE}}>
+        <GearIcon />
+      </div>
+
+      {/* Pause button: two vertical bars at (PAUSE_X, PAUSE_Y). The visible
+          icon is 12x16; a transparent 48x48 hit box centered on the icon
+          enlarges the touch target for ergonomic thumb reach. */}
+      <div
+        onPointerDown={togglePause}
+        onTouchStart={(e) => e.stopPropagation()}
+        style={{
+          position: "absolute",
+          left: PAUSE_X + (PAUSE_BAR_W + PAUSE_BAR_GAP + PAUSE_BAR_W) / 2 - 24,
+          top:  PAUSE_Y + PAUSE_BAR_H / 2 - 24,
+          width: 48, height: 48,
+          cursor: "pointer",
+        }}
+      >
+        {/* visible bars relative to the 48x48 hit box */}
+        <div style={{
+          position: "absolute",
+          left: 24 - (PAUSE_BAR_W + PAUSE_BAR_GAP + PAUSE_BAR_W) / 2,
+          top:  24 - PAUSE_BAR_H / 2,
+          width: PAUSE_BAR_W, height: PAUSE_BAR_H,
+          background: CHROME_COLOR,
+        }} />
+        <div style={{
+          position: "absolute",
+          left: 24 + PAUSE_BAR_GAP / 2,
+          top:  24 - PAUSE_BAR_H / 2,
+          width: PAUSE_BAR_W, height: PAUSE_BAR_H,
+          background: CHROME_COLOR,
+        }} />
+      </div>
+
+      {/* NEXT block: label + two piece slots, bottom right. Newer pieces
+          enter the TOP slot and shift to the BOTTOM as they get closer
+          to being spawned. */}
+      <div style={{position: "absolute", left: NEXT_X, top: NEXT_Y, width: NEXT_W}}>
+        <div style={{
+          width: NEXT_W, height: NEXT_LABEL_H,
+          color: CHROME_COLOR,
+          fontSize: 10, letterSpacing: 4,
+          textAlign: "center",
+        }}>NEXT</div>
+        <div style={{
+          position: "absolute",
+          left: 15, top: 28,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          width: 30, height: 20,
+        }}>
+          <CompactNext type={p1NextNext} color={PIECE_COLOR} />
+        </div>
+        <div style={{
+          position: "absolute",
+          left: 15, top: 64,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          width: 30, height: 20,
+        }}>
+          <CompactNext type={p1Next} color={PIECE_COLOR} />
         </div>
       </div>
 
-      {/* PAUSED overlay */}
+      {/* PAUSED overlay -- placeholder, simple text */}
       {paused && !summary && phase === "playing" && (
         <div style={{
           position: "absolute", inset: 0,
@@ -632,11 +757,11 @@ function TetrisGame2P() {
           display: "flex", alignItems: "center", justifyContent: "center",
           pointerEvents: "none",
         }}>
-          <div style={{fontSize: 32, fontWeight: 900, letterSpacing: 8, color: "#fff"}}>PAUSED</div>
+          <div style={{fontSize: 28, fontWeight: 700, letterSpacing: 8, color: "#fff"}}>PAUSED</div>
         </div>
       )}
 
-      {/* DEMO COMPLETE summary */}
+      {/* DEMO COMPLETE summary overlay */}
       {summary && (
         <div style={{
           position: "absolute", inset: 0,
@@ -644,7 +769,7 @@ function TetrisGame2P() {
           display: "flex", flexDirection: "column",
           alignItems: "center", justifyContent: "center",
         }}>
-          <div style={{fontSize: 26, fontWeight: 900, letterSpacing: 5, color: "#fff", marginBottom: 18}}>DEMO COMPLETE</div>
+          <div style={{fontSize: 24, fontWeight: 700, letterSpacing: 5, color: "#fff", marginBottom: 18}}>DEMO COMPLETE</div>
           <div style={{fontSize: 11, letterSpacing: 2, color: "rgba(255,255,255,0.55)", marginBottom: 4}}>
             P1 {summary.p1Lines}  /  P2 {summary.p2Lines}
           </div>
@@ -659,7 +784,7 @@ function TetrisGame2P() {
             style={{
               padding: "12px 36px", background: "#ff3333",
               color: "#fff", borderRadius: 6,
-              fontSize: 13, fontWeight: 700, letterSpacing: 3,
+              fontSize: 12, fontWeight: 700, letterSpacing: 3,
               cursor: "pointer",
             }}
           >REMATCH</div>
@@ -674,7 +799,7 @@ function TetrisGame2P() {
           display: "flex", flexDirection: "column",
           alignItems: "center", justifyContent: "center",
         }}>
-          <div style={{fontSize: 36, fontWeight: 900, letterSpacing: 6, color: "#fff", marginBottom: 8}}>
+          <div style={{fontSize: 32, fontWeight: 700, letterSpacing: 6, color: "#fff", marginBottom: 8}}>
             {winner ? "P" + winner + " WINS" : "GAME OVER"}
           </div>
           <div style={{fontSize: 11, letterSpacing: 2, marginBottom: 28, color: "rgba(255,255,255,0.4)"}}>
@@ -685,7 +810,7 @@ function TetrisGame2P() {
             style={{
               padding: "12px 36px", background: "#ff3333",
               color: "#fff", borderRadius: 6,
-              fontSize: 13, fontWeight: 700, letterSpacing: 3,
+              fontSize: 12, fontWeight: 700, letterSpacing: 3,
               cursor: "pointer",
             }}
           >REMATCH</div>
