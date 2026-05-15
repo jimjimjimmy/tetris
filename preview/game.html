@@ -278,7 +278,7 @@ function sumDecayShift(startIdx, n) {
 // BOARD VIEWPORT  (subset: ROWS_2P bound check, not legacy ROWS=33)
 // ============================================================
 
-function BoardViewport({ grid, boundary, startRow, endRow, animateBoundary }) {
+function BoardViewport({ grid, boundary, startRow, endRow, animateBoundary, showBoundary = true }) {
   const visRows = endRow - startRow;
   // Cell content (the filled box) is 16x16 inside the 20x20 grid slot --
   // 2px gap on each side, matching Figma's `p-[2px]` on every Box. The
@@ -306,7 +306,7 @@ function BoardViewport({ grid, boundary, startRow, endRow, animateBoundary }) {
           );
         });
       })}
-      {boundary >= startRow && boundary <= endRow && (
+      {showBoundary && boundary >= startRow && boundary <= endRow && (
         <div style={{
           position: "absolute",
           left: 0, right: 0,
@@ -706,13 +706,16 @@ function TetrisGame2P() {
     }}>
 
       {/* Two radial gradient layers from Figma (124:1448 + 124:1450).
-          Both use rgba(17,18,19,0.5) center -> transparent edge, creating
-          a soft dual-vignette. Drawn BENEATH the grid lines + content. */}
+          Figma centers are rgba(17,18,19) on a near-black frame; layered
+          over #0a0a0a that produces only a few levels of contrast. To
+          make the dual-vignette actually read on screen (the design
+          intent) the center stop is boosted to rgba(45, 48, 56) at
+          alpha 0.7 and falls to transparent at the gradient radius. */}
       <div style={{
         position: "absolute", inset: 0,
         background:
-          "radial-gradient(circle 663px at 201px 211px, rgba(17,18,19,0.5), transparent 100%), " +
-          "radial-gradient(circle 496px at 201px 437px, rgba(17,18,19,0.5), transparent 100%)",
+          "radial-gradient(circle 663px at 201px 211px, rgba(45, 48, 56, 0.7), transparent 100%), " +
+          "radial-gradient(circle 496px at 201px 437px, rgba(45, 48, 56, 0.7), transparent 100%)",
         pointerEvents: "none",
       }} />
 
@@ -758,6 +761,7 @@ function TetrisGame2P() {
           startRow={0}
           endRow={ROWS_2P}
           animateBoundary={true}
+          showBoundary={false}
         />
       </div>
 

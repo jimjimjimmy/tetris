@@ -5,7 +5,7 @@
   Whichever machine (MacFQ or Gandalf) adds a component, updates a file,
   or makes a structural change: update this file before ending the session.
   Both machines depend on this as the single source of truth.
-  Last updated: 2026-05-14 - MacFQ (game.html v5: added missing Right Panel background -- Figma 124:1829 specifies bg rgba(17,18,19,0.5) with border-left 1px rgba(49,50,51,0.5) which creates the visibly-darker sidebar column. Now sits below icons/pause/NEXT and above the gradients+grid; previously the right side blended with the play area. Mechanics untouched; index.html untouched)
+  Last updated: 2026-05-14 - MacFQ (game.html v6: gradient + boundary line: boosted radial gradients to rgba(45,48,56,0.7) center (was rgba(17,18,19,0.5) which was too subtle to read on #0a0a0a bg) so the dual-vignette is now visibly part of the composition; removed the center boundary line from the play area via a new showBoundary={false} prop on BoardViewport (index.html keeps the line via default). Mechanics untouched; index.html untouched)
 -->
 
 ## Required reading before building
