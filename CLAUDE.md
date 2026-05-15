@@ -5,7 +5,7 @@
   Whichever machine (MacFQ or Gandalf) adds a component, updates a file,
   or makes a structural change: update this file before ending the session.
   Both machines depend on this as the single source of truth.
-  Last updated: 2026-05-14 - MacFQ (game.html v6: gradient + boundary line: boosted radial gradients to rgba(45,48,56,0.7) center (was rgba(17,18,19,0.5) which was too subtle to read on #0a0a0a bg) so the dual-vignette is now visibly part of the composition; removed the center boundary line from the play area via a new showBoundary={false} prop on BoardViewport (index.html keeps the line via default). Mechanics untouched; index.html untouched)
+  Last updated: 2026-05-14 - MacFQ (game.html v7 mobile fullscreen + no-backward: removed swipe-down and ArrowDown -- P1 can no longer move backward against its float-up direction (felt confusing); removed body safe-area padding and #root letterboxing -- FullscreenGame now scales to fit WIDTH only (sx = w / FRAME_W) so the canvas runs to the physical screen edges on iOS, with the few pixels of vertical overflow clipped by overflow:hidden on #root; body bg matched to game #0a0a0a. Mechanics untouched; index.html untouched)
 -->
 
 ## Required reading before building
