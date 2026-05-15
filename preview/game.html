@@ -160,10 +160,17 @@ const PIECE_COLOR = "#B1B2B3";
 const CELL_EMPTY = 0;
 const CELL_P1    = 1;
 const CELL_P2    = 2;
+// Per Figma 124-1377: a single base color #b1b2b3 is reused for everything,
+// and visual distinction comes from OPACITY. P1's locked stack renders at
+// opacity 1.0, P2's locked stack at opacity 0.2 (the "dark stack" appearance),
+// and either player's ACTIVE falling/floating piece renders at opacity 0.5.
+const P1_LOCKED_COLOR = "#b1b2b3";                       // = PIECE_COLOR full
+const P2_LOCKED_COLOR = "rgba(177, 178, 179, 0.2)";       // dark stack
+const ACTIVE_COLOR    = "rgba(177, 178, 179, 0.5)";       // active piece
 const CELL_TO_COLOR_2P = {
   [CELL_EMPTY]: null,
-  [CELL_P1]:    PIECE_COLOR,
-  [CELL_P2]:    P2_COLOR_2P,
+  [CELL_P1]:    P1_LOCKED_COLOR,
+  [CELL_P2]:    P2_LOCKED_COLOR,
 };
 
 // ============================================================
@@ -273,10 +280,10 @@ function sumDecayShift(startIdx, n) {
 
 function BoardViewport({ grid, boundary, startRow, endRow, animateBoundary }) {
   const visRows = endRow - startRow;
-  // Cell content (the filled box) is 18x18 inside the 20x20 grid slot --
-  // 1px gap on each side. Background of the play area is transparent so
-  // the global grid lines show through.
-  const INSET = 1;
+  // Cell content (the filled box) is 16x16 inside the 20x20 grid slot --
+  // 2px gap on each side, matching Figma's `p-[2px]` on every Box. The
+  // play area background is transparent so the global grid lines show through.
+  const INSET = 2;
   return (
     <div style={{
       position: "relative",
@@ -668,11 +675,14 @@ function TetrisGame2P() {
   const { board, p1, p2, p1Next, p1NextNext, p1Lines, p2Lines, phase, boundary, winner, paused, summary } = state;
 
   const grid = board.map(row => row.map(v => CELL_TO_COLOR_2P[v]));
+  // Active pieces -- BOTH players -- render at the same translucent color
+  // (ACTIVE_COLOR = opacity 0.5). The Figma design uses a single base color
+  // and only varies opacity to distinguish locked vs active and per-player.
   getCells(p1.type, p1.rot, p1.x, p1.y).forEach(([c, r]) => {
-    if (r >= 0 && r < ROWS_2P && c >= 0 && c < COLS) grid[r][c] = PIECE_COLOR;
+    if (r >= 0 && r < ROWS_2P && c >= 0 && c < COLS) grid[r][c] = ACTIVE_COLOR;
   });
   getCells(p2.type, p2.rot, p2.x, p2.y).forEach(([c, r]) => {
-    if (r >= 0 && r < ROWS_2P && c >= 0 && c < COLS) grid[r][c] = P2_COLOR_2P;
+    if (r >= 0 && r < ROWS_2P && c >= 0 && c < COLS) grid[r][c] = ACTIVE_COLOR;
   });
 
   // Pause toggle for the on-screen pause button. Stops touch from
@@ -695,12 +705,30 @@ function TetrisGame2P() {
       WebkitUserSelect: "none",
     }}>
 
-      {/* Subtle 20x20 grid lines across the whole 402x874 frame. */}
+      {/* Two radial gradient layers from Figma (124:1448 + 124:1450).
+          Both use rgba(17,18,19,0.5) center -> transparent edge, creating
+          a soft dual-vignette. Drawn BENEATH the grid lines + content. */}
       <div style={{
         position: "absolute", inset: 0,
-        backgroundImage: `linear-gradient(${GRID_LINE_COLOR} 1px, transparent 1px), linear-gradient(90deg, ${GRID_LINE_COLOR} 1px, transparent 1px)`,
-        backgroundSize: "20px 20px",
-        backgroundPosition: "0 0",
+        background:
+          "radial-gradient(circle 663px at 201px 211px, rgba(17,18,19,0.5), transparent 100%), " +
+          "radial-gradient(circle 496px at 201px 437px, rgba(17,18,19,0.5), transparent 100%)",
+        pointerEvents: "none",
+      }} />
+
+      {/* Subtle 20x20 grid lines across the whole 402x874 frame. The
+          backgroundPosition is offset to match Figma exactly: horizontal
+          lines at y=-3.5 (rounded to -3), vertical lines at x=0.6
+          (rounded to 1). Cells live BETWEEN consecutive lines, so the
+          play area's PLAY_X=61 / PLAY_Y=-3 lands its cell boundaries
+          ON the grid lines at x=61,81,101,... and y=-3,17,37,... */}
+      <div style={{
+        position: "absolute", inset: 0,
+        backgroundImage:
+          `linear-gradient(${GRID_LINE_COLOR} 1px, transparent 1px), ` +
+          `linear-gradient(90deg, ${GRID_LINE_COLOR} 1px, transparent 1px)`,
+        backgroundSize: "20px 20px, 20px 20px",
+        backgroundPosition: "0 -3px, 1px 0",
         pointerEvents: "none",
       }} />
 
