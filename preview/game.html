@@ -65,12 +65,15 @@ const FRAME_W    = 402;
 const GAME_2P_H  = 874;
 
 // 2P shared board. ROWS_2P must be EVEN so BDY_2P = ROWS_2P/2 is the exact
-// midpoint and both players own ROWS_2P/2 rows each.
-const ROWS_2P      = 42;
-const BDY_2P       = ROWS_2P / 2;          // = 21
+// midpoint and both players own ROWS_2P/2 rows each. ROWS_2P=44 with
+// CELL=20 gives an 880px-tall play area that overflows the 874 frame by
+// 3px top and 3px bottom (clipped by the frame's overflow:hidden), so
+// the play area visually fills the entire screen edge-to-edge.
+const ROWS_2P      = 44;
+const BDY_2P       = ROWS_2P / 2;          // = 22  -- boundary lands at frame y=437 (exact center)
 const PLAY_X       = 61;                    // play-area left edge
 const PLAY_W       = COLS * CELL;           // 200
-const PLAY_Y       = (GAME_2P_H - ROWS_2P * CELL) / 2; // 17 -- centers play area
+const PLAY_Y       = (GAME_2P_H - ROWS_2P * CELL) / 2; // -3 -- 3px symmetric overflow top + bot
 const P2_COLOR_2P  = "#4a4a4a";
 const DEMO_DURATION_S = 60;
 const DECAY_RATE   = 0.05;
@@ -593,28 +596,55 @@ function TetrisGame2P() {
   React.useEffect(() => {
     const el = playRef.current;
     if (!el) return;
+    // Continuous gesture tracking. Horizontal and downward moves fire
+    // DURING the touch (every CELL/STEP_PX pixels of drag) so the piece
+    // tracks the finger live -- no waiting on touchend. Tap rotates on
+    // release if the finger never moved much. Swipe-up (buoyancy boost)
+    // is the only gesture that waits for touchend because it does a
+    // hard-drop and should not fire mid-drag.
+    const STEP_PX  = 20;   // 1 cell per 20px of drag (matches CELL)
+    const TAP_PX   = 10;   // movement under this counts as a tap
     let startX = 0, startY = 0;
+    let lastDx = 0, lastDy = 0;
+    let moved  = false;
     const onStart = (e) => {
       if (e.touches.length !== 1) return;
       startX = e.touches[0].clientX;
       startY = e.touches[0].clientY;
+      lastDx = 0; lastDy = 0; moved = false;
+    };
+    const onMove = (e) => {
+      if (e.touches.length !== 1) return;
+      const dx = e.touches[0].clientX - startX;
+      const dy = e.touches[0].clientY - startY;
+      // Drain horizontal motion: one cell per STEP_PX dragged in either direction.
+      while (dx - lastDx >=  STEP_PX) { applyP1("right"); lastDx += STEP_PX; moved = true; }
+      while (dx - lastDx <= -STEP_PX) { applyP1("left");  lastDx -= STEP_PX; moved = true; }
+      // Drain downward motion the same way. Upward is held until release
+      // so the user can lift their finger to trigger the buoyancy boost.
+      while (dy - lastDy >=  STEP_PX) { applyP1("down");  lastDy += STEP_PX; moved = true; }
     };
     const onEnd = (e) => {
       if (e.changedTouches.length !== 1) return;
       const dx = e.changedTouches[0].clientX - startX;
       const dy = e.changedTouches[0].clientY - startY;
       const adx = Math.abs(dx), ady = Math.abs(dy);
-      if (adx < 10 && ady < 10) { applyP1("tap"); return; }
-      if (adx < 20 && ady < 20) return; // dead zone between tap and swipe
-      if (adx > ady) applyP1(dx > 0 ? "right" : "left");
-      else           applyP1(dy > 0 ? "down"  : "up");
+      // Tap rotates only if the finger barely moved AND no cells were
+      // applied during touchmove. This prevents a "rotate on lift" tail
+      // after a real swipe.
+      if (!moved && adx < TAP_PX && ady < TAP_PX) { applyP1("tap"); return; }
+      // Swipe-up = hard drop UP. Fires on release if the final motion
+      // was clearly upward.
+      if (dy <= -STEP_PX && ady > adx) applyP1("up");
     };
     // Attach to the play area (not document) so taps on the sidebar
     // chrome -- pause / info / gear / NEXT -- never trigger a P1 gesture.
     el.addEventListener("touchstart", onStart, { passive: true });
+    el.addEventListener("touchmove",  onMove,  { passive: true });
     el.addEventListener("touchend",   onEnd,   { passive: true });
     return () => {
       el.removeEventListener("touchstart", onStart);
+      el.removeEventListener("touchmove",  onMove);
       el.removeEventListener("touchend",   onEnd);
     };
   }, [applyP1]);

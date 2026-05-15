@@ -5,7 +5,7 @@
   Whichever machine (MacFQ or Gandalf) adds a component, updates a file,
   or makes a structural change: update this file before ending the session.
   Both machines depend on this as the single source of truth.
-  Last updated: 2026-05-14 - MacFQ (game.html Figma reskin v2 to node 124-1377: ROWS_2P 20->42 so play area spans nearly full 874 frame (200x840 at (61, 17), boundary lands exactly at frame center y=437); real Figma-extracted SVG paths for Info (124:2266) and Gear (124:2251) icons replacing hand-drawn versions; pause color #d9d9d9 per Figma; NEXT label uses Inter 600 / 10px / 2px tracking / opacity 0.3; NEXT pieces opacity 0.5 (top, newest) / 0.2 (bottom, next-to-spawn); CompactNext cells now have 1px inner padding (8x8 visible in 10x10 slot per Figma p-px); mechanics untouched (asymmetric isValid rule, clamp, decay, gestures); index.html untouched)
+  Last updated: 2026-05-14 - MacFQ (game.html v3: TRULY edge-to-edge play area: ROWS_2P 42->44, BDY_2P=22, PLAY_Y=-3 (3px symmetric overflow top+bot clipped by frame, boundary still lands at frame y=437); CONTINUOUS gesture handler -- horizontal and downward moves now fire on touchmove every 20px (no waiting for touchend); tap fires on release only if finger barely moved AND no cells were applied during the drag; swipe-up still touchend-only (hard drop UP); much more responsive feel; mechanics untouched; index.html untouched)
 -->
 
 ## Required reading before building
