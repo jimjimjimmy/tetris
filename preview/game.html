@@ -73,7 +73,7 @@ const PLAY_W       = COLS * CELL;           // 200
 const PLAY_Y       = 0;                     // play area starts at frame top
 const GAME_2P_H    = ROWS_2P * CELL;        // = 880  -- frame matches play exactly
 const P2_COLOR_2P  = "#4a4a4a";
-const DEMO_DURATION_S = 60;
+const DEMO_DURATION_S = 300;
 const DECAY_RATE   = 0.05;
 const MIN_SHIFT    = 0.25;
 
@@ -261,7 +261,7 @@ function makeInitState2P() {
     p2ShiftAcc:  0,
     winner:      null,
     phase:       "playing",
-    paused:      true,            // start frozen -- press P or tap pause to begin
+    paused:      false,           // game starts playing immediately
     demoLeft:    DEMO_DURATION_S,
     summary:     null,
   };
