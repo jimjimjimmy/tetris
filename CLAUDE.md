@@ -5,7 +5,7 @@
   Whichever machine (MacFQ or Gandalf) adds a component, updates a file,
   or makes a structural change: update this file before ending the session.
   Both machines depend on this as the single source of truth.
-  Last updated: 2026-05-15 - MacFQ (game.html v10 longer demo + auto-play: DEMO_DURATION_S 60->300 (5-minute demo run), reverted the visual-QA pause-on-load so makeInitState2P starts with paused:false. Each player still has 22 rows of territory (ROWS_2P=44, BDY_2P=22) from v8 -- well over double the v7 / pre-Figma 10-row-per-player layout. Mechanics untouched; index.html untouched)
+  Last updated: 2026-05-15 - MacFQ (game.html v11 status bar overlay: apple-mobile-web-app-status-bar-style "black" -> "black-translucent" so the iOS status bar (clock/wifi/battery) overlays the game canvas instead of reserving a black bar at the top. Combined with viewport-fit=cover and #root position:fixed inset:0, the game now extends edge-to-edge including under the status bar on iOS PWA standalone mode. No effect in mobile Safari with URL bar visible. Mechanics untouched; index.html untouched)
 -->
 
 ## Required reading before building
