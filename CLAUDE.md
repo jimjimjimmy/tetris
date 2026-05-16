@@ -5,7 +5,7 @@
   Whichever machine (MacFQ or Gandalf) adds a component, updates a file,
   or makes a structural change: update this file before ending the session.
   Both machines depend on this as the single source of truth.
-  Last updated: 2026-05-14 - MacFQ (game.html v8 full vertical play: frame height matches play exactly -- GAME_2P_H = ROWS_2P * CELL = 880 (was 874), PLAY_Y = 0 (was -3) so the play area fills the frame top-to-bottom with no clipping; scale changed from width-only to min(sx, sy) = fit-both, so on every device the ENTIRE frame is visible and the play area occupies the full viewport height edge-to-edge; PAUSE_Y 423->426 and NEXT_Y 758->764 re-center for the new 880 frame; gradient 2 center y=437->440. Mechanics untouched; index.html untouched)
+  Last updated: 2026-05-15 - MacFQ (game.html v9 grid alignment + pause-on-load: backgroundPosition for horizontal grid lines changed from "0 -3px" to "0 0" so grid lines sit on cell-row boundaries (y=0,20,40,...) instead of cutting through cell content (was at y=-3,17,37,...). Vertical lines unchanged ("1px 0" -> lines at x=1,21,...,61,81 land exactly on PLAY_X cell boundaries). All source coords are integers so cells snap pixel-perfect to grid intersections inside their 2px-inset slot. Initial paused:true in makeInitState2P so the game starts frozen for visual QA. Mechanics untouched; index.html untouched)
 -->
 
 ## Required reading before building

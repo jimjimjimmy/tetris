@@ -261,7 +261,7 @@ function makeInitState2P() {
     p2ShiftAcc:  0,
     winner:      null,
     phase:       "playing",
-    paused:      false,
+    paused:      true,            // start frozen -- press P or tap pause to begin
     demoLeft:    DEMO_DURATION_S,
     summary:     null,
   };
@@ -717,19 +717,21 @@ function TetrisGame2P() {
         pointerEvents: "none",
       }} />
 
-      {/* Subtle 20x20 grid lines across the whole 402x874 frame. The
-          backgroundPosition is offset to match Figma exactly: horizontal
-          lines at y=-3.5 (rounded to -3), vertical lines at x=0.6
-          (rounded to 1). Cells live BETWEEN consecutive lines, so the
-          play area's PLAY_X=61 / PLAY_Y=-3 lands its cell boundaries
-          ON the grid lines at x=61,81,101,... and y=-3,17,37,... */}
+      {/* 20x20 grid lines across the entire 402x880 frame. backgroundPosition
+          is chosen so the lines sit EXACTLY on the play-area cell boundaries:
+            vertical:   x = 1, 21, 41, 61, 81, ..., 261, 281, 301, 321
+                         (PLAY_X=61 + 20c lands on every vertical line)
+            horizontal: y = 0, 20, 40, ..., 880
+                         (PLAY_Y=0 + 20r lands on every horizontal line)
+          With this alignment piece cells (which sit inside their 20x20 slot
+          with a 2px inset) never overlap a grid line. */}
       <div style={{
         position: "absolute", inset: 0,
         backgroundImage:
           `linear-gradient(${GRID_LINE_COLOR} 1px, transparent 1px), ` +
           `linear-gradient(90deg, ${GRID_LINE_COLOR} 1px, transparent 1px)`,
         backgroundSize: "20px 20px, 20px 20px",
-        backgroundPosition: "0 -3px, 1px 0",
+        backgroundPosition: "0 0, 1px 0",
         pointerEvents: "none",
       }} />
 
