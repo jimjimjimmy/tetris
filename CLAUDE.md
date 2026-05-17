@@ -5,7 +5,7 @@
   Whichever machine (MacFQ or Gandalf) adds a component, updates a file,
   or makes a structural change: update this file before ending the session.
   Both machines depend on this as the single source of truth.
-  Last updated: 2026-05-16 - MacFQ (game.html v12 Figma 128-3004 overlays: added left-side stack-height brackets (4px-wide, 1px stem, 4px horizontal cap at far-from-boundary end) -- length per player = number of rows occupied by that player's cells * CELL. Added "+N" right-side gain indicator: triggers on every boundary shift, extends in gainer's direction, fades over 1500ms; text Inter 600 10px rgba(255,255,255,0.5). Replaced solid boundary line with two DASHED segments (4px on / 4px off, rgba 0.4) drawn only in the left+right MARGINS of the frame (not through the play area). State adds lastGain:{player,rows,ts}. Mechanics untouched; index.html untouched)
+  Last updated: 2026-05-16 - MacFQ (game.html v13 bracket transitions: stack brackets, gain bracket, gain "+N" text, and both dashed boundary segments now transition top/height with BRACKET_EASE (260ms cubic-bezier(0.22,1,0.36,1)) so they glide instead of snap when the boundary shifts or a stack grows/shrinks. Caps are anchored via top:0 / bottom:0 inside their wrappers so they stay glued to the wrapper edges while the wrapper animates. No mechanic changes; index.html untouched)
 -->
 
 ## Required reading before building

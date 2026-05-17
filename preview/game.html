@@ -128,6 +128,11 @@ const GAIN_BRACKET_X   = 265;    // right-side gain bracket left edge
 const GAIN_TEXT_X      = 273;    // "+N" text left edge
 const GAIN_TEXT_OFFSET = 6;      // gap between text and bracket cap
 const GAIN_FADE_MS     = 1500;
+// Easing for stack-bracket length, gain-bracket position, and dashed-line
+// reposition. Same curve the existing animateBoundary uses inside
+// BoardViewport, applied consistently so all boundary-tracking overlays
+// glide together when the boundary shifts.
+const BRACKET_EASE     = "260ms cubic-bezier(0.22, 1, 0.36, 1)";
 
 const PIECE_TYPES = ["I","O","T","S","Z","J","L"];
 
@@ -844,7 +849,8 @@ function TetrisGame2P() {
 
       {/* ── Dashed boundary lines (Figma 128-3004 nodes 135:3897 + 135:3904).
           4px on, 4px off. Drawn ONLY in the margins -- the play area
-          itself stays clear so pieces are never sliced by a line. ── */}
+          itself stays clear so pieces are never sliced by a line. The
+          `top` animates when the boundary shifts so the dashes glide. ── */}
       <div style={{
         position: "absolute",
         left: DASH_LEFT_X, top: boundaryY, width: DASH_LEFT_W, height: 1,
@@ -852,6 +858,7 @@ function TetrisGame2P() {
         backgroundSize: `${DASH_SEG * 2}px 1px`,
         backgroundRepeat: "repeat-x",
         pointerEvents: "none",
+        transition: `top ${BRACKET_EASE}`,
       }} />
       <div style={{
         position: "absolute",
@@ -860,21 +867,26 @@ function TetrisGame2P() {
         backgroundSize: `${DASH_SEG * 2}px 1px`,
         backgroundRepeat: "repeat-x",
         pointerEvents: "none",
+        transition: `top ${BRACKET_EASE}`,
       }} />
 
       {/* ── Left-side stack-height brackets (Figma 128-3004 nodes
-          135:3922 + 135:3929). Each is a 4px-wide bounding box with a
-          1px vertical stem and a 4px horizontal cap on the END FURTHEST
-          from the boundary. Length scales with stack-row count. ── */}
+          135:3922 + 135:3929). Children are positioned with top/bottom
+          so the cap stays glued to its wrapper edge when the wrapper's
+          `top` and `height` animate. `top` and `height` transition with
+          BRACKET_EASE so the bracket slides instead of snapping. ── */}
       {p2StackRows > 0 && (
         <div style={{
           position: "absolute",
           left: BRACKET_X, top: boundaryY - p2StackRows * CELL,
           width: BRACKET_W, height: p2StackRows * CELL,
           pointerEvents: "none",
+          transition: `top ${BRACKET_EASE}, height ${BRACKET_EASE}`,
         }}>
+          {/* Cap (top) glued to top edge */}
           <div style={{ position: "absolute", left: 0, top: 0, width: BRACKET_CAP_W, height: 1, background: BRACKET_COLOR }} />
-          <div style={{ position: "absolute", left: BRACKET_STEM_X, top: 1, width: 1, height: p2StackRows * CELL - 1, background: BRACKET_COLOR }} />
+          {/* Stem stretches between cap and bottom of wrapper */}
+          <div style={{ position: "absolute", left: BRACKET_STEM_X, top: 1, bottom: 0, width: 1, background: BRACKET_COLOR }} />
         </div>
       )}
       {p1StackRows > 0 && (
@@ -883,16 +895,20 @@ function TetrisGame2P() {
           left: BRACKET_X, top: boundaryY,
           width: BRACKET_W, height: p1StackRows * CELL,
           pointerEvents: "none",
+          transition: `top ${BRACKET_EASE}, height ${BRACKET_EASE}`,
         }}>
-          <div style={{ position: "absolute", left: BRACKET_STEM_X, top: 0, width: 1, height: p1StackRows * CELL - 1, background: BRACKET_COLOR }} />
-          <div style={{ position: "absolute", left: 0, top: p1StackRows * CELL - 1, width: BRACKET_CAP_W, height: 1, background: BRACKET_COLOR }} />
+          {/* Stem stretches between top of wrapper and cap */}
+          <div style={{ position: "absolute", left: BRACKET_STEM_X, top: 0, bottom: 1, width: 1, background: BRACKET_COLOR }} />
+          {/* Cap (bottom) glued to bottom edge */}
+          <div style={{ position: "absolute", left: 0, bottom: 0, width: BRACKET_CAP_W, height: 1, background: BRACKET_COLOR }} />
         </div>
       )}
 
       {/* ── Right-side "+N" gain indicator (Figma 128-3004 nodes
           135:3947 + 135:3951). Bracket extends from boundary in the
           GAINER's direction; "+N" floats at the cap end. Fades over
-          GAIN_FADE_MS via opacity. ── */}
+          GAIN_FADE_MS via opacity, and the top/height transition with
+          BRACKET_EASE so the bracket grows/glides on appearance. ── */}
       {gainView && (
         <React.Fragment>
           <div style={{
@@ -901,17 +917,17 @@ function TetrisGame2P() {
             width: BRACKET_W, height: gainView.bracketH,
             opacity: gainView.opacity,
             pointerEvents: "none",
-            transition: "opacity 120ms linear",
+            transition: `opacity 120ms linear, top ${BRACKET_EASE}, height ${BRACKET_EASE}`,
           }}>
             {gainView.capAtTop ? (
               <React.Fragment>
                 <div style={{ position: "absolute", left: 0, top: 0, width: BRACKET_CAP_W, height: 1, background: BRACKET_COLOR }} />
-                <div style={{ position: "absolute", left: BRACKET_STEM_X, top: 1, width: 1, height: gainView.bracketH - 1, background: BRACKET_COLOR }} />
+                <div style={{ position: "absolute", left: BRACKET_STEM_X, top: 1, bottom: 0, width: 1, background: BRACKET_COLOR }} />
               </React.Fragment>
             ) : (
               <React.Fragment>
-                <div style={{ position: "absolute", left: BRACKET_STEM_X, top: 0, width: 1, height: gainView.bracketH - 1, background: BRACKET_COLOR }} />
-                <div style={{ position: "absolute", left: 0, top: gainView.bracketH - 1, width: BRACKET_CAP_W, height: 1, background: BRACKET_COLOR }} />
+                <div style={{ position: "absolute", left: BRACKET_STEM_X, top: 0, bottom: 1, width: 1, background: BRACKET_COLOR }} />
+                <div style={{ position: "absolute", left: 0, bottom: 0, width: BRACKET_CAP_W, height: 1, background: BRACKET_COLOR }} />
               </React.Fragment>
             )}
           </div>
@@ -925,7 +941,7 @@ function TetrisGame2P() {
             color: BRACKET_COLOR,
             opacity: gainView.opacity,
             pointerEvents: "none",
-            transition: "opacity 120ms linear",
+            transition: `opacity 120ms linear, top ${BRACKET_EASE}`,
             fontVariantNumeric: "tabular-nums",
             whiteSpace: "nowrap",
           }}>+{gainView.rows}</div>
