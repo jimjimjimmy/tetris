@@ -908,8 +908,10 @@ function TetrisGame2P() {
   // NEXT queue routing: show whichever side the human is playing. P2's
   // queue while the user is P1, or P1's queue if anyone is observing
   // the start-screen flicker before a side is picked (defaults to P1).
-  const nextBottom = playerSide === 2 ? p2Next     : p1Next;
-  const nextTop    = playerSide === 2 ? p2NextNext : p1NextNext;
+  // For P1: next-to-spawn in BOTTOM slot (closer to P1's bottom territory)
+  // For P2: next-to-spawn in TOP slot (closer to P2's top territory)
+  const nextTop    = playerSide === 2 ? p2Next     : p1NextNext;
+  const nextBottom = playerSide === 2 ? p2NextNext : p1Next;
 
   // Side selector: tapping a start-screen button transitions phase
   // "start" to "playing" and stores which side the user picked.

@@ -5,7 +5,7 @@
   Whichever machine (MacFQ or Gandalf) adds a component, updates a file,
   or makes a structural change: update this file before ending the session.
   Both machines depend on this as the single source of truth.
-  Last updated: 2026-05-16 - MacFQ (game.html v23 P2 NEXT queue + side-aware NEXT display: P2 now has its own 2-deep NEXT queue (p2Next + p2NextNext, mirror of P1's). The P2 spawn block shifts the queue (p2Next <- p2NextNext, p2NextNext <- randPiece()), matching P1's behavior. The NEXT block in the sidebar reads from whichever side the human is playing: playerSide===2 shows p2Next/p2NextNext, otherwise p1Next/p1NextNext (default). Each side's queue is independent, so the AI's queue doesn't interfere with the human's NEXT preview. No game-mechanic rule changes; index.html untouched.)
+  Last updated: 2026-05-17 - MacFQ (game.html v24 P2 NEXT slot direction fix: TOP slot now shows next-to-spawn for P2 (p2Next), BOTTOM slot shows piece-after-next (p2NextNext). Previously both P1 and P2 used the same slot assignment (next-to-spawn at BOTTOM), which is correct for P1 whose territory is at the bottom, but inverted for P2 whose territory is at the top. Fix: swap nextTop/nextBottom assignment when playerSide===2 so the slot closest to P2's spawn side (TOP) shows the next piece. P1 display unchanged. Two-line fix in the render destructure. No mechanic changes; index.html untouched.)
 -->
 
 ## Required reading before building
