@@ -5,7 +5,7 @@
   Whichever machine (MacFQ or Gandalf) adds a component, updates a file,
   or makes a structural change: update this file before ending the session.
   Both machines depend on this as the single source of truth.
-  Last updated: 2026-05-16 - MacFQ (game.html v16 Figma 145-3068 background exact match: gradient colors corrected from rgba(45,48,56,0.7) -> rgba(17,18,19,0.5) (matches Figma rgba(17,18,19,1) center at wrapper opacity 0.5); gradient 2 center y 440 -> 437; ADDED missing Gradient Stripe (Figma 145:3141): 322x880 solid rgba(0,0,0,0.3) overlay covering the LEFT zone (play area) -- this is what darkens the play area vs the sidebar in Figma; reordered background layers to grid -> gradients -> stripe per Figma layer stack. No mechanic changes; index.html untouched)
+  Last updated: 2026-05-16 - MacFQ (game.html v17 iOS Safari gradient + NEXT bottom safe-area: radial gradient stops boosted from rgba(17,18,19,0.5) -> rgba(36,38,44,0.55) to compensate for iOS Safari rendering Figma source values near-black on real devices; Gradient Stripe alpha reduced 0.3 -> 0.18 so the play zone has more depth/texture on iPhone instead of being crushed black; NEXT block `top` now uses calc(NEXT_Y - max(20px, env(safe-area-inset-bottom))) so on iPhone 15 Pro etc the NEXT strip is shifted UP clear of the home indicator (env ~34px), with a 20px floor for desktop. Mechanic untouched; index.html untouched. Mobile rendering verification required on iOS Simulator.)
 -->
 
 ## Required reading before building

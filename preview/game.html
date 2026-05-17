@@ -846,8 +846,12 @@ function TetrisGame2P() {
       <div style={{
         position: "absolute", inset: 0,
         background:
-          "radial-gradient(circle 663px at 201px 211px, rgba(17,18,19,0.5), rgba(17,18,19,0)), " +
-          "radial-gradient(circle 496px at 201px 437px, rgba(17,18,19,0.5), rgba(17,18,19,0))",
+          // Mobile-Safari compensation: source Figma stops are
+          // rgba(17,18,19,0.5); iOS renders those near-black. RGB bumped
+          // ~+115% (HSL lightness +~18%) and center alpha +0.05 so the
+          // dual-vignette reads with depth and texture on iPhone.
+          "radial-gradient(circle 663px at 201px 211px, rgba(36,38,44,0.55), rgba(36,38,44,0)), " +
+          "radial-gradient(circle 496px at 201px 437px, rgba(36,38,44,0.55), rgba(36,38,44,0))",
         pointerEvents: "none",
       }} />
 
@@ -857,7 +861,10 @@ function TetrisGame2P() {
       <div style={{
         position: "absolute",
         left: 0, top: 0, width: 322, height: GAME_2P_H,
-        background: "rgba(0, 0, 0, 0.3)",
+        // Mobile-Safari compensation: source alpha 0.3 crushes the play
+        // zone on iPhone; reduced to 0.18 so depth is visible without
+        // killing the gradient texture.
+        background: "rgba(0, 0, 0, 0.18)",
         pointerEvents: "none",
       }} />
 
@@ -1051,8 +1058,13 @@ function TetrisGame2P() {
       {/* NEXT block (Figma 124:1463). Label is Inter 600 / 10px / 2px
           letter-spacing / uppercase, opacity 0.3. Newer pieces enter the
           TOP slot (opacity 0.5) and shift DOWN to the bottom slot
-          (opacity 0.2) as they get closer to being spawned. */}
-      <div style={{position: "absolute", left: NEXT_X, top: NEXT_Y, width: NEXT_W, color: "#fff"}}>
+          (opacity 0.2) as they get closer to being spawned.
+
+          Bottom safe-area: the block's `top` is shifted UP by max(20px,
+          env(safe-area-inset-bottom)) so on iPhones with a home indicator
+          (~34px), the strip clears the indicator. The 20px floor keeps
+          some breathing room on devices without a real bottom inset. */}
+      <div style={{position: "absolute", left: NEXT_X, top: `calc(${NEXT_Y}px - max(20px, env(safe-area-inset-bottom)))`, width: NEXT_W, color: "#fff"}}>
         <div style={{
           width: NEXT_W, height: NEXT_LABEL_H,
           fontFamily: "'Inter', sans-serif",
