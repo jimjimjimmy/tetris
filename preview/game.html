@@ -818,7 +818,13 @@ function TetrisGame2P() {
       el.removeEventListener("touchmove",  onMove);
       el.removeEventListener("touchend",   onEnd);
     };
-  }, [applyP1, applyP2]);
+    // state.phase is in the dep array so the effect RE-RUNS after the
+    // user taps a side button on the start screen. Without it, playRef
+    // is null at first mount (start screen is rendered, not the game)
+    // so the effect returns early and never re-attaches once the play
+    // area finally renders. Adding phase forces a clean re-attach on
+    // every phase transition (start -> playing, playing -> over).
+  }, [applyP1, applyP2, state.phase]);
 
   // Demo countdown
   React.useEffect(() => {

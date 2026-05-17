@@ -5,7 +5,7 @@
   Whichever machine (MacFQ or Gandalf) adds a component, updates a file,
   or makes a structural change: update this file before ending the session.
   Both machines depend on this as the single source of truth.
-  Last updated: 2026-05-16 - MacFQ (game.html v21 P2 controllable: side-select on start screen now ACTUALLY swaps which side the human controls. Re-added the P1 AI scoring block (deleted in v7) gated on playerSide===2; gated the existing P2 AI block on playerSide===1. Added applyP2 dispatcher (mirror of applyP1; tap/left/right/down where down=hard-drop). Touch + keyboard handlers now route to applyP1 vs applyP2 based on playerSideRef (mirrors state.playerSide). Vertical-swipe direction flips: P1 boost=UP, P2 boost=DOWN; backward direction is no-op for each side. No mechanic changes; index.html untouched.)
+  Last updated: 2026-05-16 - MacFQ (game.html v22 touch handler re-attaches after start screen: bug was that the touch useEffect ran once at mount when playRef.current was null (start screen rendered, no play area) so it short-circuited without attaching listeners, and never re-ran because [applyP1, applyP2] never changed. Mobile users picking either side got no touch input. Fix: dep array is now [applyP1, applyP2, state.phase] so the effect re-runs on every phase transition (start -> playing, playing -> over) and attaches listeners to the freshly-rendered playRef. Keyboard handler was unaffected (binds to window, not playRef). No mechanic changes; index.html untouched.)
 -->
 
 ## Required reading before building
