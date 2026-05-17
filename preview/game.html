@@ -110,6 +110,25 @@ const NEXT_PIECE_COLOR = "#b1b2b3";   // matches PIECE_COLOR exactly
 // Subtle grid line color for the background.
 const GRID_LINE_COLOR  = "rgba(255,255,255,0.04)";
 
+// Figma 128-3004 new decorative overlays (stack brackets, +N gain indicator,
+// dashed boundary line). All in the same translucent-white family that the
+// chrome icons use, slightly more visible than the grid lines.
+const BRACKET_COLOR    = "rgba(255,255,255,0.5)";   // stack brackets + gain bracket
+const DASH_COLOR       = "rgba(255,255,255,0.4)";   // dashed boundary line
+const BRACKET_X        = 53;     // left-side bracket left edge (8px left of PLAY_X=61)
+const BRACKET_W        = 4;      // bracket bounding-box width
+const BRACKET_STEM_X   = 1;      // stem within bracket box (Figma "V line" at x=1.5, we use 1 for integer pixel)
+const BRACKET_CAP_W    = 4;      // horizontal cap width
+const DASH_SEG         = 4;      // dash on, dash off (Figma 4/4 pattern)
+const DASH_LEFT_X      = 0;      // left dashed segment left edge (Figma -3, rounded to 0 to stay inside frame)
+const DASH_LEFT_W      = 57;     // ends 4px before PLAY_X=61
+const DASH_RIGHT_X     = 265;    // starts 4px right of play edge (261)
+const DASH_RIGHT_W     = 52;     // ends before sidebar at 320 (with 3px gap)
+const GAIN_BRACKET_X   = 265;    // right-side gain bracket left edge
+const GAIN_TEXT_X      = 273;    // "+N" text left edge
+const GAIN_TEXT_OFFSET = 6;      // gap between text and bracket cap
+const GAIN_FADE_MS     = 1500;
+
 const PIECE_TYPES = ["I","O","T","S","Z","J","L"];
 
 const SHAPES = {
@@ -264,6 +283,10 @@ function makeInitState2P() {
     paused:      false,           // game starts playing immediately
     demoLeft:    DEMO_DURATION_S,
     summary:     null,
+    // Most-recent territory gain for the "+N" right-side indicator
+    // (Figma 128-3004). Shape: { player: 1 | 2, rows: number, ts: ms } or null.
+    // Set when a row-clear shifts the boundary; cleared after GAIN_FADE_MS.
+    lastGain:    null,
   };
 }
 
@@ -528,11 +551,24 @@ function TetrisGame2P() {
           newBdy = ROWS_2P; winner = 2; phase = "over";
         }
 
+        // Update the "+N" gain indicator. The rows that just shifted
+        // are p1IntShift (P1 gain, boundary moved UP) or p2IntShift (P2
+        // gain, boundary moved DOWN). Prefer whichever side moved this
+        // tick; if both, prefer the larger gain.
+        let lastGain = s.lastGain;
+        if (p1IntShift > 0 || p2IntShift > 0) {
+          if (p1IntShift >= p2IntShift) {
+            lastGain = { player: 1, rows: p1IntShift, ts: Date.now() };
+          } else {
+            lastGain = { player: 2, rows: p2IntShift, ts: Date.now() };
+          }
+        }
+
         return {
           ...s,
           board, aiTick, p1, p1Next, p1NextNext, p2, p2Next, phase,
           p1Lines: p1Lines + n1, p2Lines: p2Lines + n2,
-          boundary: newBdy, p1ShiftAcc, p2ShiftAcc, winner,
+          boundary: newBdy, p1ShiftAcc, p2ShiftAcc, winner, lastGain,
         };
       });
     }, TICK_MS);
@@ -670,7 +706,22 @@ function TetrisGame2P() {
     return () => clearInterval(id);
   }, []);
 
-  const { board, p1, p2, p1Next, p1NextNext, p1Lines, p2Lines, phase, boundary, winner, paused, summary } = state;
+  // Expire the "+N" gain indicator after GAIN_FADE_MS. Polls every 100ms
+  // so the indicator clears even when paused (the bracket is a transient
+  // UI marker, not gameplay state). Setting opacity via inline style on
+  // the render lets CSS transition the fade smoothly to zero.
+  React.useEffect(() => {
+    const id = setInterval(() => {
+      setState(s => {
+        if (!s.lastGain) return s;
+        if (Date.now() - s.lastGain.ts >= GAIN_FADE_MS) return { ...s, lastGain: null };
+        return s;
+      });
+    }, 100);
+    return () => clearInterval(id);
+  }, []);
+
+  const { board, p1, p2, p1Next, p1NextNext, p1Lines, p2Lines, phase, boundary, winner, paused, summary, lastGain } = state;
 
   const grid = board.map(row => row.map(v => CELL_TO_COLOR_2P[v]));
   // Active pieces -- BOTH players -- render at the same translucent color
@@ -691,6 +742,62 @@ function TetrisGame2P() {
     if (e && e.stopPropagation) e.stopPropagation();
     setState(s => ({...s, paused: !s.paused}));
   };
+
+  // ── Stack-height brackets (Figma 128-3004) ───────────────────────────
+  // For each player, find how many rows of their territory currently
+  // contain at least one of their cells. The bracket length equals
+  // (rows-with-cells) * CELL.
+  //   P2 stack: topmost P2 row (minP2) -> boundary-1
+  //   P1 stack: boundary -> bottommost P1 row (maxP1)
+  let _minP2 = ROWS_2P, _maxP1 = -1;
+  for (let r = 0; r < ROWS_2P; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const v = board[r][c];
+      if (v === CELL_P2 && r < _minP2) _minP2 = r;
+      if (v === CELL_P1 && r > _maxP1) _maxP1 = r;
+    }
+  }
+  const p2StackRows = _minP2 < boundary ? (boundary - _minP2) : 0;
+  const p1StackRows = _maxP1 >= boundary ? (_maxP1 - boundary + 1) : 0;
+  const boundaryY   = PLAY_Y + boundary * CELL;  // y of the boundary line in frame coords
+
+  // ── "+N" gain indicator (Figma 128-3004) ─────────────────────────────
+  // lastGain expires after GAIN_FADE_MS; opacity fades linearly over the
+  // last 400ms for a soft tail. Direction comes from lastGain.player:
+  //   P1 gain: boundary moved UP, bracket extends UP from boundary
+  //   P2 gain: boundary moved DOWN, bracket extends DOWN from boundary
+  let gainView = null;
+  if (lastGain) {
+    const age = Date.now() - lastGain.ts;
+    const FADE_TAIL = 400;
+    const opacity = age < (GAIN_FADE_MS - FADE_TAIL)
+      ? 1
+      : Math.max(0, 1 - (age - (GAIN_FADE_MS - FADE_TAIL)) / FADE_TAIL);
+    const gainPx = lastGain.rows * CELL;
+    if (lastGain.player === 1) {
+      gainView = {
+        opacity,
+        rows: lastGain.rows,
+        // Bracket: extends UP from boundary, cap at TOP
+        bracketTop:  boundaryY - gainPx,
+        bracketH:    gainPx,
+        capAtTop:    true,
+        // Text floats just above the cap
+        textTop:     boundaryY - gainPx - GAIN_TEXT_OFFSET - 12,
+      };
+    } else {
+      gainView = {
+        opacity,
+        rows: lastGain.rows,
+        // Bracket: extends DOWN from boundary, cap at BOTTOM
+        bracketTop:  boundaryY,
+        bracketH:    gainPx,
+        capAtTop:    false,
+        // Text floats just below the cap
+        textTop:     boundaryY + gainPx + GAIN_TEXT_OFFSET,
+      };
+    }
+  }
 
   return (
     <div style={{
@@ -734,6 +841,96 @@ function TetrisGame2P() {
         backgroundPosition: "0 0, 1px 0",
         pointerEvents: "none",
       }} />
+
+      {/* ── Dashed boundary lines (Figma 128-3004 nodes 135:3897 + 135:3904).
+          4px on, 4px off. Drawn ONLY in the margins -- the play area
+          itself stays clear so pieces are never sliced by a line. ── */}
+      <div style={{
+        position: "absolute",
+        left: DASH_LEFT_X, top: boundaryY, width: DASH_LEFT_W, height: 1,
+        backgroundImage: `linear-gradient(90deg, ${DASH_COLOR} 0, ${DASH_COLOR} ${DASH_SEG}px, transparent ${DASH_SEG}px, transparent ${DASH_SEG * 2}px)`,
+        backgroundSize: `${DASH_SEG * 2}px 1px`,
+        backgroundRepeat: "repeat-x",
+        pointerEvents: "none",
+      }} />
+      <div style={{
+        position: "absolute",
+        left: DASH_RIGHT_X, top: boundaryY, width: DASH_RIGHT_W, height: 1,
+        backgroundImage: `linear-gradient(90deg, ${DASH_COLOR} 0, ${DASH_COLOR} ${DASH_SEG}px, transparent ${DASH_SEG}px, transparent ${DASH_SEG * 2}px)`,
+        backgroundSize: `${DASH_SEG * 2}px 1px`,
+        backgroundRepeat: "repeat-x",
+        pointerEvents: "none",
+      }} />
+
+      {/* ── Left-side stack-height brackets (Figma 128-3004 nodes
+          135:3922 + 135:3929). Each is a 4px-wide bounding box with a
+          1px vertical stem and a 4px horizontal cap on the END FURTHEST
+          from the boundary. Length scales with stack-row count. ── */}
+      {p2StackRows > 0 && (
+        <div style={{
+          position: "absolute",
+          left: BRACKET_X, top: boundaryY - p2StackRows * CELL,
+          width: BRACKET_W, height: p2StackRows * CELL,
+          pointerEvents: "none",
+        }}>
+          <div style={{ position: "absolute", left: 0, top: 0, width: BRACKET_CAP_W, height: 1, background: BRACKET_COLOR }} />
+          <div style={{ position: "absolute", left: BRACKET_STEM_X, top: 1, width: 1, height: p2StackRows * CELL - 1, background: BRACKET_COLOR }} />
+        </div>
+      )}
+      {p1StackRows > 0 && (
+        <div style={{
+          position: "absolute",
+          left: BRACKET_X, top: boundaryY,
+          width: BRACKET_W, height: p1StackRows * CELL,
+          pointerEvents: "none",
+        }}>
+          <div style={{ position: "absolute", left: BRACKET_STEM_X, top: 0, width: 1, height: p1StackRows * CELL - 1, background: BRACKET_COLOR }} />
+          <div style={{ position: "absolute", left: 0, top: p1StackRows * CELL - 1, width: BRACKET_CAP_W, height: 1, background: BRACKET_COLOR }} />
+        </div>
+      )}
+
+      {/* ── Right-side "+N" gain indicator (Figma 128-3004 nodes
+          135:3947 + 135:3951). Bracket extends from boundary in the
+          GAINER's direction; "+N" floats at the cap end. Fades over
+          GAIN_FADE_MS via opacity. ── */}
+      {gainView && (
+        <React.Fragment>
+          <div style={{
+            position: "absolute",
+            left: GAIN_BRACKET_X, top: gainView.bracketTop,
+            width: BRACKET_W, height: gainView.bracketH,
+            opacity: gainView.opacity,
+            pointerEvents: "none",
+            transition: "opacity 120ms linear",
+          }}>
+            {gainView.capAtTop ? (
+              <React.Fragment>
+                <div style={{ position: "absolute", left: 0, top: 0, width: BRACKET_CAP_W, height: 1, background: BRACKET_COLOR }} />
+                <div style={{ position: "absolute", left: BRACKET_STEM_X, top: 1, width: 1, height: gainView.bracketH - 1, background: BRACKET_COLOR }} />
+              </React.Fragment>
+            ) : (
+              <React.Fragment>
+                <div style={{ position: "absolute", left: BRACKET_STEM_X, top: 0, width: 1, height: gainView.bracketH - 1, background: BRACKET_COLOR }} />
+                <div style={{ position: "absolute", left: 0, top: gainView.bracketH - 1, width: BRACKET_CAP_W, height: 1, background: BRACKET_COLOR }} />
+              </React.Fragment>
+            )}
+          </div>
+          <div style={{
+            position: "absolute",
+            left: GAIN_TEXT_X, top: gainView.textTop,
+            fontFamily: "'Inter', sans-serif",
+            fontWeight: 600,
+            fontSize: 10,
+            letterSpacing: 0,
+            color: BRACKET_COLOR,
+            opacity: gainView.opacity,
+            pointerEvents: "none",
+            transition: "opacity 120ms linear",
+            fontVariantNumeric: "tabular-nums",
+            whiteSpace: "nowrap",
+          }}>+{gainView.rows}</div>
+        </React.Fragment>
+      )}
 
       {/* Right Panel background -- the slightly-darker sidebar column.
           Figma 124:1829: bg rgba(17,18,19,0.5), border-l 1px solid
