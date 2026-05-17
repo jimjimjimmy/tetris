@@ -5,7 +5,7 @@
   Whichever machine (MacFQ or Gandalf) adds a component, updates a file,
   or makes a structural change: update this file before ending the session.
   Both machines depend on this as the single source of truth.
-  Last updated: 2026-05-16 - MacFQ (game.html v13 bracket transitions: stack brackets, gain bracket, gain "+N" text, and both dashed boundary segments now transition top/height with BRACKET_EASE (260ms cubic-bezier(0.22,1,0.36,1)) so they glide instead of snap when the boundary shifts or a stack grows/shrinks. Caps are anchored via top:0 / bottom:0 inside their wrappers so they stay glued to the wrapper edges while the wrapper animates. No mechanic changes; index.html untouched)
+  Last updated: 2026-05-16 - MacFQ (game.html v14 left dash flush right: DASH_LEFT_X 0->-3, DASH_LEFT_W 57->60 (matches Figma 135:3897 exactly). The left dashed segment now flows right-to-left -- last full dash lands flush at x=57 just before PLAY_X=61, and the leftmost partial dash bleeds off the frame's left edge where it's clipped by the wrapper's overflow:hidden. Was previously the opposite (flush left, partial on right) due to over-aggressive rounding. No mechanic changes; index.html untouched)
 -->
 
 ## Required reading before building

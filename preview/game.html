@@ -120,8 +120,8 @@ const BRACKET_W        = 4;      // bracket bounding-box width
 const BRACKET_STEM_X   = 1;      // stem within bracket box (Figma "V line" at x=1.5, we use 1 for integer pixel)
 const BRACKET_CAP_W    = 4;      // horizontal cap width
 const DASH_SEG         = 4;      // dash on, dash off (Figma 4/4 pattern)
-const DASH_LEFT_X      = 0;      // left dashed segment left edge (Figma -3, rounded to 0 to stay inside frame)
-const DASH_LEFT_W      = 57;     // ends 4px before PLAY_X=61
+const DASH_LEFT_X      = -3;     // left dashed segment left edge (Figma -3)
+const DASH_LEFT_W      = 60;     // Figma 60 -- dashes flow right-to-left so the partial dash bleeds off the frame's LEFT edge (clipped by frame overflow:hidden), and the last full dash lands flush at x=57, 4px before PLAY_X=61
 const DASH_RIGHT_X     = 265;    // starts 4px right of play edge (261)
 const DASH_RIGHT_W     = 52;     // ends before sidebar at 320 (with 3px gap)
 const GAIN_BRACKET_X   = 265;    // right-side gain bracket left edge
