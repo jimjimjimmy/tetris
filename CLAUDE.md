@@ -5,7 +5,7 @@
   Whichever machine (MacFQ or Gandalf) adds a component, updates a file,
   or makes a structural change: update this file before ending the session.
   Both machines depend on this as the single source of truth.
-  Last updated: 2026-05-16 - MacFQ (game.html v19 start screen + sensitivity + haptics: (1) new phase:"start" initial state + playerSide field; conditional start-screen render with DRIFT title, SELECT YOUR SIDE label, and two side buttons -- tapping a button transitions phase:"playing" and stores playerSide. Currently both buttons start the game with the existing P1-as-human role; playerSide is remembered for future AI-side-swap logic. (2) Touch gesture STEP_PX 20 -> 10 so a 10px drag registers a swipe / cell move -- twice as responsive on real device. (3) Web Vibration API haptic feedback via a single useEffect with refs comparing p1.type / total lines / boundary / phase: piece lock 30ms, row clear 60ms, boundary shift 100ms, game over 200ms. Fails silently if navigator.vibrate is not a function. iOS Safari historically does not support Vibration API; Android Chrome does. Mechanic untouched; index.html untouched.)
+  Last updated: 2026-05-16 - MacFQ (game.html v20 start-screen polish: side buttons now use directional arrows "[ P1 up-arrow ]" and "[ P2 down-arrow ]" instead of FLOATS-UP / FALLS-DOWN word labels (no more wrapping to two lines); border removed; letterSpacing reduced 3->2, fontSize 12->16 for the larger glyphs. No mechanic changes; index.html untouched.)
 -->
 
 ## Required reading before building

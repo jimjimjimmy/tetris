@@ -834,38 +834,36 @@ function TetrisGame2P() {
             textTransform: "uppercase",
           }}>Select your side</div>
 
-          <div style={{display: "flex", flexDirection: "column", gap: 16, alignItems: "stretch", width: 280}}>
+          <div style={{display: "flex", flexDirection: "column", gap: 24, alignItems: "stretch", width: 280}}>
             <div
               onPointerDown={selectSide(1)}
               onTouchStart={(e) => e.stopPropagation()}
               style={{
                 fontFamily: "monospace",
-                fontSize: 12, fontWeight: 600,
-                letterSpacing: 3,
+                fontSize: 16, fontWeight: 600,
+                letterSpacing: 2,
                 color: "rgba(255,255,255,0.85)",
-                border: "1px solid rgba(255,255,255,0.3)",
                 padding: "16px 20px",
                 textAlign: "center",
                 cursor: "pointer",
                 userSelect: "none",
               }}
-            >[ P 1 &nbsp; - &nbsp; F L O A T S &nbsp; U P ]</div>
+            >[ P1 &nbsp; ↑ ]</div>
 
             <div
               onPointerDown={selectSide(2)}
               onTouchStart={(e) => e.stopPropagation()}
               style={{
                 fontFamily: "monospace",
-                fontSize: 12, fontWeight: 600,
-                letterSpacing: 3,
+                fontSize: 16, fontWeight: 600,
+                letterSpacing: 2,
                 color: "rgba(255,255,255,0.85)",
-                border: "1px solid rgba(255,255,255,0.3)",
                 padding: "16px 20px",
                 textAlign: "center",
                 cursor: "pointer",
                 userSelect: "none",
               }}
-            >[ P 2 &nbsp; - &nbsp; F A L L S &nbsp; D O W N ]</div>
+            >[ P2 &nbsp; ↓ ]</div>
           </div>
         </div>
       </div>
