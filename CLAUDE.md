@@ -5,7 +5,7 @@
   Whichever machine (MacFQ or Gandalf) adds a component, updates a file,
   or makes a structural change: update this file before ending the session.
   Both machines depend on this as the single source of truth.
-  Last updated: 2026-05-16 - MacFQ (game.html v18 pause centered on boundary: PAUSE_Y is now derived as (PLAY_Y + BDY_2P * CELL) - PAUSE_BAR_H/2 = 432 instead of the hardcoded 426, so the 16px-tall pause icon's vertical center sits exactly on the STARTING boundary dashed line at y=440. Previously off by 6px upward because PAUSE_Y was computed from the Figma justify-between flex math against a 874-tall frame, not centered on the boundary. Mechanic untouched; index.html untouched.)
+  Last updated: 2026-05-16 - MacFQ (game.html v19 start screen + sensitivity + haptics: (1) new phase:"start" initial state + playerSide field; conditional start-screen render with DRIFT title, SELECT YOUR SIDE label, and two side buttons -- tapping a button transitions phase:"playing" and stores playerSide. Currently both buttons start the game with the existing P1-as-human role; playerSide is remembered for future AI-side-swap logic. (2) Touch gesture STEP_PX 20 -> 10 so a 10px drag registers a swipe / cell move -- twice as responsive on real device. (3) Web Vibration API haptic feedback via a single useEffect with refs comparing p1.type / total lines / boundary / phase: piece lock 30ms, row clear 60ms, boundary shift 100ms, game over 200ms. Fails silently if navigator.vibrate is not a function. iOS Safari historically does not support Vibration API; Android Chrome does. Mechanic untouched; index.html untouched.)
 -->
 
 ## Required reading before building

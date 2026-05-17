@@ -286,7 +286,13 @@ function makeInitState2P() {
     p1ShiftAcc:  0,
     p2ShiftAcc:  0,
     winner:      null,
-    phase:       "playing",
+    // phase: "start" -> start screen with side select (placeholder UI);
+    //        "playing" -> active game; "over" -> game-over overlay.
+    phase:       "start",
+    // playerSide is set when the user taps a side button on the start
+    // screen. Stored for future use (when AI swaps to the other side).
+    // 1 = user plays P1 (floats up). 2 = user plays P2 (falls down).
+    playerSide:  null,
     paused:      false,           // game starts playing immediately
     demoLeft:    DEMO_DURATION_S,
     summary:     null,
@@ -652,7 +658,7 @@ function TetrisGame2P() {
     // live -- no waiting on touchend. Tap rotates on release if the finger
     // never moved much. Swipe-up (buoyancy boost) hard-drops on release.
     // Down-swipes do NOTHING -- P1 cannot move backward against its float.
-    const STEP_PX  = 20;   // 1 cell per 20px of drag (matches CELL)
+    const STEP_PX  = 10;   // 10px = swipe threshold; piece moves 1 cell per 10px drag
     const TAP_PX   = 10;   // movement under this counts as a tap
     let startX = 0, startY = 0;
     let lastDx = 0;
@@ -728,7 +734,143 @@ function TetrisGame2P() {
     return () => clearInterval(id);
   }, []);
 
-  const { board, p1, p2, p1Next, p1NextNext, p1Lines, p2Lines, phase, boundary, winner, paused, summary, lastGain } = state;
+  // Haptic feedback via the Web Vibration API. We use refs to compare
+  // current and previous values so each event fires the vibration exactly
+  // once per transition. Fails silently if navigator.vibrate is not
+  // supported (iOS Safari does NOT support it; Android Chrome does).
+  //   piece lock           = p1.type changed   ->   30ms
+  //   row clear            = p1Lines+p2Lines+  ->   60ms
+  //   territory shift      = boundary changed  ->  100ms
+  //   game over            = phase -> "over"   ->  200ms
+  // When multiple events land in the same tick, the last call cancels the
+  // previous one and only its duration fires -- semantics match "most
+  // important event wins" (shift > clear > lock).
+  const prevP1TypeRef   = React.useRef(state.p1.type);
+  const prevLinesRef    = React.useRef(state.p1Lines + state.p2Lines);
+  const prevBoundaryRef = React.useRef(state.boundary);
+  const prevPhaseRef    = React.useRef(state.phase);
+  React.useEffect(() => {
+    if (typeof navigator === "undefined" || typeof navigator.vibrate !== "function") return;
+    if (state.p1.type !== prevP1TypeRef.current && state.phase === "playing") {
+      try { navigator.vibrate(30); } catch (_) {}
+    }
+    prevP1TypeRef.current = state.p1.type;
+
+    const totalLines = state.p1Lines + state.p2Lines;
+    if (totalLines > prevLinesRef.current) {
+      try { navigator.vibrate(60); } catch (_) {}
+    }
+    prevLinesRef.current = totalLines;
+
+    if (state.boundary !== prevBoundaryRef.current) {
+      try { navigator.vibrate(100); } catch (_) {}
+    }
+    prevBoundaryRef.current = state.boundary;
+
+    if (state.phase === "over" && prevPhaseRef.current !== "over") {
+      try { navigator.vibrate(200); } catch (_) {}
+    }
+    prevPhaseRef.current = state.phase;
+  });
+
+  const { board, p1, p2, p1Next, p1NextNext, p1Lines, p2Lines, phase, boundary, winner, paused, summary, lastGain, playerSide } = state;
+
+  // Side selector: tapping a start-screen button transitions phase
+  // "start" to "playing" and stores which side the user picked.
+  // Currently both buttons start the game with the player controlling
+  // P1 (the only side wired to gestures/keys today); playerSide is
+  // remembered so future logic can swap which side AI controls.
+  const selectSide = (side) => (e) => {
+    if (e && e.stopPropagation) e.stopPropagation();
+    setState(s => ({...s, phase: "playing", playerSide: side}));
+  };
+
+  // Start screen render -- short-circuits the rest of the layout.
+  if (phase === "start") {
+    return (
+      <div style={{
+        width: FRAME_W, height: GAME_2P_H,
+        background: "#0a0a0a",
+        position: "relative",
+        overflow: "hidden",
+        fontFamily: "'Inter', sans-serif",
+        userSelect: "none",
+        WebkitUserSelect: "none",
+        color: "#fff",
+      }}>
+        {/* Grid background reused from the main game so the start screen
+            shares the same texture; uses the same translucent grid lines. */}
+        <div style={{
+          position: "absolute", inset: 0,
+          backgroundImage:
+            `linear-gradient(${GRID_LINE_COLOR} 1px, transparent 1px), ` +
+            `linear-gradient(90deg, ${GRID_LINE_COLOR} 1px, transparent 1px)`,
+          backgroundSize: "20px 20px, 20px 20px",
+          backgroundPosition: "0 0, 1px 0",
+          pointerEvents: "none",
+        }} />
+
+        {/* Centered text stack */}
+        <div style={{
+          position: "absolute", inset: 0,
+          display: "flex", flexDirection: "column",
+          alignItems: "center", justifyContent: "center",
+          gap: 48,
+          paddingTop: "env(safe-area-inset-top)",
+          paddingBottom: "max(20px, env(safe-area-inset-bottom))",
+        }}>
+          <div style={{
+            fontFamily: "monospace",
+            fontSize: 28, fontWeight: 700,
+            letterSpacing: 10,
+            color: "#fff",
+          }}>D R I F T</div>
+
+          <div style={{
+            fontFamily: "monospace",
+            fontSize: 11, fontWeight: 600,
+            letterSpacing: 4,
+            color: "rgba(255,255,255,0.5)",
+            textTransform: "uppercase",
+          }}>Select your side</div>
+
+          <div style={{display: "flex", flexDirection: "column", gap: 16, alignItems: "stretch", width: 280}}>
+            <div
+              onPointerDown={selectSide(1)}
+              onTouchStart={(e) => e.stopPropagation()}
+              style={{
+                fontFamily: "monospace",
+                fontSize: 12, fontWeight: 600,
+                letterSpacing: 3,
+                color: "rgba(255,255,255,0.85)",
+                border: "1px solid rgba(255,255,255,0.3)",
+                padding: "16px 20px",
+                textAlign: "center",
+                cursor: "pointer",
+                userSelect: "none",
+              }}
+            >[ P 1 &nbsp; - &nbsp; F L O A T S &nbsp; U P ]</div>
+
+            <div
+              onPointerDown={selectSide(2)}
+              onTouchStart={(e) => e.stopPropagation()}
+              style={{
+                fontFamily: "monospace",
+                fontSize: 12, fontWeight: 600,
+                letterSpacing: 3,
+                color: "rgba(255,255,255,0.85)",
+                border: "1px solid rgba(255,255,255,0.3)",
+                padding: "16px 20px",
+                textAlign: "center",
+                cursor: "pointer",
+                userSelect: "none",
+              }}
+            >[ P 2 &nbsp; - &nbsp; F A L L S &nbsp; D O W N ]</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const grid = board.map(row => row.map(v => CELL_TO_COLOR_2P[v]));
   // Active pieces -- BOTH players -- render at the same translucent color
