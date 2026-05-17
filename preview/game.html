@@ -86,14 +86,16 @@ const ICON_INFO_Y      = 32;
 const ICON_GEAR_X      = 349;
 const ICON_GEAR_Y      = 80;
 const PAUSE_X          = 353;   // first bar left edge
-// Right column is justify-between flex (icons top, pause middle, NEXT
-// bottom) inside a 32px-padded 880px frame, so the gap between each pair
-// of items is (880 - 64 - 72 - 16 - 84) / 2 = 322. Pause origin lands
-// at y = 32 + 72 + 322 = 426; NEXT origin at y = 32 + 72 + 322 + 16 + 322 = 764.
-const PAUSE_Y          = 426;
 const PAUSE_BAR_W      = 4;
 const PAUSE_BAR_H      = 16;
 const PAUSE_BAR_GAP    = 8;     // gap between the two bars
+// Pause icon vertical center is locked to the STARTING boundary line
+// (the dashed line drawn at y = PLAY_Y + BDY_2P * CELL = 440 on a fresh
+// game). The boundary may shift during play; the pause icon stays
+// anchored to its starting reference so it always reads as the
+// horizontal midpoint of the playing field. With PAUSE_BAR_H = 16 the
+// top edge sits at 440 - 8 = 432.
+const PAUSE_Y          = (PLAY_Y + BDY_2P * CELL) - PAUSE_BAR_H / 2;   // = 432
 const NEXT_X           = 331;
 const NEXT_Y           = 764;
 const NEXT_W           = 60;

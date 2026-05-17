@@ -5,7 +5,7 @@
   Whichever machine (MacFQ or Gandalf) adds a component, updates a file,
   or makes a structural change: update this file before ending the session.
   Both machines depend on this as the single source of truth.
-  Last updated: 2026-05-16 - MacFQ (game.html v17 iOS Safari gradient + NEXT bottom safe-area: radial gradient stops boosted from rgba(17,18,19,0.5) -> rgba(36,38,44,0.55) to compensate for iOS Safari rendering Figma source values near-black on real devices; Gradient Stripe alpha reduced 0.3 -> 0.18 so the play zone has more depth/texture on iPhone instead of being crushed black; NEXT block `top` now uses calc(NEXT_Y - max(20px, env(safe-area-inset-bottom))) so on iPhone 15 Pro etc the NEXT strip is shifted UP clear of the home indicator (env ~34px), with a 20px floor for desktop. Mechanic untouched; index.html untouched. Mobile rendering verification required on iOS Simulator.)
+  Last updated: 2026-05-16 - MacFQ (game.html v18 pause centered on boundary: PAUSE_Y is now derived as (PLAY_Y + BDY_2P * CELL) - PAUSE_BAR_H/2 = 432 instead of the hardcoded 426, so the 16px-tall pause icon's vertical center sits exactly on the STARTING boundary dashed line at y=440. Previously off by 6px upward because PAUSE_Y was computed from the Figma justify-between flex math against a 874-tall frame, not centered on the boundary. Mechanic untouched; index.html untouched.)
 -->
 
 ## Required reading before building
