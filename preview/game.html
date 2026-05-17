@@ -815,28 +815,20 @@ function TetrisGame2P() {
       WebkitUserSelect: "none",
     }}>
 
-      {/* Two radial gradient layers from Figma (124:1448 + 124:1450).
-          Figma centers are rgba(17,18,19) on a near-black frame; layered
-          over #0a0a0a that produces only a few levels of contrast. To
-          make the dual-vignette actually read on screen (the design
-          intent) the center stop is boosted to rgba(45, 48, 56) at
-          alpha 0.7 and falls to transparent at the gradient radius. */}
-      <div style={{
-        position: "absolute", inset: 0,
-        background:
-          "radial-gradient(circle 663px at 201px 211px, rgba(45, 48, 56, 0.7), transparent 100%), " +
-          "radial-gradient(circle 496px at 201px 440px, rgba(45, 48, 56, 0.7), transparent 100%)",
-        pointerEvents: "none",
-      }} />
+      {/* Background-layer stack (Figma 145-3068, exact match, BOTTOM->TOP):
+            (1) 20x20 grid lines    -- 145:3069 + 145:3091
+            (2) Radial gradient 1   -- 145:3138, circle r=663 at (201,211),
+                                        rgba(17,18,19,1)->0 at wrapper opacity 0.5
+            (3) Radial gradient 2   -- 145:3139, circle r=496 at (201,437)
+            (4) Gradient Stripe     -- 145:3141, solid black 322x874 at (0,0)
+                                        at opacity 0.3 -- darkens the play zone
+          Each layer is its own div, ordered in DOM so later siblings stack
+          on top -- matching the Figma layer order exactly. */}
 
-      {/* 20x20 grid lines across the entire 402x880 frame. backgroundPosition
-          is chosen so the lines sit EXACTLY on the play-area cell boundaries:
-            vertical:   x = 1, 21, 41, 61, 81, ..., 261, 281, 301, 321
-                         (PLAY_X=61 + 20c lands on every vertical line)
-            horizontal: y = 0, 20, 40, ..., 880
-                         (PLAY_Y=0 + 20r lands on every horizontal line)
-          With this alignment piece cells (which sit inside their 20x20 slot
-          with a 2px inset) never overlap a grid line. */}
+      {/* (1) 20x20 grid lines across the entire 402x880 frame.
+          backgroundPosition: vertical lines at x=1,21,41,...,261,...,321
+          (PLAY_X=61 + 20c lands on every vertical line); horizontal lines
+          at y=0,20,40,...,880 (PLAY_Y=0 + 20r lands on every line). */}
       <div style={{
         position: "absolute", inset: 0,
         backgroundImage:
@@ -844,6 +836,28 @@ function TetrisGame2P() {
           `linear-gradient(90deg, ${GRID_LINE_COLOR} 1px, transparent 1px)`,
         backgroundSize: "20px 20px, 20px 20px",
         backgroundPosition: "0 0, 1px 0",
+        pointerEvents: "none",
+      }} />
+
+      {/* (2) + (3) Two radial gradient layers, Figma exact values:
+          rgba(17,18,19,1)->0 with wrapper opacity 0.5 = effective center
+          alpha 0.5. Centers (201,211) and (201,437). Radii are
+          r=10 * matrix scale = 663 and 496 respectively. */}
+      <div style={{
+        position: "absolute", inset: 0,
+        background:
+          "radial-gradient(circle 663px at 201px 211px, rgba(17,18,19,0.5), rgba(17,18,19,0)), " +
+          "radial-gradient(circle 496px at 201px 437px, rgba(17,18,19,0.5), rgba(17,18,19,0))",
+        pointerEvents: "none",
+      }} />
+
+      {/* (4) Gradient Stripe (Figma 145:3141): solid black at opacity 0.3
+          over a 322x874 region at (0,0). Darkens the LEFT 322px (play-area
+          zone) while leaving the right ~80px sidebar relatively brighter. */}
+      <div style={{
+        position: "absolute",
+        left: 0, top: 0, width: 322, height: GAME_2P_H,
+        background: "rgba(0, 0, 0, 0.3)",
         pointerEvents: "none",
       }} />
 

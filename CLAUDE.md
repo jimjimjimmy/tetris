@@ -5,7 +5,7 @@
   Whichever machine (MacFQ or Gandalf) adds a component, updates a file,
   or makes a structural change: update this file before ending the session.
   Both machines depend on this as the single source of truth.
-  Last updated: 2026-05-16 - MacFQ (game.html v15 safe-area top inset + NEXT queue audit: Info and Gear icon top values now use calc(32px + env(safe-area-inset-top)) and calc(80px + env()) so the chrome sits below the iOS status bar (notch / dynamic island) while the grid background and gradients continue to extend behind it; viewport-fit=cover already in place. NEXT queue (p1 / p1Next / p1NextNext) audited via in-game spawn log: 9 consecutive spawns all show new active = prev BOTTOM and new BOTTOM = prev TOP exactly. No skips, no double-advance. Earlier polling-probe "skip" was 50ms-setInterval undersampling during tab throttling. No mechanic changes; index.html untouched)
+  Last updated: 2026-05-16 - MacFQ (game.html v16 Figma 145-3068 background exact match: gradient colors corrected from rgba(45,48,56,0.7) -> rgba(17,18,19,0.5) (matches Figma rgba(17,18,19,1) center at wrapper opacity 0.5); gradient 2 center y 440 -> 437; ADDED missing Gradient Stripe (Figma 145:3141): 322x880 solid rgba(0,0,0,0.3) overlay covering the LEFT zone (play area) -- this is what darkens the play area vs the sidebar in Figma; reordered background layers to grid -> gradients -> stripe per Figma layer stack. No mechanic changes; index.html untouched)
 -->
 
 ## Required reading before building
