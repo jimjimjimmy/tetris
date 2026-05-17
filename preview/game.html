@@ -978,10 +978,15 @@ function TetrisGame2P() {
         />
       </div>
 
-      {/* Info icon -- white SVG at opacity 0.3 (Figma 124:2276) */}
+      {/* Info icon -- white SVG at opacity 0.3 (Figma 124:2276). The
+          `top` adds env(safe-area-inset-top) so the icon is pushed BELOW
+          the iOS status bar (notch / dynamic island) while the grid and
+          gradients underneath still extend behind the status bar. On
+          devices without an inset (desktop, Android, mobile Safari with
+          URL bar) env() resolves to 0 and the icon sits at its base 32. */}
       <div style={{
         position: "absolute",
-        left: ICON_INFO_X, top: ICON_INFO_Y,
+        left: ICON_INFO_X, top: `calc(${ICON_INFO_Y}px + env(safe-area-inset-top))`,
         width: ICON_SIZE, height: ICON_SIZE,
         color: "#fff", opacity: CHROME_OPACITY,
       }}>
@@ -991,7 +996,7 @@ function TetrisGame2P() {
       {/* Gear icon -- white SVG at opacity 0.3 (Figma 124:2233) */}
       <div style={{
         position: "absolute",
-        left: ICON_GEAR_X, top: ICON_GEAR_Y,
+        left: ICON_GEAR_X, top: `calc(${ICON_GEAR_Y}px + env(safe-area-inset-top))`,
         width: ICON_SIZE, height: ICON_SIZE,
         color: "#fff", opacity: CHROME_OPACITY,
       }}>
