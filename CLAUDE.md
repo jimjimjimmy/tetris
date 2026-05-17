@@ -5,7 +5,7 @@
   Whichever machine (MacFQ or Gandalf) adds a component, updates a file,
   or makes a structural change: update this file before ending the session.
   Both machines depend on this as the single source of truth.
-  Last updated: 2026-05-16 - MacFQ (game.html v22 touch handler re-attaches after start screen: bug was that the touch useEffect ran once at mount when playRef.current was null (start screen rendered, no play area) so it short-circuited without attaching listeners, and never re-ran because [applyP1, applyP2] never changed. Mobile users picking either side got no touch input. Fix: dep array is now [applyP1, applyP2, state.phase] so the effect re-runs on every phase transition (start -> playing, playing -> over) and attaches listeners to the freshly-rendered playRef. Keyboard handler was unaffected (binds to window, not playRef). No mechanic changes; index.html untouched.)
+  Last updated: 2026-05-16 - MacFQ (game.html v23 P2 NEXT queue + side-aware NEXT display: P2 now has its own 2-deep NEXT queue (p2Next + p2NextNext, mirror of P1's). The P2 spawn block shifts the queue (p2Next <- p2NextNext, p2NextNext <- randPiece()), matching P1's behavior. The NEXT block in the sidebar reads from whichever side the human is playing: playerSide===2 shows p2Next/p2NextNext, otherwise p1Next/p1NextNext (default). Each side's queue is independent, so the AI's queue doesn't interfere with the human's NEXT preview. No game-mechanic rule changes; index.html untouched.)
 -->
 
 ## Required reading before building

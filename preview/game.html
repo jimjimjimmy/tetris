@@ -279,7 +279,11 @@ function makeInitState2P() {
     p1Next:     randPiece(),
     p1NextNext: randPiece(),
     p2:       { type: p2Type, rot: 0, x: 3, y: 0 },
-    p2Next:   randPiece(),
+    // Two-deep NEXT queue for P2, mirror of P1's queue. p2Next is the
+    // next-to-spawn piece (BOTTOM slot when player picked P2); p2NextNext
+    // is the piece after that (TOP slot).
+    p2Next:     randPiece(),
+    p2NextNext: randPiece(),
     p1Lines:  0,
     p2Lines:  0,
     boundary:    BDY_2P,
@@ -434,7 +438,7 @@ function TetrisGame2P() {
       setState(s => {
         if (s.phase !== "playing") return s;
         if (s.paused || s.summary) return s;
-        let { board, aiTick, p1, p1Next, p1NextNext, p2, p2Next, p1Lines, p2Lines, boundary, p1ShiftAcc, p2ShiftAcc } = s;
+        let { board, aiTick, p1, p1Next, p1NextNext, p2, p2Next, p2NextNext, p1Lines, p2Lines, boundary, p1ShiftAcc, p2ShiftAcc } = s;
         let n1 = 0, n2 = 0;
 
         aiTick += 1;
@@ -582,7 +586,7 @@ function TetrisGame2P() {
           p1Next     = p1NextNext;
           p1NextNext = randPiece();
           if (!isValid2P(getCells(p1.type, p1.rot, p1.x, p1.y), board, boundary, 1)) {
-            return { ...s, board, p1, p1Next, p1NextNext, p2, p2Next, phase: "over", winner: 2 };
+            return { ...s, board, p1, p1Next, p1NextNext, p2, p2Next, p2NextNext, phase: "over", winner: 2 };
           }
         }
 
@@ -594,9 +598,12 @@ function TetrisGame2P() {
           const [b2, c2] = clearP2_2P(board, boundary);
           n2 = c2; board = b2;
           p2 = { type: p2Next, rot: 0, x: 3, y: 0 };
-          p2Next = randPiece();
+          // Shift the 2-deep P2 NEXT queue: p2NextNext becomes the new
+          // next-to-spawn, and a fresh random piece enters the queue.
+          p2Next     = p2NextNext;
+          p2NextNext = randPiece();
           if (!isValid2P(getCells(p2.type, p2.rot, p2.x, p2.y), board, boundary, 2)) {
-            return { ...s, board, p1, p1Next, p1NextNext, p2, p2Next, phase: "over", winner: 1 };
+            return { ...s, board, p1, p1Next, p1NextNext, p2, p2Next, p2NextNext, phase: "over", winner: 1 };
           }
         }
 
@@ -644,7 +651,7 @@ function TetrisGame2P() {
 
         return {
           ...s,
-          board, aiTick, p1, p1Next, p1NextNext, p2, p2Next, phase,
+          board, aiTick, p1, p1Next, p1NextNext, p2, p2Next, p2NextNext, phase,
           p1Lines: p1Lines + n1, p2Lines: p2Lines + n2,
           boundary: newBdy, p1ShiftAcc, p2ShiftAcc, winner, lastGain,
         };
@@ -896,7 +903,13 @@ function TetrisGame2P() {
     prevPhaseRef.current = state.phase;
   });
 
-  const { board, p1, p2, p1Next, p1NextNext, p1Lines, p2Lines, phase, boundary, winner, paused, summary, lastGain, playerSide } = state;
+  const { board, p1, p2, p1Next, p1NextNext, p2Next, p2NextNext, p1Lines, p2Lines, phase, boundary, winner, paused, summary, lastGain, playerSide } = state;
+
+  // NEXT queue routing: show whichever side the human is playing. P2's
+  // queue while the user is P1, or P1's queue if anyone is observing
+  // the start-screen flicker before a side is picked (defaults to P1).
+  const nextBottom = playerSide === 2 ? p2Next     : p1Next;
+  const nextTop    = playerSide === 2 ? p2NextNext : p1NextNext;
 
   // Side selector: tapping a start-screen button transitions phase
   // "start" to "playing" and stores which side the user picked.
@@ -1347,7 +1360,7 @@ function TetrisGame2P() {
           width: 30, height: 20,
           opacity: 0.5,
         }}>
-          <CompactNext type={p1NextNext} />
+          <CompactNext type={nextTop} />
         </div>
         {/* BOTTOM slot -- next piece to spawn */}
         <div style={{
@@ -1357,7 +1370,7 @@ function TetrisGame2P() {
           width: 30, height: 20,
           opacity: 0.2,
         }}>
-          <CompactNext type={p1Next} />
+          <CompactNext type={nextBottom} />
         </div>
       </div>
 
