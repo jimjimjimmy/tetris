@@ -2,30 +2,18 @@
 
 ---
 
-## Territorial Decay (implemented, TetrisGame2P)
+## Territorial Decay (confirmed mechanic)
 
 Each row cleared is worth slightly less territory over time. Prevents death spirals
 and keeps matches at a comfortable pace without favoring either player.
 
-**Final tuned values (in `preview/index.html` constants block):**
-- `DECAY_RATE = 0.05`
-- `MIN_SHIFT  = 0.25`
+Decay curve should feel gentle - exact values TBD during playtesting.
+General shape: starts at full value (1 row per clear), gradually tapers toward
+a floor (maybe 0.25 or 0.5 per clear). Never reaches zero - clears always
+matter, just less dramatically over time.
 
-**Curve:** `shift = max(MIN_SHIFT, 1 / (1 + DECAY_RATE * priorClears))`
-- Clear  0 -> 1.000 row
-- Clear  5 -> 0.800
-- Clear 10 -> 0.667
-- Clear 20 -> 0.500
-- Clear 40 -> 0.333
-- Clear ~60 -> hits MIN_SHIFT floor (0.250)
-
-**Accumulator model:** each player has a fractional `pXShiftAcc` that
-collects sub-row contributions. Each tick, the integer part drains into the
-boundary; the fractional remainder carries forward. P1 push UP, P2 push DOWN.
-
-**Verified (TEST_SPEED=true, 60s run):** Match length grew from 24.6s (pre-decay)
-to 35s. Final tally P2=15 clears / P1=2 (vs P2=10 / P1=0 before). Early clears
-moved ~1 row each, late clears took ~2 clears per row. No death spiral.
+Implementation note: track total clears per player, apply decay curve to
+territory shift amount per clear.
 
 ---
 
@@ -43,12 +31,54 @@ moved ~1 row each, late clears took ~2 clears per row. No death spiral.
 
 ---
 
+## Game Design Philosophy - Transparency
+
+Every outcome is traceable to a fixed rule. No hidden modifiers, no secret
+difficulty scaling, no RNG that feels rigged. If you lose, you can point to
+exactly why. Rules are public and verifiable.
+
+Levels introduce new dimensions of fixed rules - not hidden advantages.
+Each level adds one new rule. Players learn the system incrementally.
+
+"Fair by design" - a real differentiator in a world of manipulative game mechanics.
+
+---
+
+## Real-World Conditions (BIG IDEA)
+
+Use real-world environmental data as the source of "unpredictable" conditions.
+Transparent but genuinely surprising - the rule is fixed, the outcome varies
+because the real world varies. Players can verify the conditions against their
+weather app. Personal and location-specific.
+
+**Wind speed** -> lateral drift strength on pieces
+**Wind direction** -> which way pieces drift left or right
+**Temperature** -> piece fall/float speed (hot air rises faster, cold air is denser)
+**Humidity** -> lock delay (sticky air, pieces settle slower)
+**Time of day** -> subtle boundary starting position variation
+**Moon phase** -> decay curve variation (full moon = stronger buoyancy,
+  new moon = heavier pieces). Poetic, verifiable, completely out of player control.
+
+**Multiplayer question to resolve:** when two players are in different locations,
+whose weather conditions apply? Options:
+- Server location (neutral)
+- Average of both players' conditions
+- Each player experiences their own conditions (asymmetric - interesting)
+- Random coin flip between the two players' locations
+
+**Implementation note:** use a weather API at game start to fetch local conditions.
+Cache for the duration of the match so conditions don't change mid-game.
+Show the conditions to both players before the match starts - full transparency.
+
+---
+
 ## Wind (confirmed future mechanic)
 
-Horizontal drift applied to pieces as they rise/fall. Direction changes
-periodically. Adds chaos and strategy.
+Horizontal drift applied to pieces as they rise/fall. Direction and strength
+sourced from real-world wind data (see Real-World Conditions above).
 
-Wind indicator UI showing direction and strength.
+Wind indicator UI showing direction and strength - players can see exactly
+what they are dealing with before and during the match.
 Planned for after core 2-player mechanic is solid.
 
 ---
@@ -77,6 +107,44 @@ Difficulty selection screen needed before v2.
 - Random matchmaking (anonymous or named)
 - Friend match via room code
 - Computer fills empty slot instantly if no human opponent found
+
+---
+
+## Planetary Environments (BIG IDEA)
+
+Each planet/environment sets the physics rules for the match. Completely
+transparent - "you are on Jupiter, here are Jupiter's rules." No mystery,
+no hidden modifiers. Just science.
+
+Players select or are assigned an environment. Rules are displayed before
+the match starts so both players know exactly what they are dealing with.
+
+**Earth** - standard conditions, balanced starting point. Default environment.
+**Moon** - low gravity, pieces float very slowly, long hang time
+**Mars** - thin atmosphere, low gravity, pieces feel light and drift easily
+**Pluto** - minimal gravity, fierce cold wind, pieces float unpredictably
+**Jupiter** - crushing gravity, pieces fall/rise fast, strong atmospheric turbulence
+**Venus** - extreme pressure, pieces lock faster, thick atmosphere slows drift
+**Saturn** - ring interference, wind shifts direction frequently
+**The Sun** - intense everything, maximum speed, maximum chaos. Hardest mode.
+**Deep Space** - zero gravity, no wind, pure puzzle. Slowest, most strategic.
+
+**Physics parameters per environment:**
+- Gravity strength -> piece fall/float speed
+- Atmospheric density -> drift resistance and wind effect
+- Wind speed -> lateral drift strength
+- Temperature -> lock delay
+- Pressure -> territorial decay rate
+
+**Connection to real-world data:**
+Your actual GPS location could map to a planetary zone, or players
+choose their environment at the start screen. Could also unlock
+environments as you progress.
+
+**Narrative tie-in:**
+Connects to the solar system defense concept - you are literally
+fighting on different battlegrounds across the solar system.
+Each environment is a different front in the war.
 
 ---
 
