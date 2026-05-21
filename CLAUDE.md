@@ -5,7 +5,7 @@
   Whichever machine (MacFQ or Gandalf) adds a component, updates a file,
   or makes a structural change: update this file before ending the session.
   Both machines depend on this as the single source of truth.
-  Last updated: 2026-05-21 - MacFQ (game.html v26: column lane indicators dashed 2/2 via repeating-linear-gradient, span from boundary to territory floor; AI_LEVEL_DEFAULT=3 + AI_LEVEL_CONFIG 1-5; level selector on start screen. APP_COMMIT bumped to d525053.)
+  Last updated: 2026-05-21 - Gandalf (game.html: ghost opacity 0.075, lane guide opacity 0.10 (rgba for background-agnostic theming); P2_LOCKED_COLOR #4a4a4a fully opaque; human player always gets bright locked color regardless of P1/P2 side; APP_BUILD_DATE + relTime() helper for version stamp with s/m/h/d precision; stamp font 12, flex layout. APP_COMMIT ba417d1.)
 -->
 
 ## Required reading before building
@@ -302,7 +302,9 @@ function useReveal(duration) {
   - Verified decay at TEST_SPEED=true (60s): early P2 clears each pushed ~1 row, later clears took ~2 P2 clears per row of shift. Game ended at 35s with P2=15 clears, P1=2 (vs 24.6s / P2=10 / P1=0 pre-decay) -- 42% longer match, no death spiral, P1 had time to score. "P2 WINS" overlay triggered correctly. Zero console errors.
   - Verified P1/P2 symmetry at TEST_SPEED=true across 4 games: P1=51 total clears, P2=49 total clears (ratio 1.04:1, was 2.86:1 pre-fix). Winner distribution: 3 P1 wins, 1 P2 win. Boundary stayed near midline in early-game, drift driven by piece RNG rather than systemic asymmetry. Zero console errors.
   - Triple-validation completed: Round 1 (code audit) showed every P1 line of code has a mirrored P2 line on adjacent lines with same args. Round 2 (runtime probe at 110ms cadence) confirmed mean tick interval = 110.0ms (TICK_MS), P1 piece moved -1 row per tick (17->10), P2 piece moved +1 row per tick (2->9), both locking same tick; bdyEvents=[] during 6s window with no row clears (boundary only ever updates when n1>0 or n2>0). Round 3 (six screenshots at 10s intervals over 60s, with auto-rematch on game-over) showed every frame has cells in correct territories, boundary visible at midline, stacks growing comparably on each side. No jumps, no random resets.
-  - P2 color #4a4a4a (dark gray). P1 color #B1B2B3 (light gray).
+  - P1_LOCKED_COLOR "#b1b2b3" (bright). P2_LOCKED_COLOR "#4a4a4a" (dark, fully opaque). Human player always renders as bright regardless of side chosen; AI always renders dark. cellColor map computed at render from playerSide state.
+  - GHOST_COLOR "rgba(177,178,179,0.075)". LANE_COLOR "rgba(255,255,255,0.10)". Both rgba for background-agnostic theming.
+  - APP_BUILD_DATE constant (ISO datetime string). relTime() helper renders as "Xs ago / Xm ago / Xh ago / Xd ago / Mon D / Mon D, YYYY". Version stamp: font 12, flex space-between, build date on right.
   - CompactNext: 7px cells, no label, both 37px NEXT strips.
   - Debug key "0" resets.
   - TEST_SPEED: same global flag. ALWAYS false before push.
