@@ -5,7 +5,7 @@
   Whichever machine (MacFQ or Gandalf) adds a component, updates a file,
   or makes a structural change: update this file before ending the session.
   Both machines depend on this as the single source of truth.
-  Last updated: 2026-05-21 - MacFQ (game.html v26 build stamp: APP_VERSION = "v0.1" + APP_COMMIT = "daeeefc" constants at top. Bottom-center version stamp rendered ONLY on the start screen (phase==="start"), reads "v0.1 • daeeefc" in monospace 10px / 2px letter-spacing / rgba(255,255,255,0.35). Anchored at bottom: max(20px, env(safe-area-inset-bottom)) so it sits above the iOS home indicator. No build step in this project so the commit hash is hardcoded into the constant; bump it manually just before each commit. APP_VERSION bumps manually at milestones. No mechanic changes; index.html untouched.)
+  Last updated: 2026-05-21 - MacFQ (game.html v26: GHOST_COLOR alpha reduced 0.2 -> 0.15 so ghost reads as a faint hint, not a placed piece. APP_COMMIT bumped to 6857dbe.)
 -->
 
 ## Required reading before building
