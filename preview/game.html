@@ -67,7 +67,7 @@ const AI_LEVEL_CONFIG  = {
 // THIS file state (one behind HEAD after the commit lands); update it
 // just before each commit.
 const APP_VERSION   = "v0.1";
-const APP_COMMIT    = "1e56519";
+const APP_COMMIT    = "d525053";
 
 const TICK_MS       = TEST_SPEED ? 110 : 550;
 
@@ -1117,14 +1117,13 @@ function TetrisGame2P() {
           grid[r][c] = GHOST_COLOR;
         }
       });
-      const pCells = getCells(piece.type, piece.rot, piece.x, piece.y);
-      const lMinC  = Math.min(...pCells.map(([c]) => c));
-      const lMaxC  = Math.max(...pCells.map(([c]) => c));
-      const maxDr  = pieceMaxDr(piece.type, piece.rot);
-      const topRow = playerSide === 1 ? gy : piece.y;
-      const botRow = (playerSide === 1 ? piece.y : gy) + maxDr + 1;
-      laneData = { minC: lMinC, maxC: lMaxC, topPx: topRow * CELL, hPx: (botRow - topRow) * CELL };
     }
+    const pCells = getCells(piece.type, piece.rot, piece.x, piece.y);
+    const lMinC  = Math.min(...pCells.map(([c]) => c));
+    const lMaxC  = Math.max(...pCells.map(([c]) => c));
+    const topRow = playerSide === 1 ? boundary : 0;
+    const botRow = playerSide === 1 ? ROWS_2P : boundary;
+    laneData = { minC: lMinC, maxC: lMaxC, topPx: topRow * CELL, hPx: (botRow - topRow) * CELL };
   }
 
   // Active pieces -- BOTH players -- render at the same translucent color
@@ -1387,13 +1386,15 @@ function TetrisGame2P() {
             position: "absolute",
             left: PLAY_X + laneData.minC * CELL, top: laneData.topPx,
             width: 1, height: laneData.hPx,
-            background: LANE_COLOR, pointerEvents: "none",
+            backgroundImage: `repeating-linear-gradient(to bottom, ${LANE_COLOR} 0px, ${LANE_COLOR} 2px, transparent 2px, transparent 4px)`,
+            pointerEvents: "none",
           }} />
           <div style={{
             position: "absolute",
             left: PLAY_X + (laneData.maxC + 1) * CELL, top: laneData.topPx,
             width: 1, height: laneData.hPx,
-            background: LANE_COLOR, pointerEvents: "none",
+            backgroundImage: `repeating-linear-gradient(to bottom, ${LANE_COLOR} 0px, ${LANE_COLOR} 2px, transparent 2px, transparent 4px)`,
+            pointerEvents: "none",
           }} />
         </React.Fragment>
       )}

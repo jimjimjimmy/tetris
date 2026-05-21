@@ -5,7 +5,7 @@
   Whichever machine (MacFQ or Gandalf) adds a component, updates a file,
   or makes a structural change: update this file before ending the session.
   Both machines depend on this as the single source of truth.
-  Last updated: 2026-05-21 - MacFQ (game.html v26: column lane indicators (LANE_COLOR, 2x grid opacity, brackets piece column footprint from ghost to active piece, human only); AI_DIFFICULTY/AI_PERIOD replaced by AI_LEVEL_DEFAULT=3 + AI_LEVEL_CONFIG 1-5 table (randomRatio, aiPeriod, holePenalty, bumpPenalty); level tap selector on start screen (1-5, default 3); both REMATCH buttons preserve aiLevel across reset. APP_COMMIT bumped to 1e56519.)
+  Last updated: 2026-05-21 - MacFQ (game.html v26: column lane indicators dashed 2/2 via repeating-linear-gradient, span from boundary to territory floor; AI_LEVEL_DEFAULT=3 + AI_LEVEL_CONFIG 1-5; level selector on start screen. APP_COMMIT bumped to d525053.)
 -->
 
 ## Required reading before building
