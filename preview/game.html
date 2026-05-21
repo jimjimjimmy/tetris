@@ -195,6 +195,7 @@ const CELL_P2    = 2;
 const P1_LOCKED_COLOR = "#b1b2b3";                       // = PIECE_COLOR full
 const P2_LOCKED_COLOR = "rgba(177, 178, 179, 0.2)";       // dark stack
 const ACTIVE_COLOR    = "rgba(177, 178, 179, 0.5)";       // active piece
+const GHOST_COLOR     = "rgba(177, 178, 179, 0.2)";       // landing-position preview (human only)
 const CELL_TO_COLOR_2P = {
   [CELL_EMPTY]: null,
   [CELL_P1]:    P1_LOCKED_COLOR,
@@ -775,7 +776,7 @@ function TetrisGame2P() {
     // live -- no waiting on touchend. Tap rotates on release if the finger
     // never moved much. Swipe-up (buoyancy boost) hard-drops on release.
     // Down-swipes do NOTHING -- P1 cannot move backward against its float.
-    const STEP_PX  = 10;   // 10px = swipe threshold; piece moves 1 cell per 10px drag
+    const STEP_PX  = 30;   // ratchet step: each 30px of horizontal drag advances one cell. After each fire the cumulative threshold advances so a continuous drag steps discretely, not slides.
     const TAP_PX   = 10;   // movement under this counts as a tap
     let startX = 0, startY = 0;
     let lastDx = 0;
@@ -1009,6 +1010,29 @@ function TetrisGame2P() {
   }
 
   const grid = board.map(row => row.map(v => CELL_TO_COLOR_2P[v]));
+
+  // Ghost piece: a faint preview of where the HUMAN player's active piece
+  // will land if dropped from its current position. Standard Tetris ghost
+  // behavior. Only shown for the human-controlled side; the AI's piece has
+  // no ghost. Painted BEFORE the active piece so the active piece visually
+  // overwrites any overlap (which only happens when the piece is already
+  // at its landing position, i.e. about to lock).
+  if (playerSide === 1 || playerSide === 2) {
+    const piece     = playerSide === 1 ? p1 : p2;
+    const ghostStep = playerSide === 1 ? -1 : +1;  // P1 floats UP, P2 falls DOWN
+    let gy = piece.y;
+    while (isValid2P(getCells(piece.type, piece.rot, piece.x, gy + ghostStep), board, boundary, playerSide)) {
+      gy += ghostStep;
+    }
+    if (gy !== piece.y) {
+      getCells(piece.type, piece.rot, piece.x, gy).forEach(([c, r]) => {
+        if (r >= 0 && r < ROWS_2P && c >= 0 && c < COLS && !grid[r][c]) {
+          grid[r][c] = GHOST_COLOR;
+        }
+      });
+    }
+  }
+
   // Active pieces -- BOTH players -- render at the same translucent color
   // (ACTIVE_COLOR = opacity 0.5). The Figma design uses a single base color
   // and only varies opacity to distinguish locked vs active and per-player.

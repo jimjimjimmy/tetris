@@ -5,7 +5,7 @@
   Whichever machine (MacFQ or Gandalf) adds a component, updates a file,
   or makes a structural change: update this file before ending the session.
   Both machines depend on this as the single source of truth.
-  Last updated: 2026-05-17 - MacFQ (game.html v24 P2 NEXT slot direction fix: TOP slot now shows next-to-spawn for P2 (p2Next), BOTTOM slot shows piece-after-next (p2NextNext). Previously both P1 and P2 used the same slot assignment (next-to-spawn at BOTTOM), which is correct for P1 whose territory is at the bottom, but inverted for P2 whose territory is at the top. Fix: swap nextTop/nextBottom assignment when playerSide===2 so the slot closest to P2's spawn side (TOP) shows the next piece. P1 display unchanged. Two-line fix in the render destructure. No mechanic changes; index.html untouched.)
+  Last updated: 2026-05-21 - MacFQ (game.html v25 discrete swipe + ghost piece: STEP_PX 10->30 so the touchmove ratchet steps the piece discretely (~one cell per 30px of drag) instead of feeling like continuous sliding. Added ghost piece overlay (Tetris standard): for the human player only, the active piece is projected straight up (P1) or down (P2) until collision; the landing cells are rendered at GHOST_COLOR rgba(177,178,179,0.2) before the active piece is painted. Ghost cells only fill empty grid positions; locked pieces are not overwritten. AI piece has no ghost. Verified live (P1: 4 ghost cells visible at boundary while active piece at bottom). No mechanic changes; index.html untouched.)
 -->
 
 ## Required reading before building
