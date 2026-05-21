@@ -54,6 +54,14 @@ const { useState, useEffect, useRef } = React;
 const TEST_SPEED    = false; // set true for 5x speed during development -- ALWAYS false before push
 const AI_DIFFICULTY = 'MEDIUM';
 
+// Build identity shown at the bottom of the start screen so any device
+// can confirm which version it is running. Bump APP_VERSION manually at
+// milestones. APP_COMMIT is the short hash of the commit that introduced
+// THIS file state (one behind HEAD after the commit lands); update it
+// just before each commit.
+const APP_VERSION   = "v0.1";
+const APP_COMMIT    = "daeeefc";
+
 const TICK_MS       = TEST_SPEED ? 110 : 550;
 const AI_PERIOD     = 1;
 
@@ -1004,6 +1012,23 @@ function TetrisGame2P() {
               }}
             >[ P2 &nbsp; ↓ ]</div>
           </div>
+        </div>
+
+        {/* Version stamp -- bottom-center of the start screen only.
+            Small, low-opacity, monospace; helps confirm at a glance which
+            build is running on any device. Hidden once phase != "start". */}
+        <div style={{
+          position: "absolute",
+          left: 0, right: 0,
+          bottom: `max(20px, env(safe-area-inset-bottom))`,
+          textAlign: "center",
+          fontFamily: "monospace",
+          fontSize: 10, fontWeight: 500,
+          letterSpacing: 2,
+          color: "rgba(255,255,255,0.35)",
+          pointerEvents: "none",
+        }}>
+          {APP_VERSION} &nbsp; • &nbsp; {APP_COMMIT}
         </div>
       </div>
     );
