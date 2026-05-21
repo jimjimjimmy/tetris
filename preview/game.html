@@ -67,8 +67,8 @@ const AI_LEVEL_CONFIG  = {
 // THIS file state (one behind HEAD after the commit lands); update it
 // just before each commit.
 const APP_VERSION    = "v0.1";
-const APP_COMMIT     = "887381d";
-const APP_BUILD_DATE = "2026-05-20";
+const APP_COMMIT     = "7d1cb23";
+const APP_BUILD_DATE = "2026-05-20T23:37:00";
 
 const TICK_MS       = TEST_SPEED ? 110 : 550;
 
@@ -446,12 +446,14 @@ function GearIcon({ size = ICON_SIZE }) {
 
 function relTime(dateStr) {
   const diff = Date.now() - new Date(dateStr).getTime();
+  const s = Math.floor(diff / 1000);
   const m = Math.floor(diff / 60000);
   const h = Math.floor(diff / 3600000);
   const d = Math.floor(diff / 86400000);
-  if (m < 60) return m + 'm ago';
-  if (h < 24) return h + 'h ago';
-  if (d < 7)  return d + 'd ago';
+  if (s < 60)  return s + 's ago';
+  if (m < 60)  return m + 'm ago';
+  if (h < 24)  return h + 'h ago';
+  if (d < 7)   return d + 'd ago';
   const dt = new Date(dateStr);
   const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][dt.getMonth()];
   const yr = dt.getFullYear() !== new Date().getFullYear() ? ', ' + dt.getFullYear() : '';
