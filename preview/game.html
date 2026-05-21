@@ -52,7 +52,14 @@ const { useState, useEffect, useRef } = React;
 // ============================================================
 
 const TEST_SPEED    = false; // set true for 5x speed during development -- ALWAYS false before push
-const AI_DIFFICULTY = 'MEDIUM';
+const AI_LEVEL_DEFAULT = 3;
+const AI_LEVEL_CONFIG  = {
+  1: { randomRatio: 0.8, aiPeriod: 3, holePenalty: 5,  bumpPenalty: 0.5 },
+  2: { randomRatio: 0.5, aiPeriod: 2, holePenalty: 15, bumpPenalty: 1   },
+  3: { randomRatio: 0.1, aiPeriod: 1, holePenalty: 30, bumpPenalty: 2   },
+  4: { randomRatio: 0.0, aiPeriod: 1, holePenalty: 40, bumpPenalty: 3   },
+  5: { randomRatio: 0.0, aiPeriod: 1, holePenalty: 60, bumpPenalty: 5   },
+};
 
 // Build identity shown at the bottom of the start screen so any device
 // can confirm which version it is running. Bump APP_VERSION manually at
@@ -60,10 +67,9 @@ const AI_DIFFICULTY = 'MEDIUM';
 // THIS file state (one behind HEAD after the commit lands); update it
 // just before each commit.
 const APP_VERSION   = "v0.1";
-const APP_COMMIT    = "6857dbe";
+const APP_COMMIT    = "1e56519";
 
 const TICK_MS       = TEST_SPEED ? 110 : 550;
-const AI_PERIOD     = 1;
 
 // Figma 124-1377 layout, adjusted so the FRAME height matches the play
 // area height exactly. No rows clipped at the frame edge -- every cell
@@ -204,6 +210,7 @@ const P1_LOCKED_COLOR = "#b1b2b3";                       // = PIECE_COLOR full
 const P2_LOCKED_COLOR = "rgba(177, 178, 179, 0.2)";       // dark stack
 const ACTIVE_COLOR    = "rgba(177, 178, 179, 0.5)";       // active piece
 const GHOST_COLOR     = "rgba(177, 178, 179, 0.15)";      // landing-position preview (human only)
+const LANE_COLOR      = "rgba(255,255,255,0.08)";         // column lane indicators (2x grid opacity)
 const CELL_TO_COLOR_2P = {
   [CELL_EMPTY]: null,
   [CELL_P1]:    P1_LOCKED_COLOR,
@@ -306,6 +313,7 @@ function makeInitState2P() {
     // screen. Stored for future use (when AI swaps to the other side).
     // 1 = user plays P1 (floats up). 2 = user plays P2 (falls down).
     playerSide:  null,
+    aiLevel:     AI_LEVEL_DEFAULT,
     paused:      false,           // game starts playing immediately
     demoLeft:    DEMO_DURATION_S,
     summary:     null,
@@ -448,6 +456,7 @@ function TetrisGame2P() {
         if (s.phase !== "playing") return s;
         if (s.paused || s.summary) return s;
         let { board, aiTick, p1, p1Next, p1NextNext, p2, p2Next, p2NextNext, p1Lines, p2Lines, boundary, p1ShiftAcc, p2ShiftAcc } = s;
+        const aiCfg = AI_LEVEL_CONFIG[s.aiLevel] || AI_LEVEL_CONFIG[3];
         let n1 = 0, n2 = 0;
 
         aiTick += 1;
@@ -455,7 +464,7 @@ function TetrisGame2P() {
         // P1 AI block: only active when the user picked P2 on the start
         // screen. When the user is P1, this block is skipped and P1 is
         // driven by applyP1 from touch + keyboard.
-        if (s.playerSide === 2 && aiTick % AI_PERIOD === 0) {
+        if (s.playerSide === 2 && aiTick % aiCfg.aiPeriod === 0) {
           const getLandingY1 = (type, rot, x) => {
             const startY = Math.max(0, boundary - 4);
             for (let y = startY; y < ROWS_2P; y++) {
@@ -489,7 +498,7 @@ function TetrisGame2P() {
                 else if (hasFillBelow) holes++;
               }
             }
-            score -= holes * 30;
+            score -= holes * aiCfg.holePenalty;
             const colH = Array(COLS).fill(0);
             for (let c = 0; c < COLS; c++) {
               for (let r = SCORE_MIN_1; r <= SCORE_MAX_1; r++) {
@@ -498,14 +507,25 @@ function TetrisGame2P() {
             }
             let bumpiness = 0;
             for (let c = 1; c < COLS; c++) bumpiness += Math.abs(colH[c] - colH[c - 1]);
-            score -= bumpiness * 2;
+            score -= bumpiness * aiCfg.bumpPenalty;
             return score;
           };
-          let best1 = -Infinity, bestRot1 = p1.rot, bestX1 = p1.x;
-          for (let rot = 0; rot < 4; rot++) {
-            for (let x = -1; x < COLS + 1; x++) {
-              const sc = scoreP1(p1.type, rot, x);
-              if (sc > best1) { best1 = sc; bestRot1 = rot; bestX1 = x; }
+          let bestRot1 = p1.rot, bestX1 = p1.x;
+          if (Math.random() < aiCfg.randomRatio) {
+            const opts = [];
+            for (let rot = 0; rot < 4; rot++) {
+              for (let x = 0; x < COLS; x++) {
+                if (isValid2P(getCells(p1.type, rot, x, p1.y), board, boundary, 1)) opts.push({rot, x});
+              }
+            }
+            if (opts.length) { const o = opts[Math.floor(Math.random() * opts.length)]; bestRot1 = o.rot; bestX1 = o.x; }
+          } else {
+            let best1 = -Infinity;
+            for (let rot = 0; rot < 4; rot++) {
+              for (let x = -1; x < COLS + 1; x++) {
+                const sc = scoreP1(p1.type, rot, x);
+                if (sc > best1) { best1 = sc; bestRot1 = rot; bestX1 = x; }
+              }
             }
           }
           if (p1.rot !== bestRot1) {
@@ -521,7 +541,7 @@ function TetrisGame2P() {
         // P2 AI block: only active when the user picked P1 on the start
         // screen. When the user is P2, this block is skipped and P2 is
         // driven by applyP2 from touch + keyboard.
-        if (s.playerSide === 1 && aiTick % AI_PERIOD === 0) {
+        if (s.playerSide === 1 && aiTick % aiCfg.aiPeriod === 0) {
           const getLandingY2 = (type, rot, x) => {
             for (let y = 0; y <= boundary + 4; y++) {
               if (!isValid2P(getCells(type, rot, x, y), board, boundary, 2)) continue;
@@ -553,7 +573,7 @@ function TetrisGame2P() {
                 else if (hasFillAbove) holes++;
               }
             }
-            score -= holes * 30;
+            score -= holes * aiCfg.holePenalty;
             const colH = Array(COLS).fill(0);
             for (let c = 0; c < COLS; c++) {
               for (let r = SCORE_MAX_2; r >= SCORE_MIN_2; r--) {
@@ -562,14 +582,25 @@ function TetrisGame2P() {
             }
             let bumpiness = 0;
             for (let c = 1; c < COLS; c++) bumpiness += Math.abs(colH[c] - colH[c - 1]);
-            score -= bumpiness * 2;
+            score -= bumpiness * aiCfg.bumpPenalty;
             return score;
           };
-          let best2 = -Infinity, bestRot2 = p2.rot, bestX2 = p2.x;
-          for (let rot = 0; rot < 4; rot++) {
-            for (let x = -1; x < COLS + 1; x++) {
-              const sc = scoreP2(p2.type, rot, x);
-              if (sc > best2) { best2 = sc; bestRot2 = rot; bestX2 = x; }
+          let bestRot2 = p2.rot, bestX2 = p2.x;
+          if (Math.random() < aiCfg.randomRatio) {
+            const opts = [];
+            for (let rot = 0; rot < 4; rot++) {
+              for (let x = 0; x < COLS; x++) {
+                if (isValid2P(getCells(p2.type, rot, x, p2.y), board, boundary, 2)) opts.push({rot, x});
+              }
+            }
+            if (opts.length) { const o = opts[Math.floor(Math.random() * opts.length)]; bestRot2 = o.rot; bestX2 = o.x; }
+          } else {
+            let best2 = -Infinity;
+            for (let rot = 0; rot < 4; rot++) {
+              for (let x = -1; x < COLS + 1; x++) {
+                const sc = scoreP2(p2.type, rot, x);
+                if (sc > best2) { best2 = sc; bestRot2 = rot; bestX2 = x; }
+              }
             }
           }
           if (p2.rot !== bestRot2) {
@@ -912,7 +943,7 @@ function TetrisGame2P() {
     prevPhaseRef.current = state.phase;
   });
 
-  const { board, p1, p2, p1Next, p1NextNext, p2Next, p2NextNext, p1Lines, p2Lines, phase, boundary, winner, paused, summary, lastGain, playerSide } = state;
+  const { board, p1, p2, p1Next, p1NextNext, p2Next, p2NextNext, p1Lines, p2Lines, phase, boundary, winner, paused, summary, lastGain, playerSide, aiLevel } = state;
 
   // NEXT queue routing: show whichever side the human is playing. P2's
   // queue while the user is P1, or P1's queue if anyone is observing
@@ -930,6 +961,10 @@ function TetrisGame2P() {
   const selectSide = (side) => (e) => {
     if (e && e.stopPropagation) e.stopPropagation();
     setState(s => ({...s, phase: "playing", playerSide: side}));
+  };
+  const setLevel = (n) => (e) => {
+    if (e && e.stopPropagation) e.stopPropagation();
+    setState(s => ({...s, aiLevel: n}));
   };
 
   // Start screen render -- short-circuits the rest of the layout.
@@ -980,6 +1015,32 @@ function TetrisGame2P() {
             color: "rgba(255,255,255,0.5)",
             textTransform: "uppercase",
           }}>Select your side</div>
+
+          <div style={{display:"flex", flexDirection:"column", gap:10, alignItems:"center"}}>
+            <div style={{
+              fontFamily:"monospace", fontSize:10, fontWeight:600,
+              letterSpacing:4, color:"rgba(255,255,255,0.35)",
+              textTransform:"uppercase",
+            }}>Level</div>
+            <div style={{display:"flex", gap:0}}>
+              {[1,2,3,4,5].map(n => (
+                <div
+                  key={n}
+                  onPointerDown={setLevel(n)}
+                  onTouchStart={(e) => e.stopPropagation()}
+                  style={{
+                    fontFamily:"monospace",
+                    fontSize:16, fontWeight:600,
+                    letterSpacing:2,
+                    color: n === aiLevel ? "#fff" : "rgba(255,255,255,0.25)",
+                    padding:"8px 16px",
+                    cursor:"pointer",
+                    userSelect:"none",
+                  }}
+                >{n}</div>
+              ))}
+            </div>
+          </div>
 
           <div style={{display: "flex", flexDirection: "column", gap: 24, alignItems: "stretch", width: 280}}>
             <div
@@ -1042,6 +1103,7 @@ function TetrisGame2P() {
   // no ghost. Painted BEFORE the active piece so the active piece visually
   // overwrites any overlap (which only happens when the piece is already
   // at its landing position, i.e. about to lock).
+  let laneData = null;
   if (playerSide === 1 || playerSide === 2) {
     const piece     = playerSide === 1 ? p1 : p2;
     const ghostStep = playerSide === 1 ? -1 : +1;  // P1 floats UP, P2 falls DOWN
@@ -1055,6 +1117,13 @@ function TetrisGame2P() {
           grid[r][c] = GHOST_COLOR;
         }
       });
+      const pCells = getCells(piece.type, piece.rot, piece.x, piece.y);
+      const lMinC  = Math.min(...pCells.map(([c]) => c));
+      const lMaxC  = Math.max(...pCells.map(([c]) => c));
+      const maxDr  = pieceMaxDr(piece.type, piece.rot);
+      const topRow = playerSide === 1 ? gy : piece.y;
+      const botRow = (playerSide === 1 ? piece.y : gy) + maxDr + 1;
+      laneData = { minC: lMinC, maxC: lMaxC, topPx: topRow * CELL, hPx: (botRow - topRow) * CELL };
     }
   }
 
@@ -1312,6 +1381,23 @@ function TetrisGame2P() {
         pointerEvents: "none",
       }} />
 
+      {laneData && (
+        <React.Fragment>
+          <div style={{
+            position: "absolute",
+            left: PLAY_X + laneData.minC * CELL, top: laneData.topPx,
+            width: 1, height: laneData.hPx,
+            background: LANE_COLOR, pointerEvents: "none",
+          }} />
+          <div style={{
+            position: "absolute",
+            left: PLAY_X + (laneData.maxC + 1) * CELL, top: laneData.topPx,
+            width: 1, height: laneData.hPx,
+            background: LANE_COLOR, pointerEvents: "none",
+          }} />
+        </React.Fragment>
+      )}
+
       {/* Play area: 200x400 at (61, 237). Centered vertically with
           breathing room above and below for future territory animations. */}
       <div
@@ -1456,7 +1542,7 @@ function TetrisGame2P() {
             {summary.winning === 1 ? "P1 leading" : summary.winning === 2 ? "P2 leading" : "tied"}
           </div>
           <div
-            onPointerDown={() => setState(makeInitState2P())}
+            onPointerDown={() => setState(s => ({...makeInitState2P(), aiLevel: s.aiLevel}))}
             style={{
               padding: "12px 36px", background: "#ff3333",
               color: "#fff", borderRadius: 6,
@@ -1482,7 +1568,7 @@ function TetrisGame2P() {
             {winner === 1 ? "territory claimed" : winner === 2 ? "territory claimed" : "stack overflow"}
           </div>
           <div
-            onPointerDown={() => setState(makeInitState2P())}
+            onPointerDown={() => setState(s => ({...makeInitState2P(), aiLevel: s.aiLevel}))}
             style={{
               padding: "12px 36px", background: "#ff3333",
               color: "#fff", borderRadius: 6,

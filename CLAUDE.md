@@ -5,7 +5,7 @@
   Whichever machine (MacFQ or Gandalf) adds a component, updates a file,
   or makes a structural change: update this file before ending the session.
   Both machines depend on this as the single source of truth.
-  Last updated: 2026-05-21 - MacFQ (game.html v26: GHOST_COLOR alpha reduced 0.2 -> 0.15 so ghost reads as a faint hint, not a placed piece. APP_COMMIT bumped to 6857dbe.)
+  Last updated: 2026-05-21 - MacFQ (game.html v26: column lane indicators (LANE_COLOR, 2x grid opacity, brackets piece column footprint from ghost to active piece, human only); AI_DIFFICULTY/AI_PERIOD replaced by AI_LEVEL_DEFAULT=3 + AI_LEVEL_CONFIG 1-5 table (randomRatio, aiPeriod, holePenalty, bumpPenalty); level tap selector on start screen (1-5, default 3); both REMATCH buttons preserve aiLevel across reset. APP_COMMIT bumped to 1e56519.)
 -->
 
 ## Required reading before building
