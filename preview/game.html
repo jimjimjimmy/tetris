@@ -67,7 +67,7 @@ const AI_LEVEL_CONFIG  = {
 // THIS file state (one behind HEAD after the commit lands); update it
 // just before each commit.
 const APP_VERSION   = "v0.1";
-const APP_COMMIT    = "d525053";
+const APP_COMMIT    = "d8fbad3";
 
 const TICK_MS       = TEST_SPEED ? 110 : 550;
 
@@ -209,8 +209,8 @@ const CELL_P2    = 2;
 const P1_LOCKED_COLOR = "#b1b2b3";                       // = PIECE_COLOR full
 const P2_LOCKED_COLOR = "rgba(177, 178, 179, 0.2)";       // dark stack
 const ACTIVE_COLOR    = "rgba(177, 178, 179, 0.5)";       // active piece
-const GHOST_COLOR     = "rgba(177, 178, 179, 0.15)";      // landing-position preview (human only)
-const LANE_COLOR      = "rgba(255,255,255,0.08)";         // column lane indicators (2x grid opacity)
+const GHOST_COLOR     = "rgba(177, 178, 179, 0.0375)";     // landing-position preview (human only)
+const LANE_COLOR      = "rgba(255,255,255,0.20)";         // column lane indicators
 const CELL_TO_COLOR_2P = {
   [CELL_EMPTY]: null,
   [CELL_P1]:    P1_LOCKED_COLOR,
