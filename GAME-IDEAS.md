@@ -2,6 +2,53 @@
 
 ---
 
+## THE NORTH STAR CONCEPT (BIG IDEA - core vision)
+
+The game is a communication app with a game at its heart.
+
+**The core loop:**
+- You want to video chat with someone
+- You have to earn it by playing
+- The better you play, the longer your chat time
+- Lose territory = lose chat time
+- Win = extend the call
+- The game IS the conversation
+
+**Why this is different:**
+Not "play a game then chat" - the tension of the board IS the tension
+of the relationship. You are literally fighting for time with someone.
+The shared board mechanic becomes a metaphor - two people, one space,
+both trying to hold their ground.
+
+**Use cases:**
+- Long distance couples - earn your facetime
+- Friends who want to catch up but need a reason to stay on
+- Speed dating - chemistry + skill combined
+- Kids earning screen time with parents
+- Anyone who wants connection with a little stakes attached
+
+**The business model:**
+- Free: limited chat time banked per day
+- Premium: unlimited chat time, or start with more time banked
+- The game is the paywall but it never feels like one
+
+**App Store category:** Social Networking, not Games.
+This changes everything about how it is marketed and discovered.
+
+**The name DRIFT still works:**
+Drifting toward each other. Drifting apart.
+The wind mechanic, the balloon physics, the territory - all of it
+becomes metaphor for connection and distance.
+
+**Everything serves this:**
+- Planetary environments = different contexts for different relationships
+- Real-world weather = shared conditions, you are both in the same world
+- Opponent face cam = you see each other while you fight for time
+- Territorial decay = no one dominates forever, the game stays close
+- Haptic feedback = physical sensation of connection through the screen
+
+---
+
 ## Territorial Decay (confirmed mechanic)
 
 Each row cleared is worth slightly less territory over time. Prevents death spirals
@@ -145,6 +192,44 @@ environments as you progress.
 Connects to the solar system defense concept - you are literally
 fighting on different battlegrounds across the solar system.
 Each environment is a different front in the war.
+
+---
+
+## Opponent Face Cam (BIG IDEA - v3 social feature)
+
+Use the front-facing camera to show the opponent's live video feed
+behind their pieces on the shared board.
+
+**The concept:**
+- Opponent's camera feed sits behind their territory at low opacity
+  (10-15%) - barely there, just a presence
+- Or only flashes briefly when territory shifts - a glimpse of their
+  reaction at the most tense moment
+- Or a small face cam window in the corner of their territory
+
+**Why it works:**
+Seeing your opponent's face react in real time as you steal their
+territory is pure gold. The reaction moment when you clear 3 rows
+and push the boundary is the killer feature - shareable, memorable,
+social.
+
+**Design options:**
+- Full bleed behind opponent territory at low opacity
+- Small window in corner of opponent territory
+- Flash on territory shift only
+- Toggle on/off in settings (privacy consideration)
+
+**Implementation:**
+- Capacitor + AVFoundation on iOS
+- WebRTC for real-time peer-to-peer video
+- Requires camera permission from both players
+- Works in multiplayer mode only
+
+**Retention mechanic:**
+Watching someone's face react to losing territory is exactly the kind
+of moment people screenshot and share. Built-in viral loop.
+
+Could be a premium feature or unlock after N games played.
 
 ---
 
