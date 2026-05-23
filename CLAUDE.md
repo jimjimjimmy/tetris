@@ -302,6 +302,19 @@ function useReveal(duration) {
   - Verified decay at TEST_SPEED=true (60s): early P2 clears each pushed ~1 row, later clears took ~2 P2 clears per row of shift. Game ended at 35s with P2=15 clears, P1=2 (vs 24.6s / P2=10 / P1=0 pre-decay) -- 42% longer match, no death spiral, P1 had time to score. "P2 WINS" overlay triggered correctly. Zero console errors.
   - Verified P1/P2 symmetry at TEST_SPEED=true across 4 games: P1=51 total clears, P2=49 total clears (ratio 1.04:1, was 2.86:1 pre-fix). Winner distribution: 3 P1 wins, 1 P2 win. Boundary stayed near midline in early-game, drift driven by piece RNG rather than systemic asymmetry. Zero console errors.
   - Triple-validation completed: Round 1 (code audit) showed every P1 line of code has a mirrored P2 line on adjacent lines with same args. Round 2 (runtime probe at 110ms cadence) confirmed mean tick interval = 110.0ms (TICK_MS), P1 piece moved -1 row per tick (17->10), P2 piece moved +1 row per tick (2->9), both locking same tick; bdyEvents=[] during 6s window with no row clears (boundary only ever updates when n1>0 or n2>0). Round 3 (six screenshots at 10s intervals over 60s, with auto-rematch on game-over) showed every frame has cells in correct territories, boundary visible at midline, stacks growing comparably on each side. No jumps, no random resets.
+  - Gesture surface (cd3ae0a): touch listeners attach to a transparent
+    full-height capture div spanning x=0..SIDEBAR_X=320. Player can swipe/tap
+    anywhere on the left portion of the screen, not just the narrow 200px
+    play column. Right sidebar (info/gear/pause/NEXT at x>=349 > SIDEBAR_X)
+    sits outside the capture zone and remains independently tappable.
+  - Haptics (cdb6b6a): module-level `haptic` helper with light/medium/heavy/
+    gameOver methods. Each wraps `navigator.vibrate` in a feature check +
+    try/catch, fails silently on iOS Safari, swap target for
+    @capacitor/haptics in v3. Wiring:
+    move/rotate -> light (30ms) inside applyP1/applyP2 on every successful
+    input; piece lock -> medium (60ms) gated on HUMAN side's piece-type
+    change; row clear + territory shift -> heavy (100ms); game over ->
+    pattern [200, 100, 200].
   - P1_LOCKED_COLOR "#b1b2b3" (bright). P2_LOCKED_COLOR "#4a4a4a" (dark, fully opaque). Human player always renders as bright regardless of side chosen; AI always renders dark. cellColor map computed at render from playerSide state.
   - GHOST_COLOR "rgba(177,178,179,0.075)". LANE_COLOR "rgba(255,255,255,0.10)". Both rgba for background-agnostic theming.
   - APP_BUILD_DATE constant (ISO datetime string). relTime() helper renders as "Xs ago / Xm ago / Xh ago / Xd ago / Mon D / Mon D, YYYY". Version stamp: font 12, flex space-between, build date on right.
