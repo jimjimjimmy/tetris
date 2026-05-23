@@ -307,6 +307,13 @@ function useReveal(duration) {
     anywhere on the left portion of the screen, not just the narrow 200px
     play column. Right sidebar (info/gear/pause/NEXT at x>=349 > SIDEBAR_X)
     sits outside the capture zone and remains independently tappable.
+  - Loss indicator (5cd9903): paired with the existing "+N" gainer
+    indicator, "-N" now also renders on the LOSING player's side of the
+    boundary in subtle warning red (rgba(255,110,110,0.7)). Driven by the
+    same `lastGain` state; same GAIN_FADE_MS (1500ms) lifetime; mirrored
+    across the boundary line. Boundary slide animation already in place
+    via BoardViewport `transition: top 260ms cubic-bezier(0.22, 1, 0.36, 1)`
+    (animateBoundary prop passed from TetrisGame2P).
   - Haptics (cdb6b6a): module-level `haptic` helper with light/medium/heavy/
     gameOver methods. Each wraps `navigator.vibrate` in a feature check +
     try/catch, fails silently on iOS Safari, swap target for
