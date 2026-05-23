@@ -820,8 +820,9 @@ function TetrisGame2P() {
   // accidentally swipe. Attaches to document so the entire screen accepts
   // input -- the FullscreenGame wrapper already blocks default scroll/zoom.
   const playRef = React.useRef(null);
+  const gestureRef = React.useRef(null);
   React.useEffect(() => {
-    const el = playRef.current;
+    const el = gestureRef.current;
     if (!el) return;
     // Continuous gesture tracking. Horizontal moves fire DURING the touch
     // (every CELL/STEP_PX pixels of drag) so the piece tracks the finger
@@ -868,8 +869,11 @@ function TetrisGame2P() {
         if (dy <= -STEP_PX && ady > adx) apply("up");
       }
     };
-    // Attach to the play area (not document) so taps on the sidebar
-    // chrome -- pause / info / gear / NEXT -- never trigger a P1 gesture.
+    // Attach to a transparent full-height gesture surface that spans from
+    // x=0 to x=SIDEBAR_X (the entire left portion of the screen) so the
+    // player can swipe/tap anywhere outside the right sidebar. Sidebar
+    // chrome -- pause / info / gear / NEXT -- sits at x>=349, well past
+    // SIDEBAR_X=320, so its taps never reach this surface.
     el.addEventListener("touchstart", onStart, { passive: true });
     el.addEventListener("touchmove",  onMove,  { passive: true });
     el.addEventListener("touchend",   onEnd,   { passive: true });
@@ -1433,6 +1437,23 @@ function TetrisGame2P() {
           showBoundary={false}
         />
       </div>
+
+      {/* Gesture-capture surface -- transparent, spans the full left
+          column (x=0 to SIDEBAR_X, full height). All touch listeners
+          attach here so swipes/taps register anywhere outside the
+          right sidebar, not just on the narrow play area. Sidebar
+          icons (info/gear/pause/NEXT) sit at x>=349 > SIDEBAR_X=320,
+          so they remain independently tappable. */}
+      <div
+        ref={gestureRef}
+        style={{
+          position: "absolute",
+          top: 0, left: 0,
+          width: SIDEBAR_X, height: GAME_2P_H,
+          background: "transparent",
+          touchAction: "none",
+        }}
+      />
 
       {/* Info icon -- white SVG at opacity 0.3 (Figma 124:2276). The
           `top` adds env(safe-area-inset-top) so the icon is pushed BELOW
