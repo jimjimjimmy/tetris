@@ -1225,6 +1225,7 @@ function TetrisGame2P() {
   //   P1 gain: boundary moved UP, bracket extends UP from boundary
   //   P2 gain: boundary moved DOWN, bracket extends DOWN from boundary
   let gainView = null;
+  let lossView = null;
   if (lastGain) {
     const age = Date.now() - lastGain.ts;
     const FADE_TAIL = 400;
@@ -1243,6 +1244,9 @@ function TetrisGame2P() {
         // Text floats just above the cap
         textTop:     boundaryY - gainPx - GAIN_TEXT_OFFSET - 12,
       };
+      // Losing side (P2) sees "-N" mirrored to the opposite side of the
+      // boundary, in their remaining territory direction.
+      lossView = { opacity, rows: lastGain.rows, textTop: boundaryY + GAIN_TEXT_OFFSET };
     } else {
       gainView = {
         opacity,
@@ -1254,6 +1258,7 @@ function TetrisGame2P() {
         // Text floats just below the cap
         textTop:     boundaryY + gainPx + GAIN_TEXT_OFFSET,
       };
+      lossView = { opacity, rows: lastGain.rows, textTop: boundaryY - GAIN_TEXT_OFFSET - 12 };
     }
   }
 
@@ -1420,6 +1425,27 @@ function TetrisGame2P() {
             whiteSpace: "nowrap",
           }}>+{gainView.rows}</div>
         </React.Fragment>
+      )}
+
+      {/* "-N" loss indicator on the LOSING player's side. Mirrored across
+          the boundary from "+N", subtle warning red. Same font as the
+          gainer to stay consistent with the minimal aesthetic. Fades on
+          the same GAIN_FADE_MS timeline as the gainer's indicator. */}
+      {lossView && (
+        <div style={{
+          position: "absolute",
+          left: GAIN_TEXT_X, top: lossView.textTop,
+          fontFamily: "'Inter', sans-serif",
+          fontWeight: 600,
+          fontSize: 10,
+          letterSpacing: 0,
+          color: "rgba(255, 110, 110, 0.7)",
+          opacity: lossView.opacity,
+          pointerEvents: "none",
+          transition: `opacity 120ms linear, top ${BRACKET_EASE}`,
+          fontVariantNumeric: "tabular-nums",
+          whiteSpace: "nowrap",
+        }}>-{lossView.rows}</div>
       )}
 
       {/* Right Panel background -- the slightly-darker sidebar column.
