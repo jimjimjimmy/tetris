@@ -307,6 +307,14 @@ function useReveal(duration) {
     anywhere on the left portion of the screen, not just the narrow 200px
     play column. Right sidebar (info/gear/pause/NEXT at x>=349 > SIDEBAR_X)
     sits outside the capture zone and remains independently tappable.
+  - Boundary eviction + indicator lockstep (30bd2cb): dropped the
+    preventive piece-blocking clamp on newBdy. The boundary now slides
+    freely to its calculated position; any loser cells in the swept
+    range are evicted in the same paint, so the dashed boundary line
+    visibly traverses them over the 260ms ease-out. `lastGain` is now
+    computed from realShift = boundary - newBdy (after game-over
+    clamps), so +N/-N only fires when the line actually moves and the
+    row count matches the cells visibly traversed.
   - Loss indicator (5cd9903): paired with the existing "+N" gainer
     indicator, "-N" now also renders on the LOSING player's side of the
     boundary in subtle warning red (rgba(255,110,110,0.7)). Driven by the
