@@ -689,18 +689,9 @@ function TetrisGame2P() {
 
         let newBdy = boundary - p1IntShift + p2IntShift;
 
-        // Preventive boundary clamp
-        let maxP2Row = -1, minP1Row = ROWS_2P;
-        for (let r = 0; r < ROWS_2P; r++) {
-          for (let c = 0; c < COLS; c++) {
-            const cell = board[r][c];
-            if (cell === CELL_P2 && r > maxP2Row) maxP2Row = r;
-            if (cell === CELL_P1 && r < minP1Row) minP1Row = r;
-          }
-        }
-        if (newBdy <= maxP2Row) newBdy = maxP2Row + 1;
-        if (newBdy >  minP1Row) newBdy = minP1Row;
-
+        // Game-over clamps only -- no preventive piece-blocking clamp.
+        // The boundary is allowed to push past locked pieces; the swept
+        // range is then cleared (eviction) so the board stays consistent.
         let winner = null, phase = "playing";
         if (newBdy <= 0) {
           newBdy = 0; winner = 1; phase = "over";
@@ -708,17 +699,37 @@ function TetrisGame2P() {
           newBdy = ROWS_2P; winner = 2; phase = "over";
         }
 
-        // Update the "+N" gain indicator. The rows that just shifted
-        // are p1IntShift (P1 gain, boundary moved UP) or p2IntShift (P2
-        // gain, boundary moved DOWN). Prefer whichever side moved this
-        // tick; if both, prefer the larger gain.
-        let lastGain = s.lastGain;
-        if (p1IntShift > 0 || p2IntShift > 0) {
-          if (p1IntShift >= p2IntShift) {
-            lastGain = { player: 1, rows: p1IntShift, ts: Date.now() };
-          } else {
-            lastGain = { player: 2, rows: p2IntShift, ts: Date.now() };
+        // Eviction: clear loser cells in the rows that just changed
+        // hands so the boundary can actually slide to its new position.
+        // Spec: "Locked pieces evicted by the shift disappear cleanly
+        // as the line passes through them, not pop abruptly." The board
+        // mutation here happens at the same paint as the line starts
+        // its 260ms slide, so the cells vacate the sweep zone in sync
+        // with the line crossing them.
+        if (newBdy !== boundary) {
+          const r0 = Math.min(newBdy, boundary);
+          const r1 = Math.max(newBdy, boundary);
+          const evict = newBdy < boundary ? CELL_P2 : CELL_P1;
+          const next  = board.map(row => row.slice());
+          for (let r = r0; r < r1; r++) {
+            for (let c = 0; c < COLS; c++) {
+              if (next[r][c] === evict) next[r][c] = CELL_EMPTY;
+            }
           }
+          board = next;
+        }
+
+        // "+N"/"-N" indicator reflects the ACTUAL boundary delta after
+        // game-over clamps -- not the raw shift accumulator. This keeps
+        // the indicator and the visual line in lockstep: the indicator
+        // only fires when the line actually moves, and the row count
+        // matches the cells visibly traversed.
+        let lastGain = s.lastGain;
+        const realShift = boundary - newBdy;  // +N => P1 gained, -N => P2 gained
+        if (realShift > 0) {
+          lastGain = { player: 1, rows: realShift, ts: Date.now() };
+        } else if (realShift < 0) {
+          lastGain = { player: 2, rows: -realShift, ts: Date.now() };
         }
 
         return {
