@@ -307,6 +307,13 @@ function useReveal(duration) {
     anywhere on the left portion of the screen, not just the narrow 200px
     play column. Right sidebar (info/gear/pause/NEXT at x>=349 > SIDEBAR_X)
     sits outside the capture zone and remains independently tappable.
+  - Two-boundary visual (e1c4122): ORIGIN dashed lines (rgba 0.7, 2/2
+    pattern, no animation) drawn at the fixed midpoint PLAY_Y + BDY_2P *
+    CELL alongside the LIVE boundary (rgba 0.4, 4/4 pattern, 260ms
+    cubic-bezier animation). The gap reads at a glance: live above
+    origin = P1 ahead, live below = P2 ahead, overlap = neutral.
+    Constants: ORIGIN_DASH_COLOR, ORIGIN_DASH_SEG=2. Render order:
+    origin stacked AFTER live so origin wins z when both share a y.
   - Active-piece eviction on boundary shift (3b0b7ad): after the
     locked-cell sweep, both p1 and p2 active pieces are tested against
     the new boundary via isValid2P. If invalid (piece would sit in the
