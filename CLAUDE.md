@@ -307,6 +307,14 @@ function useReveal(duration) {
     anywhere on the left portion of the screen, not just the narrow 200px
     play column. Right sidebar (info/gear/pause/NEXT at x>=349 > SIDEBAR_X)
     sits outside the capture zone and remains independently tappable.
+  - Stack follows boundary (8299027): on territory shift the gainer's
+    entire locked stack translates with the boundary instead of being
+    decoupled. delta>0 (P1 gain) shifts every CELL_P1 up by delta;
+    delta<0 (P2 gain) shifts every CELL_P2 down by |delta|. Loser
+    cells in the swept range and any winner cells that would shift
+    off-board are dropped. Active pieces are NOT translated; existing
+    active-piece eviction respawn handles the rare case where the
+    boundary moves past an active piece.
   - Two-boundary visual (e1c4122): ORIGIN dashed lines (rgba 0.7, 2/2
     pattern, no animation) drawn at the fixed midpoint PLAY_Y + BDY_2P *
     CELL alongside the LIVE boundary (rgba 0.4, 4/4 pattern, 260ms
