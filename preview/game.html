@@ -141,6 +141,13 @@ const DASH_LEFT_X      = -3;     // left dashed segment left edge (Figma -3)
 const DASH_LEFT_W      = 60;     // Figma 60 -- dashes flow right-to-left so the partial dash bleeds off the frame's LEFT edge (clipped by frame overflow:hidden), and the last full dash lands flush at x=57, 4px before PLAY_X=61
 const DASH_RIGHT_X     = 265;    // starts 4px right of play edge (261)
 const DASH_RIGHT_W     = 52;     // ends before sidebar at 320 (with 3px gap)
+// ORIGIN line -- the fixed neutral reference at ROWS_2P / 2 that never
+// moves. Always rendered alongside the live boundary so the gap between
+// the two lines tells the game's territory story at a glance. Brighter
+// alpha + shorter dashes distinguish it from the live boundary's softer
+// 4/4 pattern.
+const ORIGIN_DASH_COLOR = "rgba(255,255,255,0.7)";
+const ORIGIN_DASH_SEG   = 2;     // shorter than live's 4 -- tighter rhythm
 const GAIN_BRACKET_X   = 265;    // right-side gain bracket left edge
 const GAIN_TEXT_X      = 273;    // "+N" text left edge
 const GAIN_TEXT_OFFSET = 6;      // gap between text and bracket cap
@@ -1252,6 +1259,7 @@ function TetrisGame2P() {
   const p2StackRows = _minP2 < boundary ? (boundary - _minP2) : 0;
   const p1StackRows = _maxP1 >= boundary ? (_maxP1 - boundary + 1) : 0;
   const boundaryY   = PLAY_Y + boundary * CELL;  // y of the boundary line in frame coords
+  const originY     = PLAY_Y + BDY_2P * CELL;    // y of the fixed origin (neutral) line, never moves
 
   // ── "+N" gain indicator (Figma 128-3004) ─────────────────────────────
   // lastGain expires after GAIN_FADE_MS; opacity fades linearly over the
@@ -1360,7 +1368,7 @@ function TetrisGame2P() {
         pointerEvents: "none",
       }} />
 
-      {/* ── Dashed boundary lines (Figma 128-3004 nodes 135:3897 + 135:3904).
+      {/* ── Live boundary dashed lines (Figma 128-3004 nodes 135:3897 + 135:3904).
           4px on, 4px off. Drawn ONLY in the margins -- the play area
           itself stays clear so pieces are never sliced by a line. The
           `top` animates when the boundary shifts so the dashes glide. ── */}
@@ -1381,6 +1389,29 @@ function TetrisGame2P() {
         backgroundRepeat: "repeat-x",
         pointerEvents: "none",
         transition: `top ${BRACKET_EASE}`,
+      }} />
+
+      {/* ── Origin (neutral) dashed lines. Fixed at ROWS_2P / 2, never
+          moves. Brighter alpha (0.7 vs 0.4) and shorter dashes (2/2 vs
+          4/4) distinguish it from the live boundary so the player can
+          read the gap at a glance: live above origin = P1 ahead, live
+          below = P2 ahead. Rendered AFTER the live boundary so it stacks
+          on top when they overlap at game start or after a return-to-zero. */}
+      <div style={{
+        position: "absolute",
+        left: DASH_LEFT_X, top: originY, width: DASH_LEFT_W, height: 1,
+        backgroundImage: `linear-gradient(90deg, ${ORIGIN_DASH_COLOR} 0, ${ORIGIN_DASH_COLOR} ${ORIGIN_DASH_SEG}px, transparent ${ORIGIN_DASH_SEG}px, transparent ${ORIGIN_DASH_SEG * 2}px)`,
+        backgroundSize: `${ORIGIN_DASH_SEG * 2}px 1px`,
+        backgroundRepeat: "repeat-x",
+        pointerEvents: "none",
+      }} />
+      <div style={{
+        position: "absolute",
+        left: DASH_RIGHT_X, top: originY, width: DASH_RIGHT_W, height: 1,
+        backgroundImage: `linear-gradient(90deg, ${ORIGIN_DASH_COLOR} 0, ${ORIGIN_DASH_COLOR} ${ORIGIN_DASH_SEG}px, transparent ${ORIGIN_DASH_SEG}px, transparent ${ORIGIN_DASH_SEG * 2}px)`,
+        backgroundSize: `${ORIGIN_DASH_SEG * 2}px 1px`,
+        backgroundRepeat: "repeat-x",
+        pointerEvents: "none",
       }} />
 
       {/* ── Left-side stack-height brackets (Figma 128-3004 nodes
