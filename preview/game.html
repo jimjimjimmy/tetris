@@ -699,13 +699,22 @@ function TetrisGame2P() {
           newBdy = ROWS_2P; winner = 2; phase = "over";
         }
 
-        // Eviction: clear loser cells in the rows that just changed
-        // hands so the boundary can actually slide to its new position.
+        // Eviction: when the boundary moves, both LOCKED cells AND any
+        // ACTIVE piece overlapping the swept range must be cleared so
+        // no cells end up on the wrong side of the boundary.
+        //
+        // (a) Locked-cell sweep: zero out loser cells in [r0, r1).
+        // (b) Active-piece eviction: if either piece's current cells
+        //     are no longer valid under newBdy (e.g. P1 piece sitting
+        //     at the boundary edge after a P2 gain), respawn that
+        //     piece at its natural spawn position. Skipping this leaves
+        //     the piece stranded; on its next tick it cannot move so
+        //     it locks in the wrong territory.
+        //
         // Spec: "Locked pieces evicted by the shift disappear cleanly
         // as the line passes through them, not pop abruptly." The board
-        // mutation here happens at the same paint as the line starts
-        // its 260ms slide, so the cells vacate the sweep zone in sync
-        // with the line crossing them.
+        // mutation lands the same paint the boundary line starts its
+        // 260ms slide, so cells vacate in sync with the line crossing.
         if (newBdy !== boundary) {
           const r0 = Math.min(newBdy, boundary);
           const r1 = Math.max(newBdy, boundary);
@@ -717,6 +726,20 @@ function TetrisGame2P() {
             }
           }
           board = next;
+
+          // Active-piece eviction. isValid2P checks both territory side
+          // and cell overlap. If the piece's current cells are no longer
+          // valid under newBdy, respawn it from the NEXT queue.
+          if (!isValid2P(getCells(p1.type, p1.rot, p1.x, p1.y), board, newBdy, 1)) {
+            p1 = { type: p1Next, rot: 0, x: 3, y: p1SpawnY2P(p1Next) };
+            p1Next     = p1NextNext;
+            p1NextNext = randPiece();
+          }
+          if (!isValid2P(getCells(p2.type, p2.rot, p2.x, p2.y), board, newBdy, 2)) {
+            p2 = { type: p2Next, rot: 0, x: 3, y: 0 };
+            p2Next     = p2NextNext;
+            p2NextNext = randPiece();
+          }
         }
 
         // "+N"/"-N" indicator reflects the ACTUAL boundary delta after
