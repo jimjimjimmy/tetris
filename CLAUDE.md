@@ -307,6 +307,13 @@ function useReveal(duration) {
     anywhere on the left portion of the screen, not just the narrow 200px
     play column. Right sidebar (info/gear/pause/NEXT at x>=349 > SIDEBAR_X)
     sits outside the capture zone and remains independently tappable.
+  - Active-piece eviction on boundary shift (3b0b7ad): after the
+    locked-cell sweep, both p1 and p2 active pieces are tested against
+    the new boundary via isValid2P. If invalid (piece would sit in the
+    other player's territory), the piece is respawned from the NEXT
+    queue at its natural spawn position. Fixes a regression where
+    pieces sitting at the boundary edge during a shift got locked in
+    the wrong territory on the next tick.
   - Boundary eviction + indicator lockstep (30bd2cb): dropped the
     preventive piece-blocking clamp on newBdy. The boundary now slides
     freely to its calculated position; any loser cells in the swept
