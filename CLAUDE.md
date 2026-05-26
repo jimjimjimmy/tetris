@@ -307,6 +307,19 @@ function useReveal(duration) {
     anywhere on the left portion of the screen, not just the narrow 200px
     play column. Right sidebar (info/gear/pause/NEXT at x>=349 > SIDEBAR_X)
     sits outside the capture zone and remains independently tappable.
+  - Status-color boundary indicator (571aaa0, Figma 152-1747 / 152-2247):
+    when the live boundary is displaced, the live dashed line, the
+    bracket (stem + cap), and the +N/-N text all switch to a status
+    color. Gain = #2fff00, loss = #ff0000. Neutral keeps the existing
+    white treatment.
+    Per-element opacities per Figma: live dash 0.5 (rgba pre-mixed for
+    the gradient), bracket cap 0.5, bracket stem 0.15, text 0.5.
+    Bracket gains a 4x1 horizontal cap at the LIVE boundary end
+    (top for gain, bottom for loss). Text style updated to Inter
+    Regular 10/2px uppercase per spec.
+    Constants added: GAIN_HEX, LOSS_HEX, GAIN_DASH_RGBA, LOSS_DASH_RGBA.
+    All indicator elements live in the [261, 320] right-margin gutter
+    between play area and sidebar -- no overhang into either.
   - 1:1 boundary shift + DEBUG_PIECES (0a3b9ef): removed the decay
     accumulator (decayShiftAt/sumDecayShift, DECAY_RATE, MIN_SHIFT,
     p1ShiftAcc, p2ShiftAcc). Each row cleared moves the boundary by
