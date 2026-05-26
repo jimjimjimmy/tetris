@@ -307,6 +307,11 @@ function useReveal(duration) {
     anywhere on the left portion of the screen, not just the narrow 200px
     play column. Right sidebar (info/gear/pause/NEXT at x>=349 > SIDEBAR_X)
     sits outside the capture zone and remains independently tappable.
+  - Live boundary solid line (438f492): replaced the dashed
+    backgroundImage with background:<color> on both left + right
+    live-boundary divs. background-color added to the transition so
+    neutral/gain/loss color flips ease smoothly. Origin (dotted) line
+    unchanged.
   - Status-color boundary indicator (571aaa0, Figma 152-1747 / 152-2247):
     when the live boundary is displaced, the live dashed line, the
     bracket (stem + cap), and the +N/-N text all switch to a status
