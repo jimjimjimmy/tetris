@@ -307,6 +307,18 @@ function useReveal(duration) {
     anywhere on the left portion of the screen, not just the narrow 200px
     play column. Right sidebar (info/gear/pause/NEXT at x>=349 > SIDEBAR_X)
     sits outside the capture zone and remains independently tappable.
+  - Line clear flash + wall kicks (4a2080c, closes #3 + #4):
+    Wall kicks: applyP1/applyP2 'tap' tries [0, +1, -1] x-offsets on
+    rotation; first valid (rot, x) wins. Updates both rot and x in
+    the same state change.
+    Line clear flash: new state.clearAnim shape {rows: number[],
+    ts: ms} | null. Tick scans for full rows BEFORE clearP*_2P
+    mutates the board (per-side: P1 territory r>=boundary, P2
+    territory r<boundary). For 100ms a white rgba(255,255,255,0.7)
+    overlay sits at PLAY_Y + r * CELL for each cleared row. Expire
+    via useEffect setTimeout, reference-equality guard so a fast
+    second clear doesn't cancel the first. New constant
+    CLEAR_FLASH_MS = 100.
   - Soft drop (be798e9, closes #2): the previously-unbound backward
     direction is now wired as a per-step manual move.
       P1: swipe down / ArrowDown -> y+1 (one row down per STEP_PX)
