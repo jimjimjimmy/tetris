@@ -307,6 +307,22 @@ function useReveal(duration) {
     anywhere on the left portion of the screen, not just the narrow 200px
     play column. Right sidebar (info/gear/pause/NEXT at x>=349 > SIDEBAR_X)
     sits outside the capture zone and remains independently tappable.
+  - 1:1 boundary shift + DEBUG_PIECES (0a3b9ef): removed the decay
+    accumulator (decayShiftAt/sumDecayShift, DECAY_RATE, MIN_SHIFT,
+    p1ShiftAcc, p2ShiftAcc). Each row cleared moves the boundary by
+    exactly 1, with no fractional carry-over. Tick is now
+    newBdy = boundary - n1 + n2. Fixes the +1->+2 (and -1->-2)
+    fencepost where the second clear's 0.952 contribution got stuck
+    below floor=1, and the simultaneous 2-row-at-+1 case that landed
+    on +2 instead of +3.
+
+    New smoke-test mode DEBUG_PIECES (default false): when true,
+    randPiece() always returns BAR, a 10x1 horizontal piece added to
+    SHAPES. One BAR drop = one filled row = exactly one row clear,
+    so transition tests are deterministic. New spawnX(type) helper
+    returns 0 for BAR (full-row alignment), 3 otherwise. All spawn
+    sites switched from x:3 literal to spawnX(type). Always false
+    before push.
   - Line clear flash + wall kicks (4a2080c, closes #3 + #4):
     Wall kicks: applyP1/applyP2 'tap' tries [0, +1, -1] x-offsets on
     rotation; first valid (rot, x) wins. Updates both rot and x in
