@@ -307,6 +307,15 @@ function useReveal(duration) {
     anywhere on the left portion of the screen, not just the narrow 200px
     play column. Right sidebar (info/gear/pause/NEXT at x>=349 > SIDEBAR_X)
     sits outside the capture zone and remains independently tappable.
+  - Lock delay (55bbc55, closes #1): 250ms grace before a piece commits.
+    Each piece carries lockPendingTs + lockResets. Tick: piece that
+    can't move forward starts the timer; LOCK_DELAY_MS later (or sooner
+    if the timer is bumped into the past), the lock commits. Successful
+    human input during the window refreshes the timer up to
+    MAX_LOCK_RESETS=5 times then caps (prevents infinite spin). AI
+    moves do not reset. Hard drop bypasses the grace by pre-aging the
+    timer to LOCK_DELAY_MS in the past. Constants:
+    LOCK_DELAY_MS=250, MAX_LOCK_RESETS=5.
   - Mobile dvh viewport (f1ffe21): html/body/#root now use 100dvh
     (dynamic viewport height) with a 100vh fallback. Fixes a visible
     black bar at the bottom of the app on iOS Safari where the
