@@ -307,6 +307,13 @@ function useReveal(duration) {
     anywhere on the left portion of the screen, not just the narrow 200px
     play column. Right sidebar (info/gear/pause/NEXT at x>=349 > SIDEBAR_X)
     sits outside the capture zone and remains independently tappable.
+  - Local-player boundary indicator (265393f): single +N/-N number
+    rendered only from the LOCAL player's perspective (no opponent
+    indicator). Persistent while boundary != BDY_2P. Vertical line
+    anchors at originY and extends to boundaryY. Number = abs gap from
+    origin in rows. Color: white if local ahead, red if local behind.
+    Text sits at the live boundary on the local player's territory side.
+    lastGain state retained for haptics, no longer drives this visual.
   - Stack follows boundary (8299027): on territory shift the gainer's
     entire locked stack translates with the boundary instead of being
     decoupled. delta>0 (P1 gain) shifts every CELL_P1 up by delta;
