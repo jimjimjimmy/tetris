@@ -187,6 +187,12 @@ const GAIN_FADE_MS     = 1500;
 // lock without the human getting another reset.
 const LOCK_DELAY_MS    = 250;
 const MAX_LOCK_RESETS  = 5;
+
+// Line clear flash: how long a white overlay sits on each just-cleared
+// row's OLD pixel position. Adds visual weight to clears that would
+// otherwise be instant. Stack-follows-boundary already moves the cells
+// out from under it, so the flash reads as "this is what just vanished".
+const CLEAR_FLASH_MS   = 100;
 // Easing for stack-bracket length, gain-bracket position, and dashed-line
 // reposition. Same curve the existing animateBoundary uses inside
 // BoardViewport, applied consistently so all boundary-tracking overlays
@@ -360,6 +366,10 @@ function makeInitState2P() {
     // (Figma 128-3004). Shape: { player: 1 | 2, rows: number, ts: ms } or null.
     // Set when a row-clear shifts the boundary; cleared after GAIN_FADE_MS.
     lastGain:    null,
+    // Just-cleared row indices for the line-clear flash. Shape:
+    // { rows: number[], ts: ms } or null. Rows are in OLD board
+    // coordinates (pre-shift). Cleared after CLEAR_FLASH_MS.
+    clearAnim:   null,
   };
 }
 
@@ -532,6 +542,10 @@ function TetrisGame2P() {
         let { board, aiTick, p1, p1Next, p1NextNext, p2, p2Next, p2NextNext, p1Lines, p2Lines, boundary, p1ShiftAcc, p2ShiftAcc } = s;
         const aiCfg = AI_LEVEL_CONFIG[s.aiLevel] || AI_LEVEL_CONFIG[3];
         let n1 = 0, n2 = 0;
+        // Track which rows were full at lock time so we can flash them
+        // briefly after they're cleared. Filled per-side just before
+        // clearP*_2P runs (board still has the full rows at that moment).
+        const clearedRowsThisTick = [];
 
         aiTick += 1;
 
@@ -703,6 +717,11 @@ function TetrisGame2P() {
           } else if (nowMs - p1.lockPendingTs >= LOCK_DELAY_MS) {
             // Grace period elapsed -- commit the lock.
             board = lockPiece2P(board, getCells(p1.type, p1.rot, p1.x, p1.y), CELL_P1);
+            // Snapshot the full rows in P1 territory BEFORE the clear
+            // mutates the board, for the line-clear flash overlay.
+            for (let r = boundary; r < ROWS_2P; r++) {
+              if (board[r].every(v => v !== CELL_EMPTY)) clearedRowsThisTick.push(r);
+            }
             const [b1, c1] = clearP1_2P(board, boundary);
             n1 = c1; board = b1;
             p1 = { type: p1Next, rot: 0, x: 3, y: p1SpawnY2P(p1Next), lockPendingTs: null, lockResets: 0 };
@@ -726,6 +745,9 @@ function TetrisGame2P() {
             p2 = { ...p2, lockPendingTs: nowMs };
           } else if (nowMs - p2.lockPendingTs >= LOCK_DELAY_MS) {
             board = lockPiece2P(board, getCells(p2.type, p2.rot, p2.x, p2.y), CELL_P2);
+            for (let r = 0; r < boundary; r++) {
+              if (board[r].every(v => v !== CELL_EMPTY)) clearedRowsThisTick.push(r);
+            }
             const [b2, c2] = clearP2_2P(board, boundary);
             n2 = c2; board = b2;
             p2 = { type: p2Next, rot: 0, x: 3, y: 0, lockPendingTs: null, lockResets: 0 };
@@ -842,6 +864,9 @@ function TetrisGame2P() {
           board, aiTick, p1, p1Next, p1NextNext, p2, p2Next, p2NextNext, phase,
           p1Lines: p1Lines + n1, p2Lines: p2Lines + n2,
           boundary: newBdy, p1ShiftAcc, p2ShiftAcc, winner, lastGain,
+          clearAnim: clearedRowsThisTick.length > 0
+            ? { rows: clearedRowsThisTick, ts: Date.now() }
+            : s.clearAnim,
         };
       });
     }, TEST_SPEED ? 110 : (AI_LEVEL_CONFIG[state.aiLevel]?.tickMs || TICK_MS_DEFAULT));
@@ -874,9 +899,15 @@ function TetrisGame2P() {
       };
       if (action === "tap") {
         const nr = (p1.rot + 1) % 4;
-        if (isValid2P(getCells(p1.type, nr, p1.x, p1.y), board, boundary, 1)) {
-          haptic.light();
-          return { ...s, p1: { ...p1, rot: nr, ...lockReset(p1) } };
+        // Basic wall kick: try centered, then +1, then -1. Lets the
+        // player rotate even when flush against a wall or against
+        // another piece. No full SRS table -- just the single-cell
+        // escape attempt. First-valid wins.
+        for (const dx of [0, 1, -1]) {
+          if (isValid2P(getCells(p1.type, nr, p1.x + dx, p1.y), board, boundary, 1)) {
+            haptic.light();
+            return { ...s, p1: { ...p1, rot: nr, x: p1.x + dx, ...lockReset(p1) } };
+          }
         }
       } else if (action === "left") {
         if (isValid2P(getCells(p1.type, p1.rot, p1.x - 1, p1.y), board, boundary, 1)) {
@@ -928,9 +959,12 @@ function TetrisGame2P() {
       };
       if (action === "tap") {
         const nr = (p2.rot + 1) % 4;
-        if (isValid2P(getCells(p2.type, nr, p2.x, p2.y), board, boundary, 2)) {
-          haptic.light();
-          return { ...s, p2: { ...p2, rot: nr, ...lockReset(p2) } };
+        // Basic wall kick (mirror of P1): try centered, then +1, then -1.
+        for (const dx of [0, 1, -1]) {
+          if (isValid2P(getCells(p2.type, nr, p2.x + dx, p2.y), board, boundary, 2)) {
+            haptic.light();
+            return { ...s, p2: { ...p2, rot: nr, x: p2.x + dx, ...lockReset(p2) } };
+          }
         }
       } else if (action === "left") {
         if (isValid2P(getCells(p2.type, p2.rot, p2.x - 1, p2.y), board, boundary, 2)) {
@@ -1107,6 +1141,18 @@ function TetrisGame2P() {
     return () => clearInterval(id);
   }, []);
 
+  // Expire the line-clear flash after CLEAR_FLASH_MS. Single setTimeout
+  // scheduled per clearAnim (rather than a polling interval) since the
+  // flash window is short and we want the cleanup to be precisely timed.
+  React.useEffect(() => {
+    if (!state.clearAnim) return;
+    const ts = state.clearAnim.ts;
+    const id = setTimeout(() => {
+      setState(s => (s.clearAnim && s.clearAnim.ts === ts) ? { ...s, clearAnim: null } : s);
+    }, CLEAR_FLASH_MS);
+    return () => clearTimeout(id);
+  }, [state.clearAnim]);
+
   // Haptic feedback via the `haptic` helper (module-level). Refs compare
   // current and previous values so each event fires exactly once per
   // transition. Helper fails silently when navigator.vibrate is missing
@@ -1154,7 +1200,7 @@ function TetrisGame2P() {
     prevPhaseRef.current = state.phase;
   });
 
-  const { board, p1, p2, p1Next, p1NextNext, p2Next, p2NextNext, p1Lines, p2Lines, phase, boundary, winner, paused, summary, lastGain, playerSide, aiLevel } = state;
+  const { board, p1, p2, p1Next, p1NextNext, p2Next, p2NextNext, p1Lines, p2Lines, phase, boundary, winner, paused, summary, lastGain, clearAnim, playerSide, aiLevel } = state;
 
   // NEXT queue routing: show whichever side the human is playing. P2's
   // queue while the user is P1, or P1's queue if anyone is observing
@@ -1635,6 +1681,23 @@ function TetrisGame2P() {
           showBoundary={false}
         />
       </div>
+
+      {/* Line-clear flash overlay. For each row that was full at lock
+          time, paint a white bar at its OLD pixel position for
+          CLEAR_FLASH_MS. Stack-follows-boundary moves cells out from
+          under the flash, so visually the flash reads as "this row
+          just vanished". pointerEvents: none so it never blocks touch. */}
+      {clearAnim && clearAnim.rows.map(r => (
+        <div key={r} style={{
+          position: "absolute",
+          left: PLAY_X,
+          top: PLAY_Y + r * CELL,
+          width: PLAY_W,
+          height: CELL,
+          background: "rgba(255, 255, 255, 0.7)",
+          pointerEvents: "none",
+        }} />
+      ))}
 
       {/* Gesture-capture surface -- transparent, spans the full left
           column (x=0 to SIDEBAR_X, full height). All touch listeners
