@@ -1546,48 +1546,47 @@ function TetrisGame2P() {
         pointerEvents: "none",
       }} />
 
-      {/* ── Live boundary line (Figma 152-1747 / 152-2247). Solid 1px line
-          in the margins; the play area itself stays clear so pieces
-          are never sliced. The `top` animates when the boundary shifts
-          so the line glides. Color: green (gain) / red (loss) when
-          boundary != BDY_2P; white DASH_COLOR at neutral. The line is
-          solid per Figma (an earlier read of the Figma extract used
-          "Dash Line" naming but the actual rendered shape is solid). ── */}
+      {/* ── Live boundary line (Figma 152-1747 / 152-2247). Dashed 4/4
+          pattern in the margins; the play area itself stays clear so
+          pieces are never sliced. The `top` animates when the boundary
+          shifts so the dashes glide. Color: green (gain) / red (loss)
+          when boundary != BDY_2P; white DASH_COLOR at neutral. CSS
+          can't transition gradient stops, so the color flip is instant
+          -- the vertical slide still eases. ── */}
       <div style={{
         position: "absolute",
         left: DASH_LEFT_X, top: boundaryY, width: DASH_LEFT_W, height: 1,
-        background: bdyView ? bdyView.dashRgba : DASH_COLOR,
+        backgroundImage: `linear-gradient(90deg, ${bdyView ? bdyView.dashRgba : DASH_COLOR} 0, ${bdyView ? bdyView.dashRgba : DASH_COLOR} ${DASH_SEG}px, transparent ${DASH_SEG}px, transparent ${DASH_SEG * 2}px)`,
+        backgroundSize: `${DASH_SEG * 2}px 1px`,
+        backgroundRepeat: "repeat-x",
         pointerEvents: "none",
-        transition: `top ${BRACKET_EASE}, background-color 200ms linear`,
+        transition: `top ${BRACKET_EASE}`,
       }} />
       <div style={{
         position: "absolute",
         left: DASH_RIGHT_X, top: boundaryY, width: DASH_RIGHT_W, height: 1,
-        background: bdyView ? bdyView.dashRgba : DASH_COLOR,
+        backgroundImage: `linear-gradient(90deg, ${bdyView ? bdyView.dashRgba : DASH_COLOR} 0, ${bdyView ? bdyView.dashRgba : DASH_COLOR} ${DASH_SEG}px, transparent ${DASH_SEG}px, transparent ${DASH_SEG * 2}px)`,
+        backgroundSize: `${DASH_SEG * 2}px 1px`,
+        backgroundRepeat: "repeat-x",
         pointerEvents: "none",
-        transition: `top ${BRACKET_EASE}, background-color 200ms linear`,
+        transition: `top ${BRACKET_EASE}`,
       }} />
 
-      {/* ── Origin (neutral) dashed lines. Fixed at ROWS_2P / 2, never
-          moves. Brighter alpha (0.7 vs 0.4) and shorter dashes (2/2 vs
-          4/4) distinguish it from the live boundary so the player can
-          read the gap at a glance: live above origin = P1 ahead, live
-          below = P2 ahead. Rendered AFTER the live boundary so it stacks
-          on top when they overlap at game start or after a return-to-zero. */}
+      {/* ── Origin (neutral reference). Solid 1px line fixed at
+          ROWS_2P / 2, never moves. Brighter alpha (0.7) than the live
+          dashed boundary's 0.4 so the player can read the gap at a
+          glance. Rendered AFTER the live boundary so it stacks on top
+          when they overlap at game start or after a return-to-zero. ── */}
       <div style={{
         position: "absolute",
         left: DASH_LEFT_X, top: originY, width: DASH_LEFT_W, height: 1,
-        backgroundImage: `linear-gradient(90deg, ${ORIGIN_DASH_COLOR} 0, ${ORIGIN_DASH_COLOR} ${ORIGIN_DASH_SEG}px, transparent ${ORIGIN_DASH_SEG}px, transparent ${ORIGIN_DASH_SEG * 2}px)`,
-        backgroundSize: `${ORIGIN_DASH_SEG * 2}px 1px`,
-        backgroundRepeat: "repeat-x",
+        background: ORIGIN_DASH_COLOR,
         pointerEvents: "none",
       }} />
       <div style={{
         position: "absolute",
         left: DASH_RIGHT_X, top: originY, width: DASH_RIGHT_W, height: 1,
-        backgroundImage: `linear-gradient(90deg, ${ORIGIN_DASH_COLOR} 0, ${ORIGIN_DASH_COLOR} ${ORIGIN_DASH_SEG}px, transparent ${ORIGIN_DASH_SEG}px, transparent ${ORIGIN_DASH_SEG * 2}px)`,
-        backgroundSize: `${ORIGIN_DASH_SEG * 2}px 1px`,
-        backgroundRepeat: "repeat-x",
+        background: ORIGIN_DASH_COLOR,
         pointerEvents: "none",
       }} />
 
