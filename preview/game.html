@@ -53,12 +53,16 @@ const { useState, useEffect, useRef } = React;
 
 const TEST_SPEED    = false; // set true for 5x speed during development -- ALWAYS false before push
 const AI_LEVEL_DEFAULT = 3;
+// tickMs = fall interval per level. ~1.5x faster each step so the
+// difference is felt at the hands: L1 beginner-pleasant, L5 expert-
+// snappy. L1 -> L5 is ~4.3x speedup (600 / 140). Applied to both
+// players. TEST_SPEED overrides this to 110ms for dev playback.
 const AI_LEVEL_CONFIG  = {
-  1: { randomRatio: 0.8, aiPeriod: 3, holePenalty: 5,  bumpPenalty: 0.5 },
-  2: { randomRatio: 0.5, aiPeriod: 2, holePenalty: 15, bumpPenalty: 1   },
-  3: { randomRatio: 0.1, aiPeriod: 1, holePenalty: 30, bumpPenalty: 2   },
-  4: { randomRatio: 0.0, aiPeriod: 1, holePenalty: 40, bumpPenalty: 3   },
-  5: { randomRatio: 0.0, aiPeriod: 1, holePenalty: 60, bumpPenalty: 5   },
+  1: { randomRatio: 0.8, aiPeriod: 3, holePenalty: 5,  bumpPenalty: 0.5, tickMs: 600 },
+  2: { randomRatio: 0.5, aiPeriod: 2, holePenalty: 15, bumpPenalty: 1,   tickMs: 440 },
+  3: { randomRatio: 0.1, aiPeriod: 1, holePenalty: 30, bumpPenalty: 2,   tickMs: 320 },
+  4: { randomRatio: 0.0, aiPeriod: 1, holePenalty: 40, bumpPenalty: 3,   tickMs: 220 },
+  5: { randomRatio: 0.0, aiPeriod: 1, holePenalty: 60, bumpPenalty: 5,   tickMs: 140 },
 };
 
 // Build identity shown at the bottom of the start screen so any device
@@ -70,7 +74,10 @@ const APP_VERSION    = "v0.1";
 const APP_COMMIT     = "265393f";
 const APP_BUILD_DATE = "2026-05-26T13:45:00";
 
-const TICK_MS       = TEST_SPEED ? 110 : 550;
+// Default fall interval (used as a fallback when state.aiLevel is invalid).
+// Real tick rate comes from AI_LEVEL_CONFIG[aiLevel].tickMs, looked up at
+// effect-create time. TEST_SPEED globally overrides for fast dev playback.
+const TICK_MS_DEFAULT = 320;
 
 // Figma 124-1377 layout, adjusted so the FRAME height matches the play
 // area height exactly. No rows clipped at the frame edge -- every cell
@@ -792,9 +799,9 @@ function TetrisGame2P() {
           boundary: newBdy, p1ShiftAcc, p2ShiftAcc, winner, lastGain,
         };
       });
-    }, TICK_MS);
+    }, TEST_SPEED ? 110 : (AI_LEVEL_CONFIG[state.aiLevel]?.tickMs || TICK_MS_DEFAULT));
     return () => clearInterval(id);
-  }, []);
+  }, [state.aiLevel]);
 
   // applyP1: human-input dispatcher for the P1 piece. Used by both the
   // touch-gesture handler (iOS) and the keyboard handler (laptop testing).
