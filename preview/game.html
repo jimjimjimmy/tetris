@@ -177,6 +177,16 @@ const GAIN_BRACKET_X   = 265;    // right-side gain bracket left edge
 const GAIN_TEXT_X      = 273;    // "+N" text left edge
 const GAIN_TEXT_OFFSET = 6;      // gap between text and bracket cap
 const GAIN_FADE_MS     = 1500;
+
+// Lock delay: how long a piece sits at its "can't move further"
+// position before locking. Successful human input (left/right/rotate
+// during the delay) resets the timer up to MAX_LOCK_RESETS times so
+// players can slide along the floor / boundary edge. AI moves do NOT
+// reset (the AI doesn't need this feel; humans do). Hard drop bypasses
+// the delay only in the sense that it sets y and lets the next tick
+// lock without the human getting another reset.
+const LOCK_DELAY_MS    = 250;
+const MAX_LOCK_RESETS  = 5;
 // Easing for stack-bracket length, gain-bracket position, and dashed-line
 // reposition. Same curve the existing animateBoundary uses inside
 // BoardViewport, applied consistently so all boundary-tracking overlays
@@ -317,13 +327,13 @@ function makeInitState2P() {
   return {
     board:    initBoard2P(),
     aiTick:   0,
-    p1:       { type: p1Type, rot: 0, x: 3, y: p1SpawnY2P(p1Type) },
+    p1:       { type: p1Type, rot: 0, x: 3, y: p1SpawnY2P(p1Type), lockPendingTs: null, lockResets: 0 },
     // Two-deep NEXT queue for P1: p1Next is the next-to-spawn piece
     // (rendered in the BOTTOM slot of the NEXT block), p1NextNext is
     // the one after that (TOP slot -- newest entry).
     p1Next:     randPiece(),
     p1NextNext: randPiece(),
-    p2:       { type: p2Type, rot: 0, x: 3, y: 0 },
+    p2:       { type: p2Type, rot: 0, x: 3, y: 0, lockPendingTs: null, lockResets: 0 },
     // Two-deep NEXT queue for P2, mirror of P1's queue. p2Next is the
     // next-to-spawn piece (BOTTOM slot when player picked P2); p2NextNext
     // is the piece after that (TOP slot).
@@ -677,37 +687,54 @@ function TetrisGame2P() {
           }
         }
 
-        // P1 physics
+        // P1 physics with lock delay.
+        // If the piece can move up, it does, and the lock-pending timer
+        // clears (the piece is no longer stuck). If it can't move, the
+        // timer starts; the piece doesn't lock until LOCK_DELAY_MS has
+        // elapsed. Successful human input during this window resets the
+        // timer (handled inside applyP1), up to MAX_LOCK_RESETS.
         if (isValid2P(getCells(p1.type, p1.rot, p1.x, p1.y - 1), board, boundary, 1)) {
-          p1 = { ...p1, y: p1.y - 1 };
+          p1 = { ...p1, y: p1.y - 1, lockPendingTs: null, lockResets: 0 };
         } else {
-          board = lockPiece2P(board, getCells(p1.type, p1.rot, p1.x, p1.y), CELL_P1);
-          const [b1, c1] = clearP1_2P(board, boundary);
-          n1 = c1; board = b1;
-          p1 = { type: p1Next, rot: 0, x: 3, y: p1SpawnY2P(p1Next) };
-          // Shift the 2-deep NEXT queue: p1NextNext becomes the new
-          // next-to-spawn, and a fresh random piece enters the queue.
-          p1Next     = p1NextNext;
-          p1NextNext = randPiece();
-          if (!isValid2P(getCells(p1.type, p1.rot, p1.x, p1.y), board, boundary, 1)) {
-            return { ...s, board, p1, p1Next, p1NextNext, p2, p2Next, p2NextNext, phase: "over", winner: 2 };
+          const nowMs = Date.now();
+          if (p1.lockPendingTs == null) {
+            // Start the timer this tick. Piece stays put, no lock yet.
+            p1 = { ...p1, lockPendingTs: nowMs };
+          } else if (nowMs - p1.lockPendingTs >= LOCK_DELAY_MS) {
+            // Grace period elapsed -- commit the lock.
+            board = lockPiece2P(board, getCells(p1.type, p1.rot, p1.x, p1.y), CELL_P1);
+            const [b1, c1] = clearP1_2P(board, boundary);
+            n1 = c1; board = b1;
+            p1 = { type: p1Next, rot: 0, x: 3, y: p1SpawnY2P(p1Next), lockPendingTs: null, lockResets: 0 };
+            // Shift the 2-deep NEXT queue: p1NextNext becomes the new
+            // next-to-spawn, and a fresh random piece enters the queue.
+            p1Next     = p1NextNext;
+            p1NextNext = randPiece();
+            if (!isValid2P(getCells(p1.type, p1.rot, p1.x, p1.y), board, boundary, 1)) {
+              return { ...s, board, p1, p1Next, p1NextNext, p2, p2Next, p2NextNext, phase: "over", winner: 2 };
+            }
           }
+          // else: still within grace -- piece stays put for this tick.
         }
 
-        // P2 physics
+        // P2 physics (mirror of P1, falling DOWN toward boundary).
         if (isValid2P(getCells(p2.type, p2.rot, p2.x, p2.y + 1), board, boundary, 2)) {
-          p2 = { ...p2, y: p2.y + 1 };
+          p2 = { ...p2, y: p2.y + 1, lockPendingTs: null, lockResets: 0 };
         } else {
-          board = lockPiece2P(board, getCells(p2.type, p2.rot, p2.x, p2.y), CELL_P2);
-          const [b2, c2] = clearP2_2P(board, boundary);
-          n2 = c2; board = b2;
-          p2 = { type: p2Next, rot: 0, x: 3, y: 0 };
-          // Shift the 2-deep P2 NEXT queue: p2NextNext becomes the new
-          // next-to-spawn, and a fresh random piece enters the queue.
-          p2Next     = p2NextNext;
-          p2NextNext = randPiece();
-          if (!isValid2P(getCells(p2.type, p2.rot, p2.x, p2.y), board, boundary, 2)) {
-            return { ...s, board, p1, p1Next, p1NextNext, p2, p2Next, p2NextNext, phase: "over", winner: 1 };
+          const nowMs = Date.now();
+          if (p2.lockPendingTs == null) {
+            p2 = { ...p2, lockPendingTs: nowMs };
+          } else if (nowMs - p2.lockPendingTs >= LOCK_DELAY_MS) {
+            board = lockPiece2P(board, getCells(p2.type, p2.rot, p2.x, p2.y), CELL_P2);
+            const [b2, c2] = clearP2_2P(board, boundary);
+            n2 = c2; board = b2;
+            p2 = { type: p2Next, rot: 0, x: 3, y: 0, lockPendingTs: null, lockResets: 0 };
+            // Shift the 2-deep P2 NEXT queue.
+            p2Next     = p2NextNext;
+            p2NextNext = randPiece();
+            if (!isValid2P(getCells(p2.type, p2.rot, p2.x, p2.y), board, boundary, 2)) {
+              return { ...s, board, p1, p1Next, p1NextNext, p2, p2Next, p2NextNext, phase: "over", winner: 1 };
+            }
           }
         }
 
@@ -786,12 +813,12 @@ function TetrisGame2P() {
           // cells are no longer valid under newBdy, respawn it from
           // the NEXT queue.
           if (!isValid2P(getCells(p1.type, p1.rot, p1.x, p1.y), board, newBdy, 1)) {
-            p1 = { type: p1Next, rot: 0, x: 3, y: p1SpawnY2P(p1Next) };
+            p1 = { type: p1Next, rot: 0, x: 3, y: p1SpawnY2P(p1Next), lockPendingTs: null, lockResets: 0 };
             p1Next     = p1NextNext;
             p1NextNext = randPiece();
           }
           if (!isValid2P(getCells(p2.type, p2.rot, p2.x, p2.y), board, newBdy, 2)) {
-            p2 = { type: p2Next, rot: 0, x: 3, y: 0 };
+            p2 = { type: p2Next, rot: 0, x: 3, y: 0, lockPendingTs: null, lockResets: 0 };
             p2Next     = p2NextNext;
             p2NextNext = randPiece();
           }
@@ -837,30 +864,42 @@ function TetrisGame2P() {
     setState(s => {
       if (s.phase !== "playing" || s.paused || s.summary) return s;
       const { p1, board, boundary } = s;
+      // Lock-delay reset: if the piece is currently in the lock-pending
+      // window AND we haven't blown the reset cap, a successful input
+      // resets the timer so the player can slide along the edge.
+      const lockReset = (piece) => {
+        if (piece.lockPendingTs == null) return {};
+        if ((piece.lockResets || 0) >= MAX_LOCK_RESETS) return {};
+        return { lockPendingTs: Date.now(), lockResets: (piece.lockResets || 0) + 1 };
+      };
       if (action === "tap") {
         const nr = (p1.rot + 1) % 4;
         if (isValid2P(getCells(p1.type, nr, p1.x, p1.y), board, boundary, 1)) {
           haptic.light();
-          return { ...s, p1: { ...p1, rot: nr } };
+          return { ...s, p1: { ...p1, rot: nr, ...lockReset(p1) } };
         }
       } else if (action === "left") {
         if (isValid2P(getCells(p1.type, p1.rot, p1.x - 1, p1.y), board, boundary, 1)) {
           haptic.light();
-          return { ...s, p1: { ...p1, x: p1.x - 1 } };
+          return { ...s, p1: { ...p1, x: p1.x - 1, ...lockReset(p1) } };
         }
       } else if (action === "right") {
         if (isValid2P(getCells(p1.type, p1.rot, p1.x + 1, p1.y), board, boundary, 1)) {
           haptic.light();
-          return { ...s, p1: { ...p1, x: p1.x + 1 } };
+          return { ...s, p1: { ...p1, x: p1.x + 1, ...lockReset(p1) } };
         }
       } else if (action === "up") {
         // Hard drop UP: keep moving until invalid. P1 floats UP so smallest
-        // valid y is the lock position. Tick physics will lock on next frame.
+        // valid y is the lock position. Tick physics will lock on next
+        // frame. Hard drop bypasses lock-delay extension -- the timer is
+        // set to a past instant so the next tick locks immediately.
         let y = p1.y;
         while (isValid2P(getCells(p1.type, p1.rot, p1.x, y - 1), board, boundary, 1)) {
           y--;
         }
-        if (y !== p1.y) return { ...s, p1: { ...p1, y } };
+        if (y !== p1.y) {
+          return { ...s, p1: { ...p1, y, lockPendingTs: Date.now() - LOCK_DELAY_MS, lockResets: MAX_LOCK_RESETS } };
+        }
       }
       return s;
     });
@@ -873,31 +912,37 @@ function TetrisGame2P() {
     setState(s => {
       if (s.phase !== "playing" || s.paused || s.summary) return s;
       const { p2, board, boundary } = s;
+      const lockReset = (piece) => {
+        if (piece.lockPendingTs == null) return {};
+        if ((piece.lockResets || 0) >= MAX_LOCK_RESETS) return {};
+        return { lockPendingTs: Date.now(), lockResets: (piece.lockResets || 0) + 1 };
+      };
       if (action === "tap") {
         const nr = (p2.rot + 1) % 4;
         if (isValid2P(getCells(p2.type, nr, p2.x, p2.y), board, boundary, 2)) {
           haptic.light();
-          return { ...s, p2: { ...p2, rot: nr } };
+          return { ...s, p2: { ...p2, rot: nr, ...lockReset(p2) } };
         }
       } else if (action === "left") {
         if (isValid2P(getCells(p2.type, p2.rot, p2.x - 1, p2.y), board, boundary, 2)) {
           haptic.light();
-          return { ...s, p2: { ...p2, x: p2.x - 1 } };
+          return { ...s, p2: { ...p2, x: p2.x - 1, ...lockReset(p2) } };
         }
       } else if (action === "right") {
         if (isValid2P(getCells(p2.type, p2.rot, p2.x + 1, p2.y), board, boundary, 2)) {
           haptic.light();
-          return { ...s, p2: { ...p2, x: p2.x + 1 } };
+          return { ...s, p2: { ...p2, x: p2.x + 1, ...lockReset(p2) } };
         }
       } else if (action === "down") {
-        // Hard drop DOWN: keep moving until invalid. P2 falls DOWN so
-        // the largest valid y is the lock position. Tick physics locks
-        // on the next frame.
+        // Hard drop DOWN: same pattern as P1's hard drop UP. Bypass
+        // lock-delay extension by setting the timer to a past instant.
         let y = p2.y;
         while (isValid2P(getCells(p2.type, p2.rot, p2.x, y + 1), board, boundary, 2)) {
           y++;
         }
-        if (y !== p2.y) return { ...s, p2: { ...p2, y } };
+        if (y !== p2.y) {
+          return { ...s, p2: { ...p2, y, lockPendingTs: Date.now() - LOCK_DELAY_MS, lockResets: MAX_LOCK_RESETS } };
+        }
       }
       return s;
     });
