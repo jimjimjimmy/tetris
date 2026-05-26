@@ -900,6 +900,15 @@ function TetrisGame2P() {
         if (y !== p1.y) {
           return { ...s, p1: { ...p1, y, lockPendingTs: Date.now() - LOCK_DELAY_MS, lockResets: MAX_LOCK_RESETS } };
         }
+      } else if (action === "soft") {
+        // Soft drop for P1: one row DOWN (y+1), backward from boundary.
+        // P1 floats UP naturally; "soft" is the manual backward step
+        // used to dodge / reposition. Treated as a successful input so
+        // it refreshes the lock-delay timer like any other move.
+        if (isValid2P(getCells(p1.type, p1.rot, p1.x, p1.y + 1), board, boundary, 1)) {
+          haptic.light();
+          return { ...s, p1: { ...p1, y: p1.y + 1, ...lockReset(p1) } };
+        }
       }
       return s;
     });
@@ -943,6 +952,14 @@ function TetrisGame2P() {
         if (y !== p2.y) {
           return { ...s, p2: { ...p2, y, lockPendingTs: Date.now() - LOCK_DELAY_MS, lockResets: MAX_LOCK_RESETS } };
         }
+      } else if (action === "soft") {
+        // Soft drop for P2: one row UP (y-1), backward from boundary.
+        // P2 falls DOWN naturally; "soft" is the manual backward step.
+        // Refreshes the lock-delay timer like any other move.
+        if (isValid2P(getCells(p2.type, p2.rot, p2.x, p2.y - 1), board, boundary, 2)) {
+          haptic.light();
+          return { ...s, p2: { ...p2, y: p2.y - 1, ...lockReset(p2) } };
+        }
       }
       return s;
     });
@@ -955,19 +972,21 @@ function TetrisGame2P() {
   playerSideRef.current = state.playerSide;
 
   // Keyboard: "0" reset, "p"/"P" pause, arrows + space drive whichever
-  // side the user picked on the start screen. The "backward" direction
-  // (ArrowDown for P1, ArrowUp for P2) is intentionally unbound.
+  // side the user picked on the start screen.
+  //   ArrowLeft / ArrowRight -- horizontal move
+  //   ArrowUp                -- P1 hard drop (boost) / P2 soft drop (backward step)
+  //   ArrowDown              -- P1 soft drop (backward step) / P2 hard drop (boost)
+  //   Space                  -- rotate
   React.useEffect(() => {
     const onKey = (e) => {
       if (e.key === "0") setState(makeInitState2P());
       else if (e.key === "p" || e.key === "P") { setState(s => ({...s, paused: !s.paused})); return; }
       const side = playerSideRef.current;
       const apply = side === 2 ? applyP2 : applyP1;
-      const fwd   = side === 2 ? "down" : "up";
       if      (e.key === "ArrowLeft")  apply("left");
       else if (e.key === "ArrowRight") apply("right");
-      else if (e.key === "ArrowUp")    { if (side !== 2) apply(fwd); }
-      else if (e.key === "ArrowDown")  { if (side === 2) apply(fwd); }
+      else if (e.key === "ArrowUp")    apply(side === 2 ? "soft" : "up");
+      else if (e.key === "ArrowDown")  apply(side === 2 ? "down" : "soft");
       else if (e.key === " ")          apply("tap");
     };
     window.addEventListener("keydown", onKey);
@@ -988,27 +1007,35 @@ function TetrisGame2P() {
     // live -- no waiting on touchend. Tap rotates on release if the finger
     // never moved much. Swipe-up (buoyancy boost) hard-drops on release.
     // Down-swipes do NOTHING -- P1 cannot move backward against its float.
-    const STEP_PX  = 30;   // ratchet step: each 30px of horizontal drag advances one cell. After each fire the cumulative threshold advances so a continuous drag steps discretely, not slides.
+    const STEP_PX  = 30;   // ratchet step: each 30px of drag advances one cell.
     const TAP_PX   = 10;   // movement under this counts as a tap
     let startX = 0, startY = 0;
-    let lastDx = 0;
+    let lastDx = 0, lastDy = 0;
     let moved  = false;
     const onStart = (e) => {
       if (e.touches.length !== 1) return;
       startX = e.touches[0].clientX;
       startY = e.touches[0].clientY;
-      lastDx = 0; moved = false;
+      lastDx = 0; lastDy = 0; moved = false;
     };
     const onMove = (e) => {
       if (e.touches.length !== 1) return;
       const dx = e.touches[0].clientX - startX;
-      const apply = playerSideRef.current === 2 ? applyP2 : applyP1;
+      const dy = e.touches[0].clientY - startY;
+      const side  = playerSideRef.current;
+      const apply = side === 2 ? applyP2 : applyP1;
       // Drain horizontal motion: one cell per STEP_PX dragged either way.
       while (dx - lastDx >=  STEP_PX) { apply("right"); lastDx += STEP_PX; moved = true; }
       while (dx - lastDx <= -STEP_PX) { apply("left");  lastDx -= STEP_PX; moved = true; }
-      // Vertical motion is held until release. The "boost" direction is
-      // UP for P1 (floats up) and DOWN for P2 (falls down). The opposite
-      // direction is the backward gesture and does nothing.
+      // Drain vertical-backward motion (soft drop) per STEP_PX. P1's
+      // backward = DOWN (positive dy); P2's backward = UP (negative dy).
+      // The boost direction (P1 up, P2 down) is intentionally not ratched
+      // here -- it fires hard drop on touch end.
+      if (side === 2) {
+        while (lastDy - dy >= STEP_PX) { apply("soft"); lastDy -= STEP_PX; moved = true; }
+      } else {
+        while (dy - lastDy >= STEP_PX) { apply("soft"); lastDy += STEP_PX; moved = true; }
+      }
     };
     const onEnd = (e) => {
       if (e.changedTouches.length !== 1) return;
