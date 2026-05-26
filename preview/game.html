@@ -1546,31 +1546,26 @@ function TetrisGame2P() {
         pointerEvents: "none",
       }} />
 
-      {/* ── Live boundary dashed lines (Figma 128-3004 nodes 135:3897 + 135:3904,
-          and gain/loss state per 152-1747 / 152-2247). 4px on, 4px off.
-          Drawn ONLY in the margins -- the play area itself stays clear
-          so pieces are never sliced by a line. The `top` animates when
-          the boundary shifts so the dashes glide. Color flips to green
-          (gain) or red (loss) when boundary != BDY_2P; back to white at
-          neutral. CSS can't transition gradient stops, so the color
-          flip is instant -- the vertical slide still eases. ── */}
+      {/* ── Live boundary line (Figma 152-1747 / 152-2247). Solid 1px line
+          in the margins; the play area itself stays clear so pieces
+          are never sliced. The `top` animates when the boundary shifts
+          so the line glides. Color: green (gain) / red (loss) when
+          boundary != BDY_2P; white DASH_COLOR at neutral. The line is
+          solid per Figma (an earlier read of the Figma extract used
+          "Dash Line" naming but the actual rendered shape is solid). ── */}
       <div style={{
         position: "absolute",
         left: DASH_LEFT_X, top: boundaryY, width: DASH_LEFT_W, height: 1,
-        backgroundImage: `linear-gradient(90deg, ${bdyView ? bdyView.dashRgba : DASH_COLOR} 0, ${bdyView ? bdyView.dashRgba : DASH_COLOR} ${DASH_SEG}px, transparent ${DASH_SEG}px, transparent ${DASH_SEG * 2}px)`,
-        backgroundSize: `${DASH_SEG * 2}px 1px`,
-        backgroundRepeat: "repeat-x",
+        background: bdyView ? bdyView.dashRgba : DASH_COLOR,
         pointerEvents: "none",
-        transition: `top ${BRACKET_EASE}`,
+        transition: `top ${BRACKET_EASE}, background-color 200ms linear`,
       }} />
       <div style={{
         position: "absolute",
         left: DASH_RIGHT_X, top: boundaryY, width: DASH_RIGHT_W, height: 1,
-        backgroundImage: `linear-gradient(90deg, ${bdyView ? bdyView.dashRgba : DASH_COLOR} 0, ${bdyView ? bdyView.dashRgba : DASH_COLOR} ${DASH_SEG}px, transparent ${DASH_SEG}px, transparent ${DASH_SEG * 2}px)`,
-        backgroundSize: `${DASH_SEG * 2}px 1px`,
-        backgroundRepeat: "repeat-x",
+        background: bdyView ? bdyView.dashRgba : DASH_COLOR,
         pointerEvents: "none",
-        transition: `top ${BRACKET_EASE}`,
+        transition: `top ${BRACKET_EASE}, background-color 200ms linear`,
       }} />
 
       {/* ── Origin (neutral) dashed lines. Fixed at ROWS_2P / 2, never
