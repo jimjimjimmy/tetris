@@ -15,8 +15,16 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
-      width: 100%; height: 100%;
-      background: #000;
+      width: 100%;
+      /* 100% on iOS Safari = layout viewport (excludes the dynamic browser
+         chrome / home-indicator zone), leaving a visible black bar at the
+         bottom. 100dvh = dynamic viewport height, which expands/contracts
+         as Safari UI shows/hides and includes the safe-area below. The
+         100vh fallback comes first for browsers without dvh support. */
+      height: 100vh;
+      height: 100dvh;
+      min-height: 100dvh;
+      background: #0a0a0a;
       overflow: hidden;
       overscroll-behavior: none;
       touch-action: none;
@@ -27,15 +35,25 @@
     }
     /* True edge-to-edge: no body padding, #root fills the entire viewport
        including under the notch and home indicator. The game wrapper
-       scales to fit WIDTH (cover-style), so the canvas runs to the
-       physical screen edges horizontally with minimal vertical overflow
-       clipped (the design's 402:874 aspect is within ~1% of typical
-       phone aspect ratios, so vertical clipping is negligible). */
+       scales to fit HEIGHT, so the canvas runs to the physical screen
+       edges vertically. Background extends behind the iOS home indicator
+       zone via 100dvh + safe-area-inset-bottom on the root. */
     body {
       padding: 0;
     }
     #root {
-      position: fixed; inset: 0;
+      position: fixed;
+      top: 0; right: 0; bottom: 0; left: 0;
+      width: 100%;
+      /* dvh fills the dynamic viewport (including the iOS home-indicator
+         zone) so the app's background runs edge to edge with no black
+         bar. The FullscreenGame canvas scales to this same height, so the
+         game itself extends into the home-indicator zone -- the system
+         overlays a translucent home-indicator pill on top, which reads
+         naturally over our dark grid. */
+      height: 100vh;
+      height: 100dvh;
+      min-height: 100dvh;
       display: flex; align-items: center; justify-content: center;
       background: #0a0a0a;
       overflow: hidden;
