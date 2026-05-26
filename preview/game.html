@@ -160,8 +160,17 @@ const GRID_LINE_COLOR  = "rgba(255,255,255,0.04)";
 // Figma 128-3004 new decorative overlays (stack brackets, +N gain indicator,
 // dashed boundary line). All in the same translucent-white family that the
 // chrome icons use, slightly more visible than the grid lines.
-const BRACKET_COLOR    = "rgba(255,255,255,0.5)";   // stack brackets + gain bracket
-const DASH_COLOR       = "rgba(255,255,255,0.4)";   // dashed boundary line
+const BRACKET_COLOR    = "rgba(255,255,255,0.5)";   // stack brackets
+const DASH_COLOR       = "rgba(255,255,255,0.4)";   // dashed boundary line (neutral)
+// Figma 152-1747 / 152-2247: when the boundary is displaced, the live
+// dash line + indicator bracket + +N/-N text all switch to a status
+// color. Gain (local player ahead) = #2fff00, loss = #ff0000.
+// _RGBA values are alpha-baked for the live-dash linear-gradient (CSS
+// can't transition gradient stops, so we pre-mix the alpha).
+const GAIN_HEX         = "#2fff00";
+const LOSS_HEX         = "#ff0000";
+const GAIN_DASH_RGBA   = "rgba(47, 255, 0, 0.5)";
+const LOSS_DASH_RGBA   = "rgba(255, 0, 0, 0.5)";
 const BRACKET_X        = 53;     // left-side bracket left edge (8px left of PLAY_X=61)
 const BRACKET_W        = 4;      // bracket bounding-box width
 const BRACKET_STEM_X   = 1;      // stem within bracket box (Figma "V line" at x=1.5, we use 1 for integer pixel)
@@ -1439,10 +1448,11 @@ function TetrisGame2P() {
   // the live boundary differs from the origin (BDY_2P). The vertical line
   // spans from the origin (dotted) to the live boundary (dashed). The
   // number reflects the actual row gap. Sign + color depend on whether
-  // the local player is currently AHEAD (+, white) or BEHIND (-, red).
-  //   Local P1 ahead -> "+N" white,  text below the live line in P1 territory
+  // the local player is currently AHEAD (+, green #2fff00) or BEHIND
+  // (-, red #ff0000) per Figma 152-1747 / 152-2247.
+  //   Local P1 ahead  -> "+N" green, text below the live line in P1 territory
   //   Local P1 behind -> "-N" red,   text below the live line in P1 territory
-  //   Local P2 ahead -> "+N" white,  text above the live line in P2 territory
+  //   Local P2 ahead  -> "+N" green, text above the live line in P2 territory
   //   Local P2 behind -> "-N" red,   text above the live line in P2 territory
   let bdyView = null;
   if (boundary !== BDY_2P && (playerSide === 1 || playerSide === 2)) {
@@ -1451,16 +1461,25 @@ function TetrisGame2P() {
     const localAhead  = gainerSide === playerSide;
     const sign        = localAhead ? "+" : "-";
     const rows        = Math.abs(gap);
-    const color       = localAhead ? BRACKET_COLOR : "rgba(255, 110, 110, 0.85)";
+    // Base hex (Figma) so we can apply Figma's per-element opacities
+    // via the CSS opacity property (0.5 on cap + text, 0.15 on stem).
+    const colorHex    = localAhead ? GAIN_HEX : LOSS_HEX;
+    // Pre-mixed rgba for the live-dash linear-gradient.
+    const dashRgba    = localAhead ? GAIN_DASH_RGBA : LOSS_DASH_RGBA;
     const bracketTop  = Math.min(originY, boundaryY);
     const bracketH    = Math.abs(originY - boundaryY);
+    // Cap sits at the LIVE boundary end of the bracket (where the
+    // dashed line is). For gain (live above origin) that's the top
+    // edge of the bracket; for loss (live below origin) it's the
+    // bottom edge.
+    const capTop = boundaryY;
     // Text sits at the live boundary, on the LOCAL player's side.
     // P1 territory is below boundary -> text below live line.
     // P2 territory is above boundary -> text above live line.
     const textTop = playerSide === 1
       ? boundaryY + GAIN_TEXT_OFFSET
       : boundaryY - GAIN_TEXT_OFFSET - 12;
-    bdyView = { sign, rows, color, bracketTop, bracketH, textTop };
+    bdyView = { sign, rows, colorHex, dashRgba, bracketTop, bracketH, capTop, textTop };
   }
 
   return (
@@ -1527,14 +1546,18 @@ function TetrisGame2P() {
         pointerEvents: "none",
       }} />
 
-      {/* ── Live boundary dashed lines (Figma 128-3004 nodes 135:3897 + 135:3904).
-          4px on, 4px off. Drawn ONLY in the margins -- the play area
-          itself stays clear so pieces are never sliced by a line. The
-          `top` animates when the boundary shifts so the dashes glide. ── */}
+      {/* ── Live boundary dashed lines (Figma 128-3004 nodes 135:3897 + 135:3904,
+          and gain/loss state per 152-1747 / 152-2247). 4px on, 4px off.
+          Drawn ONLY in the margins -- the play area itself stays clear
+          so pieces are never sliced by a line. The `top` animates when
+          the boundary shifts so the dashes glide. Color flips to green
+          (gain) or red (loss) when boundary != BDY_2P; back to white at
+          neutral. CSS can't transition gradient stops, so the color
+          flip is instant -- the vertical slide still eases. ── */}
       <div style={{
         position: "absolute",
         left: DASH_LEFT_X, top: boundaryY, width: DASH_LEFT_W, height: 1,
-        backgroundImage: `linear-gradient(90deg, ${DASH_COLOR} 0, ${DASH_COLOR} ${DASH_SEG}px, transparent ${DASH_SEG}px, transparent ${DASH_SEG * 2}px)`,
+        backgroundImage: `linear-gradient(90deg, ${bdyView ? bdyView.dashRgba : DASH_COLOR} 0, ${bdyView ? bdyView.dashRgba : DASH_COLOR} ${DASH_SEG}px, transparent ${DASH_SEG}px, transparent ${DASH_SEG * 2}px)`,
         backgroundSize: `${DASH_SEG * 2}px 1px`,
         backgroundRepeat: "repeat-x",
         pointerEvents: "none",
@@ -1543,7 +1566,7 @@ function TetrisGame2P() {
       <div style={{
         position: "absolute",
         left: DASH_RIGHT_X, top: boundaryY, width: DASH_RIGHT_W, height: 1,
-        backgroundImage: `linear-gradient(90deg, ${DASH_COLOR} 0, ${DASH_COLOR} ${DASH_SEG}px, transparent ${DASH_SEG}px, transparent ${DASH_SEG * 2}px)`,
+        backgroundImage: `linear-gradient(90deg, ${bdyView ? bdyView.dashRgba : DASH_COLOR} 0, ${bdyView ? bdyView.dashRgba : DASH_COLOR} ${DASH_SEG}px, transparent ${DASH_SEG}px, transparent ${DASH_SEG * 2}px)`,
         backgroundSize: `${DASH_SEG * 2}px 1px`,
         backgroundRepeat: "repeat-x",
         pointerEvents: "none",
@@ -1608,30 +1631,49 @@ function TetrisGame2P() {
       )}
 
       {/* ── Boundary change indicator (right side, local player only). The
-          vertical line anchors at the live boundary (dashed) and extends
-          to the origin (dotted) -- its length is the current row gap. The
-          number sign + color comes from the local player's perspective:
-          "+N" white when ahead, "-N" red when behind. Persistent while
-          boundary != BDY_2P; top/height transition with BRACKET_EASE so
-          the line glides as the boundary shifts. ── */}
+          stem extends from the live boundary (dashed) to the origin
+          (dotted). Cap sits at the live boundary end. Sign + color
+          come from the local player's perspective per Figma 152-1747
+          (gain) / 152-2247 (loss):
+            ahead  -> "+N" + green  (#2fff00)
+            behind -> "-N" + red    (#ff0000)
+          Element opacities per Figma: stem 0.15 (thin guide), cap and
+          text 0.5 (muted accent). Persistent while boundary != BDY_2P;
+          top/height transition with BRACKET_EASE so the line glides as
+          the boundary shifts. ── */}
       {bdyView && (
         <React.Fragment>
+          {/* Bracket stem -- 1px wide vertical from origin to live, opacity 0.15 */}
           <div style={{
             position: "absolute",
             left: GAIN_BRACKET_X + BRACKET_STEM_X, top: bdyView.bracketTop,
             width: 1, height: bdyView.bracketH,
-            background: bdyView.color,
+            background: bdyView.colorHex,
+            opacity: 0.15,
             pointerEvents: "none",
             transition: `top ${BRACKET_EASE}, height ${BRACKET_EASE}, background-color 200ms linear`,
           }} />
+          {/* Bracket cap -- 4px x 1px horizontal at the LIVE boundary end, opacity 0.5 */}
+          <div style={{
+            position: "absolute",
+            left: GAIN_BRACKET_X, top: bdyView.capTop,
+            width: BRACKET_CAP_W, height: 1,
+            background: bdyView.colorHex,
+            opacity: 0.5,
+            pointerEvents: "none",
+            transition: `top ${BRACKET_EASE}, background-color 200ms linear`,
+          }} />
+          {/* "+N" / "-N" text -- Inter Regular 10/2px, uppercase, opacity 0.5 */}
           <div style={{
             position: "absolute",
             left: GAIN_TEXT_X, top: bdyView.textTop,
             fontFamily: "'Inter', sans-serif",
-            fontWeight: 600,
+            fontWeight: 400,
             fontSize: 10,
-            letterSpacing: 0,
-            color: bdyView.color,
+            letterSpacing: 2,
+            textTransform: "uppercase",
+            color: bdyView.colorHex,
+            opacity: 0.5,
             pointerEvents: "none",
             transition: `top ${BRACKET_EASE}, color 200ms linear`,
             fontVariantNumeric: "tabular-nums",
