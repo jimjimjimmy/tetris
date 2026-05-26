@@ -70,6 +70,13 @@ const { useState, useEffect, useRef } = React;
 // ============================================================
 
 const TEST_SPEED    = false; // set true for 5x speed during development -- ALWAYS false before push
+
+// Debug smoke-test mode: when true, randPiece() always returns "BAR",
+// a full-width 10x1 horizontal piece. One BAR drop = one filled row =
+// exactly one row clear, so boundary-shift transitions can be tested
+// deterministically without playing through a full game. Permanent
+// smoke-test tool. Always false before push.
+const DEBUG_PIECES  = false;
 const AI_LEVEL_DEFAULT = 3;
 // tickMs = fall interval per level. ~1.5x faster each step so the
 // difference is felt at the hands: L1 beginner-pleasant, L5 expert-
@@ -114,8 +121,6 @@ const PLAY_Y       = 0;                     // play area starts at frame top
 const GAME_2P_H    = ROWS_2P * CELL;        // = 880  -- frame matches play exactly
 const P2_COLOR_2P  = "#4a4a4a";
 const DEMO_DURATION_S = 300;
-const DECAY_RATE   = 0.05;
-const MIN_SHIFT    = 0.25;
 
 // Right sidebar (Figma absolute coords inside the 402x874 frame)
 const SIDEBAR_X        = 320;
@@ -244,6 +249,15 @@ const SHAPES = {
     [[0,1],[1,1],[2,1],[0,2]],
     [[0,0],[1,0],[1,1],[1,2]],
   ],
+  // DEBUG_PIECES smoke-test piece: 10x1 horizontal full-width bar. All
+  // four "rotations" are identical (rotation is a no-op) so the piece
+  // can be dropped straight into any row to trigger exactly one clear.
+  BAR: [
+    [[0,0],[1,0],[2,0],[3,0],[4,0],[5,0],[6,0],[7,0],[8,0],[9,0]],
+    [[0,0],[1,0],[2,0],[3,0],[4,0],[5,0],[6,0],[7,0],[8,0],[9,0]],
+    [[0,0],[1,0],[2,0],[3,0],[4,0],[5,0],[6,0],[7,0],[8,0],[9,0]],
+    [[0,0],[1,0],[2,0],[3,0],[4,0],[5,0],[6,0],[7,0],[8,0],[9,0]],
+  ],
 };
 
 const PIECE_COLOR = "#B1B2B3";
@@ -267,7 +281,14 @@ const CELL_TO_COLOR_2P = {
 // ============================================================
 
 function randPiece() {
+  if (DEBUG_PIECES) return "BAR";
   return PIECE_TYPES[Math.floor(Math.random() * PIECE_TYPES.length)];
+}
+// Spawn x for a piece type. Default x=3 centers the 4-wide
+// standard pieces; BAR is 10 wide and must spawn at x=0 so its cells
+// land in cols 0..9 (full row width) instead of 3..12 (out of bounds).
+function spawnX(type) {
+  return type === "BAR" ? 0 : 3;
 }
 function getCells(type, rot, px, py) {
   return SHAPES[type][rot].map(([dc, dr]) => [px + dc, py + dr]);
@@ -333,13 +354,13 @@ function makeInitState2P() {
   return {
     board:    initBoard2P(),
     aiTick:   0,
-    p1:       { type: p1Type, rot: 0, x: 3, y: p1SpawnY2P(p1Type), lockPendingTs: null, lockResets: 0 },
+    p1:       { type: p1Type, rot: 0, x: spawnX(p1Type), y: p1SpawnY2P(p1Type), lockPendingTs: null, lockResets: 0 },
     // Two-deep NEXT queue for P1: p1Next is the next-to-spawn piece
     // (rendered in the BOTTOM slot of the NEXT block), p1NextNext is
     // the one after that (TOP slot -- newest entry).
     p1Next:     randPiece(),
     p1NextNext: randPiece(),
-    p2:       { type: p2Type, rot: 0, x: 3, y: 0, lockPendingTs: null, lockResets: 0 },
+    p2:       { type: p2Type, rot: 0, x: spawnX(p2Type), y: 0, lockPendingTs: null, lockResets: 0 },
     // Two-deep NEXT queue for P2, mirror of P1's queue. p2Next is the
     // next-to-spawn piece (BOTTOM slot when player picked P2); p2NextNext
     // is the piece after that (TOP slot).
@@ -348,8 +369,6 @@ function makeInitState2P() {
     p1Lines:  0,
     p2Lines:  0,
     boundary:    BDY_2P,
-    p1ShiftAcc:  0,
-    p2ShiftAcc:  0,
     winner:      null,
     // phase: "start" -> start screen with side select (placeholder UI);
     //        "playing" -> active game; "over" -> game-over overlay.
@@ -371,15 +390,6 @@ function makeInitState2P() {
     // coordinates (pre-shift). Cleared after CLEAR_FLASH_MS.
     clearAnim:   null,
   };
-}
-
-function decayShiftAt(priorClears) {
-  return Math.max(MIN_SHIFT, 1 / (1 + DECAY_RATE * priorClears));
-}
-function sumDecayShift(startIdx, n) {
-  let sum = 0;
-  for (let i = 0; i < n; i++) sum += decayShiftAt(startIdx + i);
-  return sum;
 }
 
 // ============================================================
@@ -539,7 +549,7 @@ function TetrisGame2P() {
       setState(s => {
         if (s.phase !== "playing") return s;
         if (s.paused || s.summary) return s;
-        let { board, aiTick, p1, p1Next, p1NextNext, p2, p2Next, p2NextNext, p1Lines, p2Lines, boundary, p1ShiftAcc, p2ShiftAcc } = s;
+        let { board, aiTick, p1, p1Next, p1NextNext, p2, p2Next, p2NextNext, p1Lines, p2Lines, boundary } = s;
         const aiCfg = AI_LEVEL_CONFIG[s.aiLevel] || AI_LEVEL_CONFIG[3];
         let n1 = 0, n2 = 0;
         // Track which rows were full at lock time so we can flash them
@@ -724,7 +734,7 @@ function TetrisGame2P() {
             }
             const [b1, c1] = clearP1_2P(board, boundary);
             n1 = c1; board = b1;
-            p1 = { type: p1Next, rot: 0, x: 3, y: p1SpawnY2P(p1Next), lockPendingTs: null, lockResets: 0 };
+            p1 = { type: p1Next, rot: 0, x: spawnX(p1Next), y: p1SpawnY2P(p1Next), lockPendingTs: null, lockResets: 0 };
             // Shift the 2-deep NEXT queue: p1NextNext becomes the new
             // next-to-spawn, and a fresh random piece enters the queue.
             p1Next     = p1NextNext;
@@ -750,7 +760,7 @@ function TetrisGame2P() {
             }
             const [b2, c2] = clearP2_2P(board, boundary);
             n2 = c2; board = b2;
-            p2 = { type: p2Next, rot: 0, x: 3, y: 0, lockPendingTs: null, lockResets: 0 };
+            p2 = { type: p2Next, rot: 0, x: spawnX(p2Next), y: 0, lockPendingTs: null, lockResets: 0 };
             // Shift the 2-deep P2 NEXT queue.
             p2Next     = p2NextNext;
             p2NextNext = randPiece();
@@ -760,15 +770,12 @@ function TetrisGame2P() {
           }
         }
 
-        // Territory shift with decay
-        if (n1 > 0) p1ShiftAcc += sumDecayShift(p1Lines, n1);
-        if (n2 > 0) p2ShiftAcc += sumDecayShift(p2Lines, n2);
-        const p1IntShift = Math.floor(p1ShiftAcc);
-        const p2IntShift = Math.floor(p2ShiftAcc);
-        p1ShiftAcc -= p1IntShift;
-        p2ShiftAcc -= p2IntShift;
-
-        let newBdy = boundary - p1IntShift + p2IntShift;
+        // Territory shift: 1:1 mapping. Each row cleared on a side
+        // moves the boundary 1 row toward the opponent. No decay,
+        // no fractional carry-over (the previous accumulator design
+        // caused the +1 -> +2 fencepost where the second clear's
+        // 0.952 contribution got stuck below floor=1).
+        let newBdy = boundary - n1 + n2;
 
         // Game-over clamps only -- no preventive piece-blocking clamp.
         // The boundary is allowed to push past locked pieces; the swept
@@ -835,12 +842,12 @@ function TetrisGame2P() {
           // cells are no longer valid under newBdy, respawn it from
           // the NEXT queue.
           if (!isValid2P(getCells(p1.type, p1.rot, p1.x, p1.y), board, newBdy, 1)) {
-            p1 = { type: p1Next, rot: 0, x: 3, y: p1SpawnY2P(p1Next), lockPendingTs: null, lockResets: 0 };
+            p1 = { type: p1Next, rot: 0, x: spawnX(p1Next), y: p1SpawnY2P(p1Next), lockPendingTs: null, lockResets: 0 };
             p1Next     = p1NextNext;
             p1NextNext = randPiece();
           }
           if (!isValid2P(getCells(p2.type, p2.rot, p2.x, p2.y), board, newBdy, 2)) {
-            p2 = { type: p2Next, rot: 0, x: 3, y: 0, lockPendingTs: null, lockResets: 0 };
+            p2 = { type: p2Next, rot: 0, x: spawnX(p2Next), y: 0, lockPendingTs: null, lockResets: 0 };
             p2Next     = p2NextNext;
             p2NextNext = randPiece();
           }
@@ -863,7 +870,7 @@ function TetrisGame2P() {
           ...s,
           board, aiTick, p1, p1Next, p1NextNext, p2, p2Next, p2NextNext, phase,
           p1Lines: p1Lines + n1, p2Lines: p2Lines + n2,
-          boundary: newBdy, p1ShiftAcc, p2ShiftAcc, winner, lastGain,
+          boundary: newBdy, winner, lastGain,
           clearAnim: clearedRowsThisTick.length > 0
             ? { rows: clearedRowsThisTick, ts: Date.now() }
             : s.clearAnim,
