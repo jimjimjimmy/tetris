@@ -307,6 +307,11 @@ function useReveal(duration) {
     anywhere on the left portion of the screen, not just the narrow 200px
     play column. Right sidebar (info/gear/pause/NEXT at x>=349 > SIDEBAR_X)
     sits outside the capture zone and remains independently tappable.
+  - Per-level fall speed (5c16db7): AI_LEVEL_CONFIG now carries tickMs
+    per level: 1=600, 2=440, 3=320, 4=220, 5=140. ~1.5x faster per
+    level, 4.3x speedup L1->L5. Tick useEffect deps include
+    state.aiLevel so the interval rebuilds when level changes on the
+    start screen. TEST_SPEED override (110ms) preserved.
   - Local-player boundary indicator (265393f): single +N/-N number
     rendered only from the LOCAL player's perspective (no opponent
     indicator). Persistent while boundary != BDY_2P. Vertical line
