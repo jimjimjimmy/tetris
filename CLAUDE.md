@@ -307,6 +307,15 @@ function useReveal(duration) {
     anywhere on the left portion of the screen, not just the narrow 200px
     play column. Right sidebar (info/gear/pause/NEXT at x>=349 > SIDEBAR_X)
     sits outside the capture zone and remains independently tappable.
+  - Soft drop (be798e9, closes #2): the previously-unbound backward
+    direction is now wired as a per-step manual move.
+      P1: swipe down / ArrowDown -> y+1 (one row down per STEP_PX)
+      P2: swipe up   / ArrowUp   -> y-1 (one row up   per STEP_PX)
+    Implemented via a new "soft" action on applyP1/applyP2, ratched
+    from the touch handler's onMove using lastDy + STEP_PX (mirror
+    of the horizontal ratchet). Refreshes lock-delay timer like any
+    other successful input. Hard drop still fires on touchend in
+    the boost direction (P1 up / P2 down).
   - Lock delay (55bbc55, closes #1): 250ms grace before a piece commits.
     Each piece carries lockPendingTs + lockResets. Tick: piece that
     can't move forward starts the timer; LOCK_DELAY_MS later (or sooner
