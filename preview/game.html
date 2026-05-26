@@ -1284,47 +1284,33 @@ function TetrisGame2P() {
   const boundaryY   = PLAY_Y + boundary * CELL;  // y of the boundary line in frame coords
   const originY     = PLAY_Y + BDY_2P * CELL;    // y of the fixed origin (neutral) line, never moves
 
-  // ── "+N" gain indicator (Figma 128-3004) ─────────────────────────────
-  // lastGain expires after GAIN_FADE_MS; opacity fades linearly over the
-  // last 400ms for a soft tail. Direction comes from lastGain.player:
-  //   P1 gain: boundary moved UP, bracket extends UP from boundary
-  //   P2 gain: boundary moved DOWN, bracket extends DOWN from boundary
-  let gainView = null;
-  let lossView = null;
-  if (lastGain) {
-    const age = Date.now() - lastGain.ts;
-    const FADE_TAIL = 400;
-    const opacity = age < (GAIN_FADE_MS - FADE_TAIL)
-      ? 1
-      : Math.max(0, 1 - (age - (GAIN_FADE_MS - FADE_TAIL)) / FADE_TAIL);
-    const gainPx = lastGain.rows * CELL;
-    if (lastGain.player === 1) {
-      gainView = {
-        opacity,
-        rows: lastGain.rows,
-        // Bracket: extends UP from boundary, cap at TOP
-        bracketTop:  boundaryY - gainPx,
-        bracketH:    gainPx,
-        capAtTop:    true,
-        // Text floats just above the cap
-        textTop:     boundaryY - gainPx - GAIN_TEXT_OFFSET - 12,
-      };
-      // Losing side (P2) sees "-N" mirrored to the opposite side of the
-      // boundary, in their remaining territory direction.
-      lossView = { opacity, rows: lastGain.rows, textTop: boundaryY + GAIN_TEXT_OFFSET };
-    } else {
-      gainView = {
-        opacity,
-        rows: lastGain.rows,
-        // Bracket: extends DOWN from boundary, cap at BOTTOM
-        bracketTop:  boundaryY,
-        bracketH:    gainPx,
-        capAtTop:    false,
-        // Text floats just below the cap
-        textTop:     boundaryY + gainPx + GAIN_TEXT_OFFSET,
-      };
-      lossView = { opacity, rows: lastGain.rows, textTop: boundaryY - GAIN_TEXT_OFFSET - 12 };
-    }
+  // ── Boundary change indicator (one per screen, local-player view) ────
+  // Single indicator from the LOCAL player's perspective. Persistent while
+  // the live boundary differs from the origin (BDY_2P). The vertical line
+  // spans from the origin (dotted) to the live boundary (dashed). The
+  // number reflects the actual row gap. Sign + color depend on whether
+  // the local player is currently AHEAD (+, white) or BEHIND (-, red).
+  //   Local P1 ahead -> "+N" white,  text below the live line in P1 territory
+  //   Local P1 behind -> "-N" red,   text below the live line in P1 territory
+  //   Local P2 ahead -> "+N" white,  text above the live line in P2 territory
+  //   Local P2 behind -> "-N" red,   text above the live line in P2 territory
+  let bdyView = null;
+  if (boundary !== BDY_2P && (playerSide === 1 || playerSide === 2)) {
+    const gap         = BDY_2P - boundary;        // + = P1 ahead, - = P2 ahead
+    const gainerSide  = gap > 0 ? 1 : 2;
+    const localAhead  = gainerSide === playerSide;
+    const sign        = localAhead ? "+" : "-";
+    const rows        = Math.abs(gap);
+    const color       = localAhead ? BRACKET_COLOR : "rgba(255, 110, 110, 0.85)";
+    const bracketTop  = Math.min(originY, boundaryY);
+    const bracketH    = Math.abs(originY - boundaryY);
+    // Text sits at the live boundary, on the LOCAL player's side.
+    // P1 territory is below boundary -> text below live line.
+    // P2 territory is above boundary -> text above live line.
+    const textTop = playerSide === 1
+      ? boundaryY + GAIN_TEXT_OFFSET
+      : boundaryY - GAIN_TEXT_OFFSET - 12;
+    bdyView = { sign, rows, color, bracketTop, bracketH, textTop };
   }
 
   return (
@@ -1471,69 +1457,37 @@ function TetrisGame2P() {
         </div>
       )}
 
-      {/* ── Right-side "+N" gain indicator (Figma 128-3004 nodes
-          135:3947 + 135:3951). Bracket extends from boundary in the
-          GAINER's direction; "+N" floats at the cap end. Fades over
-          GAIN_FADE_MS via opacity, and the top/height transition with
-          BRACKET_EASE so the bracket grows/glides on appearance. ── */}
-      {gainView && (
+      {/* ── Boundary change indicator (right side, local player only). The
+          vertical line anchors at the live boundary (dashed) and extends
+          to the origin (dotted) -- its length is the current row gap. The
+          number sign + color comes from the local player's perspective:
+          "+N" white when ahead, "-N" red when behind. Persistent while
+          boundary != BDY_2P; top/height transition with BRACKET_EASE so
+          the line glides as the boundary shifts. ── */}
+      {bdyView && (
         <React.Fragment>
           <div style={{
             position: "absolute",
-            left: GAIN_BRACKET_X, top: gainView.bracketTop,
-            width: BRACKET_W, height: gainView.bracketH,
-            opacity: gainView.opacity,
+            left: GAIN_BRACKET_X + BRACKET_STEM_X, top: bdyView.bracketTop,
+            width: 1, height: bdyView.bracketH,
+            background: bdyView.color,
             pointerEvents: "none",
-            transition: `opacity 120ms linear, top ${BRACKET_EASE}, height ${BRACKET_EASE}`,
-          }}>
-            {gainView.capAtTop ? (
-              <React.Fragment>
-                <div style={{ position: "absolute", left: 0, top: 0, width: BRACKET_CAP_W, height: 1, background: BRACKET_COLOR }} />
-                <div style={{ position: "absolute", left: BRACKET_STEM_X, top: 1, bottom: 0, width: 1, background: BRACKET_COLOR }} />
-              </React.Fragment>
-            ) : (
-              <React.Fragment>
-                <div style={{ position: "absolute", left: BRACKET_STEM_X, top: 0, bottom: 1, width: 1, background: BRACKET_COLOR }} />
-                <div style={{ position: "absolute", left: 0, bottom: 0, width: BRACKET_CAP_W, height: 1, background: BRACKET_COLOR }} />
-              </React.Fragment>
-            )}
-          </div>
+            transition: `top ${BRACKET_EASE}, height ${BRACKET_EASE}, background-color 200ms linear`,
+          }} />
           <div style={{
             position: "absolute",
-            left: GAIN_TEXT_X, top: gainView.textTop,
+            left: GAIN_TEXT_X, top: bdyView.textTop,
             fontFamily: "'Inter', sans-serif",
             fontWeight: 600,
             fontSize: 10,
             letterSpacing: 0,
-            color: BRACKET_COLOR,
-            opacity: gainView.opacity,
+            color: bdyView.color,
             pointerEvents: "none",
-            transition: `opacity 120ms linear, top ${BRACKET_EASE}`,
+            transition: `top ${BRACKET_EASE}, color 200ms linear`,
             fontVariantNumeric: "tabular-nums",
             whiteSpace: "nowrap",
-          }}>+{gainView.rows}</div>
+          }}>{bdyView.sign}{bdyView.rows}</div>
         </React.Fragment>
-      )}
-
-      {/* "-N" loss indicator on the LOSING player's side. Mirrored across
-          the boundary from "+N", subtle warning red. Same font as the
-          gainer to stay consistent with the minimal aesthetic. Fades on
-          the same GAIN_FADE_MS timeline as the gainer's indicator. */}
-      {lossView && (
-        <div style={{
-          position: "absolute",
-          left: GAIN_TEXT_X, top: lossView.textTop,
-          fontFamily: "'Inter', sans-serif",
-          fontWeight: 600,
-          fontSize: 10,
-          letterSpacing: 0,
-          color: "rgba(255, 110, 110, 0.7)",
-          opacity: lossView.opacity,
-          pointerEvents: "none",
-          transition: `opacity 120ms linear, top ${BRACKET_EASE}`,
-          fontVariantNumeric: "tabular-nums",
-          whiteSpace: "nowrap",
-        }}>-{lossView.rows}</div>
       )}
 
       {/* Right Panel background -- the slightly-darker sidebar column.
