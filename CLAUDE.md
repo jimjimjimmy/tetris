@@ -325,6 +325,8 @@ function useReveal(duration) {
     Constants added: GAIN_HEX, LOSS_HEX, GAIN_DASH_RGBA, LOSS_DASH_RGBA.
     All indicator elements live in the [261, 320] right-margin gutter
     between play area and sidebar -- no overhang into either.
+    DASH_RIGHT_W set to 0: the right-side dash stub was removed so the
+    boundary line clips exactly at the play area right edge (x=261).
   - 1:1 boundary shift + DEBUG_PIECES (0a3b9ef): removed the decay
     accumulator (decayShiftAt/sumDecayShift, DECAY_RATE, MIN_SHIFT,
     p1ShiftAcc, p2ShiftAcc). Each row cleared moves the boundary by
@@ -361,6 +363,9 @@ function useReveal(duration) {
     Keyboard: ArrowUp fires P1 soft (side!=2); ArrowDown fires P2 soft (side==2).
     Touch onMove: P1 fires on negative dy (swipe-up); P2 fires on positive dy (swipe-down).
     Both refresh the lock-delay timer like any other successful input.
+    Touch soft drop is one-shot per gesture: softFired flag set on first
+    STEP_PX threshold crossing, then locked until the next touchstart.
+    Horizontal movement still uses the full while-ratchet (tracks finger).
   - Lock delay (55bbc55, closes #1): 250ms grace before a piece commits.
     Each piece carries lockPendingTs + lockResets. Tick: piece that
     can't move forward starts the timer; LOCK_DELAY_MS later (or sooner

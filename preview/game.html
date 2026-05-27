@@ -179,7 +179,7 @@ const DASH_SEG         = 4;      // dash on, dash off (Figma 4/4 pattern)
 const DASH_LEFT_X      = -3;     // left dashed segment left edge (Figma -3)
 const DASH_LEFT_W      = 60;     // Figma 60 -- dashes flow right-to-left so the partial dash bleeds off the frame's LEFT edge (clipped by frame overflow:hidden), and the last full dash lands flush at x=57, 4px before PLAY_X=61
 const DASH_RIGHT_X     = 265;    // starts 4px right of play edge (261)
-const DASH_RIGHT_W     = 52;     // ends before sidebar at 320 (with 3px gap)
+const DASH_RIGHT_W     = 0;      // right stub removed; line clips at play area right edge
 // ORIGIN line -- the fixed neutral reference at ROWS_2P / 2 that never
 // moves. Always rendered alongside the live boundary so the gap between
 // the two lines tells the game's territory story at a glance. Brighter
@@ -1062,12 +1062,12 @@ function TetrisGame2P() {
     const TAP_PX   = 10;   // movement under this counts as a tap
     let startX = 0, startY = 0;
     let lastDx = 0, lastDy = 0;
-    let moved  = false;
+    let moved  = false, softFired = false;
     const onStart = (e) => {
       if (e.touches.length !== 1) return;
       startX = e.touches[0].clientX;
       startY = e.touches[0].clientY;
-      lastDx = 0; lastDy = 0; moved = false;
+      lastDx = 0; lastDy = 0; moved = false; softFired = false;
     };
     const onMove = (e) => {
       if (e.touches.length !== 1) return;
@@ -1078,14 +1078,15 @@ function TetrisGame2P() {
       // Drain horizontal motion: one cell per STEP_PX dragged either way.
       while (dx - lastDx >=  STEP_PX) { apply("right"); lastDx += STEP_PX; moved = true; }
       while (dx - lastDx <= -STEP_PX) { apply("left");  lastDx -= STEP_PX; moved = true; }
-      // Drain vertical-backward motion (soft drop) per STEP_PX. P1's
-      // backward = DOWN (positive dy); P2's backward = UP (negative dy).
-      // The boost direction (P1 up, P2 down) is intentionally not ratched
-      // here -- it fires hard drop on touch end.
-      if (side === 2) {
-        while (dy - lastDy >= STEP_PX) { apply("soft"); lastDy += STEP_PX; moved = true; }
-      } else {
-        while (lastDy - dy >= STEP_PX) { apply("soft"); lastDy -= STEP_PX; moved = true; }
+      // One soft-drop per gesture: fires on the first STEP_PX threshold
+      // crossing, then locked for the rest of the gesture (softFired=true).
+      // Against-gravity direction is intentionally a no-op.
+      if (!softFired) {
+        if (side === 2) {
+          if (dy - lastDy >= STEP_PX) { apply("soft"); softFired = true; moved = true; }
+        } else {
+          if (lastDy - dy >= STEP_PX) { apply("soft"); softFired = true; moved = true; }
+        }
       }
     };
     const onEnd = (e) => {
