@@ -1544,9 +1544,9 @@ function TetrisGame2P() {
 
       {/* ── Origin line (left + right). Solid 1px fixed at ROWS_2P / 2,
           never moves. Left stub at DASH_LEFT_X, right stub at
-          DASH_RIGHT_X with ORIGIN_RIGHT_W. The live boundary dashed
-          line is intentionally omitted from both margins -- the right-
-          side bdyView indicator carries that information. ── */}
+          DASH_RIGHT_X with ORIGIN_RIGHT_W. When boundary shifts, the
+          bdyView block adds colored dashed lines at the live boundary Y
+          on both margins, visually distinct from this fixed origin. ── */}
       <div style={{
         position: "absolute",
         left: DASH_LEFT_X, top: originY, width: DASH_LEFT_W, height: 1,
@@ -1607,6 +1607,29 @@ function TetrisGame2P() {
           the boundary shifts. ── */}
       {bdyView && (
         <React.Fragment>
+          {/* Live boundary dashed line -- left margin. Only shown when boundary
+              has shifted (bdyView active) so it never overlaps the solid origin
+              stub at neutral. Slides with BRACKET_EASE when boundary moves. */}
+          <div style={{
+            position: "absolute",
+            left: DASH_LEFT_X, top: boundaryY, width: DASH_LEFT_W, height: 1,
+            backgroundImage: `linear-gradient(90deg, ${bdyView.dashRgba} 0, ${bdyView.dashRgba} ${DASH_SEG}px, transparent ${DASH_SEG}px, transparent ${DASH_SEG * 2}px)`,
+            backgroundSize: `${DASH_SEG * 2}px 1px`,
+            backgroundRepeat: "repeat-x",
+            pointerEvents: "none",
+            transition: `top ${BRACKET_EASE}`,
+          }} />
+          {/* Live boundary dashed line -- right margin. ORIGIN_RIGHT_W keeps it
+              within the right gutter; same color and animation as left. */}
+          <div style={{
+            position: "absolute",
+            left: DASH_RIGHT_X, top: boundaryY, width: ORIGIN_RIGHT_W, height: 1,
+            backgroundImage: `linear-gradient(90deg, ${bdyView.dashRgba} 0, ${bdyView.dashRgba} ${DASH_SEG}px, transparent ${DASH_SEG}px, transparent ${DASH_SEG * 2}px)`,
+            backgroundSize: `${DASH_SEG * 2}px 1px`,
+            backgroundRepeat: "repeat-x",
+            pointerEvents: "none",
+            transition: `top ${BRACKET_EASE}`,
+          }} />
           {/* Bracket stem -- 1px wide vertical from origin to live, opacity 0.15 */}
           <div style={{
             position: "absolute",
