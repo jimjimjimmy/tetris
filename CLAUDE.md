@@ -167,6 +167,18 @@ GITHUB_TOKEN=$(gh auth token --hostname github.com -u jimjimjimmy 2>/dev/null)
 git push "https://jimjimjimmy:${GITHUB_TOKEN}@github.com/jimjimjimmy/tetris.git" main
 ```
 
+### REQUIRED before every commit - update version stamps
+Every commit to `preview/game.html` MUST update both constants before staging:
+1. `APP_COMMIT` - set to the short hash of the commit being made (run `git commit` first in a separate step, then copy the hash, OR do a two-commit pattern: content commit then version bump commit)
+2. `APP_BUILD_DATE` - set to current LOCAL time (NOT UTC): `date +"%Y-%m-%dT%H:%M:%S"`
+
+```js
+const APP_COMMIT     = "abc1234";          // short hash of the behavioral commit
+const APP_BUILD_DATE = "2026-05-26T22:47:00";  // local time, never UTC
+```
+
+The "3h ago" footer display is driven by APP_BUILD_DATE. If it shows a negative or large number, the date was set in UTC instead of local time.
+
 > This machine has two GitHub accounts (jimjimjimmy personal + JimmyChe_floqast work).
 > Always use the explicit token form above or git will use the wrong account and get a 403.
 > Tetris is personal -- Gandalf CAN push directly. No freeradicals-studio remote needed.
