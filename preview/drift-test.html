@@ -26,7 +26,7 @@
       flex-shrink: 0;
     }
 
-    /* origin line sits above the canvas */
+    /* origin line sits above canvas */
     #origin-line {
       position: absolute;
       height: 2px;
@@ -83,13 +83,13 @@
 // ================================================================
 
 const BPM           = 120;
-const BEAT_MS       = 60000 / BPM;   // ms per beat (500ms at 120bpm)
+const BEAT_MS       = 60000 / BPM;   // 500ms at 120bpm
 
 // Board geometry (mirrors index.html exactly)
 const CELL          = 20;
 const COLS          = 10;
 const ROWS_2P       = 44;
-const BDY_2P        = ROWS_2P / 2;   // 22 - boundary row
+const BDY_2P        = ROWS_2P / 2;   // 22
 const FRAME_W       = 402;
 const GAME_2P_H     = ROWS_2P * CELL; // 880
 const PLAY_X        = 61;
@@ -97,35 +97,31 @@ const PLAY_W        = COLS * CELL;    // 200
 const PLAY_Y        = 0;
 
 // Lane layout
-const LANE_INTERVAL = 4;   // rows between lanes, measured from origin
-const MIN_EDGE_GAP  = 2;   // min clear rows between outermost lane and frame edge
+const LANE_INTERVAL = 4;
+const MIN_EDGE_GAP  = 2;
 
-// Stripe pattern (in cells, not pixels)
-// STRIPE_CELLS out of every STRIPE_PERIOD columns are lit per lane row.
-// Tweak these to change visual density.
-const STRIPE_PERIOD = 5;   // pattern repeats every N cells
-const STRIPE_CELLS  = 1;   // lit cells per period
-
-// Visuals
-const LANE_OPACITY  = 0.14;
-const GRID_COLOR    = "rgba(255,255,255,0.04)";
-const LANE_COLOR    = "rgba(255,255,255," + LANE_OPACITY + ")";
+// Grid
+// GRID_COLOR slightly brighter than the original (0.04) so the traveling
+// gap is perceptible -- the gap IS the visual, there are no fills.
+const GRID_COLOR    = "rgba(255,255,255,0.07)";
 
 // ================================================================
-//  LANE DATA STRUCTURE
+//  LANE DATA
 // ================================================================
 //
-//  Each lane is a plain object:
-//    row          - grid row (0..ROWS_2P-1)
-//    dir          - +1 right, -1 left
-//    offset       - current pattern shift in cells (0..period-1)
-//    beatsPerStep - beats between each 1-cell shift (1 = every beat)
-//    beatAccum    - beats accumulated toward next step
-//    period       - stripe repeat length in cells (per-lane, for flexibility)
-//    stripeCells  - lit cells per period (per-lane, for flexibility)
+//  The "drift" effect is expressed purely through the grid lines.
+//  Each drift lane has an `offset` (0..COLS-1). On each beat step,
+//  offset advances by dir, cycling with period = COLS.
 //
-//  To add vertical column movement later: add a colOffset[] array and a
-//  parallel COL_MAP, then extend drawGrid() to check both axes.
+//  In drawGrid(), the interior column line at position `offset` is
+//  OMITTED for that row, making two adjacent cells appear double-wide
+//  (a "fault"). The fault travels one column per beat in direction dir.
+//
+//  When offset = 0 the row looks identical to a non-drift row.
+//
+//  P1 lanes (below origin): dir = +1 (fault travels right)
+//  P2 lanes (above origin): dir = -1 (fault travels left)
+//  This creates outward symmetry from the center.
 
 function buildLanes() {
   const lanes = [];
@@ -136,29 +132,24 @@ function buildLanes() {
     dist += LANE_INTERVAL
   ) {
     idx++;
-    const dir = idx % 2 === 1 ? 1 : -1;  // alternating right / left
-
-    // P1 side: rows below origin
+    const dir = idx % 2 === 1 ? 1 : -1;
     lanes.push({
       id: "p1-" + idx, row: BDY_2P + dist, dist, side: 1,
       dir, index: idx,
       offset: 0, beatAccum: 0, beatsPerStep: 1,
-      period: STRIPE_PERIOD, stripeCells: STRIPE_CELLS,
+      period: COLS,  // fault cycles through all COLS column positions
     });
-
-    // P2 side: rows above origin (mirrored direction)
     lanes.push({
       id: "p2-" + idx, row: BDY_2P - dist, dist, side: 2,
       dir: -dir, index: idx,
       offset: 0, beatAccum: 0, beatsPerStep: 1,
-      period: STRIPE_PERIOD, stripeCells: STRIPE_CELLS,
+      period: COLS,
     });
   }
   return lanes;
 }
 
 const LANES    = buildLanes();
-// Row -> lane lookup (O(1)) - useful when per-cell logic needs to know its lane
 const LANE_MAP = new Map(LANES.map(l => [l.row, l]));
 
 // ================================================================
@@ -177,7 +168,7 @@ applyScale();
 window.addEventListener("resize", applyScale);
 
 // ================================================================
-//  CANVAS SETUP
+//  CANVAS
 // ================================================================
 
 const canvas = document.getElementById("canvas");
@@ -198,53 +189,67 @@ originLine.style.top   = (PLAY_Y + BDY_2P * CELL) + "px";
 // ================================================================
 //  DRAW
 // ================================================================
-//  Called once on init, then once per beat.
-//  Between beats, the canvas is static -- snap hold snap hold.
+//
+//  The grid IS the visual -- no cell fills, no overlaid layers.
+//
+//  Drift rows look exactly like non-drift rows when offset=0.
+//  When offset=1..COLS-1, one interior vertical line segment is
+//  absent in that row, creating a double-wide "fault" cell that
+//  travels one column per beat.
+//
+//  Column grid inside play area is PLAY_X-aligned so cell boundaries
+//  match exactly. Outside play area uses the global CELL-grid.
 
 function drawGrid() {
   ctx.clearRect(0, 0, FRAME_W, GAME_2P_H);
-
-  // --- grid lines (full frame, same tile origin as original CSS background) ---
-  ctx.beginPath();
   ctx.strokeStyle = GRID_COLOR;
   ctx.lineWidth   = 1;
-  for (let y = 0; y <= GAME_2P_H; y += CELL) {
-    ctx.moveTo(0,       y + 0.5);
-    ctx.lineTo(FRAME_W, y + 0.5);
+  ctx.beginPath();
+
+  // --- horizontal lines: full width, every row ---
+  for (let r = 0; r <= ROWS_2P; r++) {
+    ctx.moveTo(0,       r * CELL + 0.5);
+    ctx.lineTo(FRAME_W, r * CELL + 0.5);
   }
+
+  // --- vertical lines outside play area: global CELL-grid ---
   for (let x = 0; x <= FRAME_W; x += CELL) {
+    if (x > PLAY_X && x < PLAY_X + PLAY_W) continue;
     ctx.moveTo(x + 0.5, 0);
     ctx.lineTo(x + 0.5, GAME_2P_H);
   }
-  ctx.stroke();
 
-  // --- drift lane cells ---
-  //  A cell at column `col` in a lane is lit when:
-  //    ((col - offset) mod period) < stripeCells
-  //  This shifts the lit pattern one cell per step as offset increments.
-  ctx.fillStyle = LANE_COLOR;
-  LANES.forEach(lane => {
-    const cellY = PLAY_Y + lane.row * CELL;
-    for (let col = 0; col < COLS; col++) {
-      const pos = ((col - lane.offset) % lane.period + lane.period) % lane.period;
-      if (pos < lane.stripeCells) {
-        // 1px inset so fill sits cleanly inside grid lines
-        ctx.fillRect(PLAY_X + col * CELL + 1, cellY + 1, CELL - 2, CELL - 2);
-      }
+  // --- play area left/right boundaries: always present, full height ---
+  ctx.moveTo(PLAY_X          + 0.5, 0);
+  ctx.lineTo(PLAY_X          + 0.5, GAME_2P_H);
+  ctx.moveTo(PLAY_X + PLAY_W + 0.5, 0);
+  ctx.lineTo(PLAY_X + PLAY_W + 0.5, GAME_2P_H);
+
+  // --- interior column lines inside play area: per-row with drift gap ---
+  //
+  //  For each row, draw interior lines at PLAY_X + c*CELL for c=1..COLS-1.
+  //  For drift rows: skip the line at c = lane.offset (the traveling fault).
+  //  When lane.offset = 0, no line is skipped (row looks normal).
+  for (let r = 0; r < ROWS_2P; r++) {
+    const y1 = r * CELL + 0.5;
+    const y2 = (r + 1) * CELL + 0.5;
+    const lane    = LANE_MAP.get(r);
+    const gapCol  = lane ? lane.offset : 0; // 0 means no gap
+
+    for (let c = 1; c < COLS; c++) {
+      if (c === gapCol) continue;           // fault: omit this line
+      const x = PLAY_X + c * CELL + 0.5;
+      ctx.moveTo(x, y1);
+      ctx.lineTo(x, y2);
     }
-  });
+  }
+
+  ctx.stroke();
 }
 
 // ================================================================
 //  BEAT CLOCK
 // ================================================================
-//
-//  On every beat:
-//    1. Increment each lane's beatAccum.
-//    2. When beatAccum reaches beatsPerStep, reset it and shift offset by dir.
-//    3. Redraw the grid.
-//
-//  lastBeatTime uses += BEAT_MS (not = now) to prevent drift accumulation.
 
 let beatCount    = 0;
 let lastBeatTime = performance.now();
@@ -270,7 +275,7 @@ function tick(now) {
   requestAnimationFrame(tick);
 }
 
-drawGrid();                    // static first frame (no flicker before first beat)
+drawGrid();
 requestAnimationFrame(tick);
 
 // ================================================================
@@ -292,25 +297,29 @@ function renderDebug() {
     "BEAT MS   " + BEAT_MS.toFixed(0) + "ms",
     "BEAT #    " + beatCount,
     "CELL      " + CELL + "px",
-    "PERIOD    " + STRIPE_PERIOD + " cells  (" + STRIPE_CELLS + " lit)",
+    "FAULT     traveling gap (1 line/beat)",
+    "PERIOD    " + COLS + " beats",
     "ORIGIN    row " + BDY_2P + "  y=" + (BDY_2P * CELL) + "px",
     "LANES     " + LANES.length,
     "",
-    "IDX  SIDE  ROW  DIST  DIR  OFF  BPS",
+    "IDX  SIDE  ROW  DIST  DIR  OFF  GAP",
     "---  ----  ---  ----  ---  ---  ---",
   ];
   const rows = LANES
     .slice()
     .sort((a, b) => a.row - b.row)
-    .map(l => (
-      " " + l.index +
-      "    P" + l.side +
-      "    " + String(l.row).padStart(2, " ") +
-      "    +" + l.dist +
-      "   " + (l.dir > 0 ? " ->" : "<- ") +
-      "   " + l.offset +
-      "    " + l.beatsPerStep
-    ));
+    .map(l => {
+      const gapStr = l.offset === 0 ? "none" : "col " + l.offset;
+      return (
+        " " + l.index +
+        "    P" + l.side +
+        "    " + String(l.row).padStart(2, " ") +
+        "    +" + l.dist +
+        "   " + (l.dir > 0 ? " ->" : "<- ") +
+        "   " + l.offset +
+        "  " + gapStr
+      );
+    });
   debugEl.textContent = header.concat(rows).join("\n");
 }
 
