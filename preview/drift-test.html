@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>DRIFT - Lane Test</title>
+  <style>
+    /* ---- same full-screen baseline as index.html ---- */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { height: 100%; height: 100dvh; }
+    body {
+      width: 100%; height: 100%; height: 100dvh;
+      background: #0a0a0a;
+      overflow: hidden;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      font-family: monospace;
+    }
+
+    /* ---- game frame: same dimensions as TetrisGame2P ---- */
+    #frame {
+      position: relative;
+      /* width + height set by JS from FRAME_W / GAME_2P_H */
+      transform-origin: top center;
+      background: #0a0a0a;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    /* ---- grid background: exact match to game ---- */
+    #grid {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    /* ---- play-area boundary box (visual ref only, no border) ---- */
+    #play-area {
+      position: absolute;
+      /* left / top / width / height set by JS */
+      pointer-events: none;
+    }
+
+    /* ---- origin line: solid white at BDY_2P row ---- */
+    #origin-line {
+      position: absolute;
+      height: 2px;
+      background: rgba(255, 255, 255, 0.65);
+      pointer-events: none;
+    }
+
+    /* ---- individual drift lane ---- */
+    .drift-lane {
+      position: absolute;
+      pointer-events: none;
+      /* background-image, animation, top, height set by JS */
+    }
+
+    /* ---- debug overlay ---- */
+    #debug {
+      position: fixed;
+      top: max(12px, env(safe-area-inset-top));
+      right: max(12px, env(safe-area-inset-right));
+      padding: 10px 12px;
+      background: rgba(0, 0, 0, 0.82);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      color: rgba(255, 255, 255, 0.65);
+      font-size: 9px;
+      letter-spacing: 0.5px;
+      line-height: 1.7;
+      white-space: pre;
+      z-index: 200;
+      transition: opacity 0.15s;
+      min-width: 180px;
+    }
+    #debug.hidden { opacity: 0; pointer-events: none; }
+
+    /* ---- debug toggle chip ---- */
+    #dbg-toggle {
+      position: fixed;
+      bottom: max(20px, env(safe-area-inset-bottom));
+      left: 50%;
+      transform: translateX(-50%);
+      color: rgba(255, 255, 255, 0.25);
+      font-size: 9px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      cursor: pointer;
+      user-select: none;
+      -webkit-user-select: none;
+      z-index: 200;
+    }
+  </style>
+</head>
+<body>
+  <div id="frame">
+    <div id="grid"></div>
+    <!-- drift lanes injected by JS -->
+    <div id="origin-line"></div>
+  </div>
+
+  <div id="debug" class="hidden"></div>
+  <div id="dbg-toggle">[ debug ]</div>
+
+<script>
+// ================================================================
+//  CONSTANTS -- tweak here, nowhere else
+// ================================================================
+
+const BPM           = 120;          // beats per minute (adjust freely)
+const BEAT_MS       = 60000 / BPM;  // ms per beat = 500ms at 120bpm
+
+// Board geometry -- mirrors game constants exactly
+const CELL          = 20;           // px per cell
+const COLS          = 10;           // board columns
+const ROWS_2P       = 44;           // board rows (ROWS_2P in game)
+const BDY_2P        = ROWS_2P / 2;  // = 22  initial boundary row
+const FRAME_W       = 402;          // total frame width
+const GAME_2P_H     = ROWS_2P * CELL; // = 880  total frame height
+const PLAY_X        = 61;           // play area left edge (px in frame)
+const PLAY_W        = COLS * CELL;  // = 200  play area width
+const PLAY_Y        = 0;            // play area top edge
+
+// Drift lane layout
+const LANE_INTERVAL = 4;            // rows between lanes, measured from origin
+const LANE_OPACITY  = 0.10;         // conveyor stripe opacity (0=invisible, 1=solid)
+const STRIPE_PX     = 3;            // stripe width in px (gap = CELL - STRIPE_PX)
+const GRID_COLOR    = "rgba(255,255,255,0.04)";
+
+// ================================================================
+//  LANE CONFIGURATION
+// ================================================================
+// Lanes sit at rows  BDY_2P +/- LANE_INTERVAL, +/- 2*LANE_INTERVAL, ...
+// Direction alternates by index (index 1 = right, index 2 = left, ...).
+// P2 side mirrors P1 direction: at the same distance from origin, the two
+// lanes run in opposite directions (creating outward or inward symmetry).
+
+function buildLanes() {
+  const lanes = [];
+  let idx = 0;
+  for (
+    let dist = LANE_INTERVAL;
+    BDY_2P + dist < ROWS_2P || BDY_2P - dist >= 0;
+    dist += LANE_INTERVAL
+  ) {
+    idx++;
+    const dir = idx % 2 === 1 ? 1 : -1;  // 1 = right, -1 = left
+
+    // P1 side: rows BELOW origin (higher row index)
+    const p1Row = BDY_2P + dist;
+    if (p1Row < ROWS_2P) {
+      lanes.push({ id: `p1-${idx}`, row: p1Row, dist, side: 1, dir,      index: idx });
+    }
+
+    // P2 side: rows ABOVE origin (lower row index)
+    const p2Row = BDY_2P - dist;
+    if (p2Row >= 0) {
+      lanes.push({ id: `p2-${idx}`, row: p2Row, dist, side: 2, dir: -dir, index: idx });
+    }
+  }
+  return lanes;
+}
+
+const LANES = buildLanes();
+
+// ================================================================
+//  FRAME + SCALE
+// ================================================================
+
+const frame = document.getElementById("frame");
+frame.style.width  = FRAME_W    + "px";
+frame.style.height = GAME_2P_H  + "px";
+
+function applyScale() {
+  const s = Math.min(
+    window.innerWidth  / FRAME_W,
+    window.innerHeight / GAME_2P_H
+  );
+  frame.style.transform = "scale(" + s + ")";
+}
+applyScale();
+window.addEventListener("resize", applyScale);
+
+// ================================================================
+//  GRID BACKGROUND
+// ================================================================
+
+const grid = document.getElementById("grid");
+grid.style.backgroundImage =
+  "linear-gradient(" + GRID_COLOR + " 1px, transparent 1px), " +
+  "linear-gradient(90deg, " + GRID_COLOR + " 1px, transparent 1px)";
+grid.style.backgroundSize  = CELL + "px " + CELL + "px";
+
+// ================================================================
+//  ORIGIN LINE
+// ================================================================
+
+const originLine = document.getElementById("origin-line");
+originLine.style.left  = PLAY_X + "px";
+originLine.style.width = PLAY_W  + "px";
+originLine.style.top   = (PLAY_Y + BDY_2P * CELL) + "px";
+
+// ================================================================
+//  CSS KEYFRAMES (injected so duration ties to BPM constant)
+// ================================================================
+//  One full pattern scroll = CELL px per beat.
+//  Pattern background-size = CELL, so one loop = one beat = seamless.
+
+const styleEl = document.createElement("style");
+styleEl.textContent = `
+  @keyframes drift-right {
+    from { background-position-x: 0px; }
+    to   { background-position-x: ${CELL}px; }
+  }
+  @keyframes drift-left {
+    from { background-position-x: 0px; }
+    to   { background-position-x: -${CELL}px; }
+  }
+`;
+document.head.appendChild(styleEl);
+
+// ================================================================
+//  BUILD DRIFT LANE ELEMENTS
+// ================================================================
+
+const stripeColor = "rgba(255,255,255," + LANE_OPACITY + ")";
+// Conveyor pattern: narrow stripe + wide gap, repeating every CELL px.
+// At STRIPE_PX=3, CELL=20: 3px lit / 17px dark per cell.
+const stripePat =
+  "repeating-linear-gradient(90deg," +
+  stripeColor + " 0px," +
+  stripeColor + " " + STRIPE_PX  + "px," +
+  "transparent "    + STRIPE_PX  + "px," +
+  "transparent "    + CELL       + "px)";
+
+LANES.forEach(lane => {
+  const el = document.createElement("div");
+  el.className = "drift-lane";
+  el.id = "lane-" + lane.id;
+
+  el.style.left            = PLAY_X + "px";
+  el.style.width           = PLAY_W  + "px";
+  el.style.top             = (PLAY_Y + lane.row * CELL) + "px";
+  el.style.height          = CELL    + "px";
+  el.style.backgroundImage = stripePat;
+  el.style.backgroundSize  = CELL + "px 100%";
+
+  const anim = lane.dir > 0 ? "drift-right" : "drift-left";
+  el.style.animation = anim + " " + BEAT_MS + "ms linear infinite";
+
+  frame.appendChild(el);
+});
+
+// ================================================================
+//  BEAT COUNTER (drives debug readout)
+// ================================================================
+
+let beatCount     = 0;
+let lastBeatTime  = performance.now();
+
+function raf(now) {
+  if (now - lastBeatTime >= BEAT_MS) {
+    beatCount++;
+    lastBeatTime += BEAT_MS;   // += avoids drift vs assigning `now`
+    if (debugVisible) renderDebug();
+  }
+  requestAnimationFrame(raf);
+}
+requestAnimationFrame(raf);
+
+// ================================================================
+//  DEBUG OVERLAY
+// ================================================================
+
+const debugEl   = document.getElementById("debug");
+let debugVisible = false;
+
+function toggleDebug() {
+  debugVisible = !debugVisible;
+  debugEl.classList.toggle("hidden", !debugVisible);
+  if (debugVisible) renderDebug();
+}
+
+function renderDebug() {
+  const header = [
+    "BPM      " + BPM,
+    "BEAT MS  " + BEAT_MS.toFixed(0) + "ms",
+    "BEAT #   " + beatCount,
+    "CELL     " + CELL + "px",
+    "ORIGIN   row " + BDY_2P + "  y=" + (BDY_2P * CELL) + "px",
+    "LANES    " + LANES.length,
+    "",
+    "IDX  SIDE  ROW  DIST  DIR  Y",
+    "---  ----  ---  ----  ---  ---",
+  ];
+
+  const rows = LANES
+    .slice()
+    .sort((a, b) => a.row - b.row)
+    .map(l => {
+      const arrow = l.dir > 0 ? " ->" : "<- ";
+      const y     = PLAY_Y + l.row * CELL;
+      return (
+        " " + l.index +
+        "    P" + l.side +
+        "    " + String(l.row).padStart(2, " ") +
+        "    +" + l.dist +
+        "   " + arrow +
+        "  " + y
+      );
+    });
+
+  debugEl.textContent = header.concat(rows).join("\n");
+}
+
+// Toggle: 'd' key or tap the chip
+document.getElementById("dbg-toggle")
+  .addEventListener("pointerdown", toggleDebug);
+document.addEventListener("keydown", e => {
+  if (e.key === "d" || e.key === "D") toggleDebug();
+});
+</script>
+</body>
+</html>
