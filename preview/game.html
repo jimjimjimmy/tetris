@@ -97,7 +97,7 @@ const AI_LEVEL_CONFIG  = {
 // just before each commit.
 const APP_VERSION    = "v0.1";
 const APP_COMMIT     = "2b929c9";
-const APP_BUILD_DATE = "2026-05-27T12:38:05";
+const APP_BUILD_DATE = "2026-05-27T13:12:48";
 
 // Default fall interval (used as a fallback when state.aiLevel is invalid).
 // Real tick rate comes from AI_LEVEL_CONFIG[aiLevel].tickMs, looked up at
@@ -542,15 +542,55 @@ function relTime(dateStr) {
 // (ImpactStyle.Light/Medium/Heavy + notification patterns) -- the
 // call sites in this file do not need to change.
 const haptic = {
+  // Synced on every render via haptic.configure(settings).
+  // Keeps the module-level object in lockstep with React state without
+  // requiring hooks or prop-drilling into applyP1/applyP2 callbacks.
+  _s: { haptics: true, hapticIntensity: "medium" },
+
+  configure(s) { this._s = s; },
+
   _vibrate(pattern) {
+    if (!this._s.haptics) return;
     if (typeof navigator === "undefined") return;
     if (typeof navigator.vibrate !== "function") return;
     try { navigator.vibrate(pattern); } catch (_) {}
   },
-  light()    { this._vibrate(30); },
-  medium()   { this._vibrate(60); },
-  heavy()    { this._vibrate(100); },
-  gameOver() { this._vibrate([200, 100, 200]); },
+
+  // UI interactions: rotate / move / soft-drop (short unobtrusive tick)
+  light() {
+    const d = this._s.hapticIntensity;
+    this._vibrate(d === "light" ? 8 : d === "strong" ? 18 : 12);
+  },
+
+  // Piece lock -- short single tap
+  pieceLock() {
+    const d = this._s.hapticIntensity;
+    this._vibrate(d === "light" ? 10 : d === "strong" ? 30 : 20);
+  },
+
+  // Line clear -- strong pulse
+  lineClear() {
+    const d = this._s.hapticIntensity;
+    this._vibrate(d === "light" ? 30 : d === "strong" ? 80 : 50);
+  },
+
+  // Boundary shift gain -- positive double tap
+  boundaryGain() {
+    const d = this._s.hapticIntensity;
+    this._vibrate(d === "light" ? [10, 50, 10] : d === "strong" ? [30, 50, 30] : [20, 50, 20]);
+  },
+
+  // Boundary shift loss -- single long pulse
+  boundaryLoss() {
+    const d = this._s.hapticIntensity;
+    this._vibrate(d === "light" ? 40 : d === "strong" ? 100 : 70);
+  },
+
+  // Game over -- long rumble
+  gameOver() {
+    const d = this._s.hapticIntensity;
+    this._vibrate(d === "light" ? 200 : d === "strong" ? 600 : 400);
+  },
 };
 
 // ============================================================
@@ -800,6 +840,11 @@ function TetrisGame2P() {
   const [showSettings, setShowSettings] = React.useState(false);
   const [settingsSection, setSettingsSection] = React.useState(null);
   const [state, setState] = React.useState(makeInitState2P);
+
+  // Keep the module-level haptic object in sync with React settings state.
+  // Called synchronously every render so applyP1/applyP2 callbacks always
+  // read the current toggle + intensity without stale-closure issues.
+  haptic.configure(settings);
 
   const openSettings = (section) => {
     setSettingsSection(section || null);
@@ -1440,25 +1485,39 @@ function TetrisGame2P() {
   const prevBoundaryRef = React.useRef(state.boundary);
   const prevPhaseRef    = React.useRef(state.phase);
   React.useEffect(() => {
-    // Fire lock haptic only on the HUMAN's piece-type change. The other
-    // side is AI and shouldn't tap the player's hand on every AI lock.
+    // Piece lock: fires only when the HUMAN player's active piece type
+    // changes (i.e. a new piece spawned). AI side is intentionally excluded.
     const humanTypeChanged = state.playerSide === 2
       ? state.p2.type !== prevP2TypeRef.current
       : state.p1.type !== prevP1TypeRef.current;
     if (humanTypeChanged && state.phase === "playing") {
-      haptic.medium();
+      haptic.pieceLock();
     }
     prevP1TypeRef.current = state.p1.type;
     prevP2TypeRef.current = state.p2.type;
 
+    // Line clear: any lines cleared this tick (either side counts -- the
+    // board effect is always visible to the human player).
     const totalLines = state.p1Lines + state.p2Lines;
     if (totalLines > prevLinesRef.current) {
-      haptic.heavy();
+      haptic.lineClear();
     }
     prevLinesRef.current = totalLines;
 
+    // Boundary shift: gain vs loss depends on which direction the line moved
+    // relative to the human player's side.
+    // boundary decreasing = P1 gaining territory
+    // boundary increasing = P2 gaining territory
     if (state.boundary !== prevBoundaryRef.current) {
-      haptic.heavy();
+      const moved = state.boundary - prevBoundaryRef.current;
+      const p1Gained = moved < 0;
+      const humanGained = (state.playerSide === 1 && p1Gained)
+                       || (state.playerSide === 2 && !p1Gained);
+      if (humanGained) {
+        haptic.boundaryGain();
+      } else {
+        haptic.boundaryLoss();
+      }
     }
     prevBoundaryRef.current = state.boundary;
 
