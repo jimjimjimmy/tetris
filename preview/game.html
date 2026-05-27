@@ -1077,14 +1077,15 @@ function TetrisGame2P() {
       // Drain horizontal motion: one cell per STEP_PX dragged either way.
       while (dx - lastDx >=  STEP_PX) { apply("right"); lastDx += STEP_PX; moved = true; }
       while (dx - lastDx <= -STEP_PX) { apply("left");  lastDx -= STEP_PX; moved = true; }
-      // One soft-drop per gesture: fires on the first STEP_PX threshold
-      // crossing, then locked for the rest of the gesture (softFired=true).
+      // Hard drop per gesture: fires once when threshold is crossed
+      // (softFired locks it for the rest of the gesture). P1 swipe-up
+      // -> "up" (float to lock position); P2 swipe-down -> "down".
       // Against-gravity direction is intentionally a no-op.
       if (!softFired) {
         if (side === 2) {
-          if (dy - lastDy >= STEP_PX) { apply("soft"); softFired = true; moved = true; }
+          if (dy - lastDy >= STEP_PX) { apply("down"); softFired = true; moved = true; }
         } else {
-          if (lastDy - dy >= STEP_PX) { apply("soft"); softFired = true; moved = true; }
+          if (lastDy - dy >= STEP_PX) { apply("up"); softFired = true; moved = true; }
         }
       }
     };
