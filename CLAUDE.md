@@ -359,21 +359,14 @@ function useReveal(duration) {
     CLEAR_FLASH_MS = 100.
   - Soft drop (be798e9/corrected): soft drop fires in the natural-travel
     direction -- same way the piece moves automatically.
-      P1 (floats UP): swipe-up / ArrowUp -> y-1 (one row UP per STEP_PX)
-      P2 (falls DOWN): swipe-down / ArrowDown -> y+1 (one row DOWN per STEP_PX)
-    Opposite swipe is intentionally a no-op (against gravity).
-    Keyboard: ArrowUp fires P1 soft (side!=2); ArrowDown fires P2 soft (side==2).
-    Touch onMove: P1 fires on negative dy (swipe-up); P2 fires on positive dy (swipe-down).
-    Both refresh the lock-delay timer like any other successful input.
-    Touch soft drop is one-shot per gesture: softFired flag set on first
-    STEP_PX threshold crossing, then locked until the next touchstart.
-    Horizontal movement still uses the full while-ratchet (tracks finger).
-    Both keyboard AND touch fire HARD DROP: ArrowUp / P1 swipe-up ->
-    apply("up") (all the way to lock position); ArrowDown / P2 swipe-down
-    -> apply("down"). Opposite direction is no-op for each side.
-    softFired flag (reset on touchstart) prevents multiple hard drops
-    from a single long swipe. "soft" action exists in applyP1/applyP2
-    but is currently uncalled from any input handler.
+    Both keyboard AND touch fire HARD DROP:
+      Keyboard: ArrowUp -> P1 apply("up"); ArrowDown -> P2 apply("down").
+      Touch: fires ONCE on touchend (lift) after DROP_PX=44 minimum vertical
+      travel from swipe start. Horizontal tracking (STEP_PX=30 ratchet) still
+      fires live during onMove. Opposite direction is a no-op for each side.
+    DROP_PX deadzone prevents accidental drops from small finger movements.
+    softFired and lastDy removed -- no longer needed with lift-only model.
+    "soft" action exists in applyP1/applyP2 but is uncalled from any handler.
   - Lock delay (55bbc55, closes #1): 250ms grace before a piece commits.
     Each piece carries lockPendingTs + lockResets. Tick: piece that
     can't move forward starts the timer; LOCK_DELAY_MS later (or sooner

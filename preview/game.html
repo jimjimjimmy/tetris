@@ -1022,7 +1022,7 @@ function TetrisGame2P() {
   // Keyboard: "0" reset, "p"/"P" pause, arrows + space drive whichever
   // side the user picked on the start screen. Vertical arrows fire the
   // hard drop toward the boundary; the opposite arrow is a no-op.
-  // Touch soft drop (one row) remains on the swipe gesture.
+  // Touch hard drop fires on lift after DROP_PX vertical travel.
   //   ArrowLeft / ArrowRight -- horizontal move
   //   ArrowUp                -- P1 hard drop (all the way up) / P2 no-op
   //   ArrowDown              -- P2 hard drop (all the way down) / P1 no-op
@@ -1053,42 +1053,33 @@ function TetrisGame2P() {
     const el = gestureRef.current;
     if (!el) return;
     // Continuous gesture tracking. Horizontal moves fire DURING the touch
-    // (every CELL/STEP_PX pixels of drag) so the piece tracks the finger
-    // live -- no waiting on touchend. Tap rotates on release if the finger
-    // never moved much. The ONLY vertical gesture is the soft drop in the
-    // natural-travel direction: P1 swipe-up, P2 swipe-down. The
-    // against-gravity swipe is intentionally a no-op.
+    // (every STEP_PX pixels of drag) so the piece tracks the finger live.
+    // Vertical hard drop fires ONCE on lift (touchend) only when total
+    // vertical travel exceeds DROP_PX deadzone -- small accidental movements
+    // are ignored. Tap rotates on release if the finger barely moved.
+    // Direction: P1 swipe-up fires "up"; P2 swipe-down fires "down".
+    // Against-gravity swipes are intentionally no-ops.
     const STEP_PX  = 30;   // ratchet step: each 30px of drag advances one cell.
     const TAP_PX   = 10;   // movement under this counts as a tap
+    const DROP_PX  = 44;   // minimum vertical travel before hard drop fires on lift
     let startX = 0, startY = 0;
-    let lastDx = 0, lastDy = 0;
-    let moved  = false, softFired = false;
+    let lastDx = 0;
+    let moved  = false;
     const onStart = (e) => {
       if (e.touches.length !== 1) return;
       startX = e.touches[0].clientX;
       startY = e.touches[0].clientY;
-      lastDx = 0; lastDy = 0; moved = false; softFired = false;
+      lastDx = 0; moved = false;
     };
     const onMove = (e) => {
       if (e.touches.length !== 1) return;
       const dx = e.touches[0].clientX - startX;
-      const dy = e.touches[0].clientY - startY;
       const side  = playerSideRef.current;
       const apply = side === 2 ? applyP2 : applyP1;
       // Drain horizontal motion: one cell per STEP_PX dragged either way.
+      // Vertical drop is NOT tracked here -- it fires once on touchend.
       while (dx - lastDx >=  STEP_PX) { apply("right"); lastDx += STEP_PX; moved = true; }
       while (dx - lastDx <= -STEP_PX) { apply("left");  lastDx -= STEP_PX; moved = true; }
-      // Hard drop per gesture: fires once when threshold is crossed
-      // (softFired locks it for the rest of the gesture). P1 swipe-up
-      // -> "up" (float to lock position); P2 swipe-down -> "down".
-      // Against-gravity direction is intentionally a no-op.
-      if (!softFired) {
-        if (side === 2) {
-          if (dy - lastDy >= STEP_PX) { apply("down"); softFired = true; moved = true; }
-        } else {
-          if (lastDy - dy >= STEP_PX) { apply("up"); softFired = true; moved = true; }
-        }
-      }
     };
     const onEnd = (e) => {
       if (e.changedTouches.length !== 1) return;
@@ -1100,9 +1091,15 @@ function TetrisGame2P() {
       // Tap rotates only if the finger barely moved AND no cells were
       // applied during touchmove (prevents "rotate on lift" after swipe).
       if (!moved && adx < TAP_PX && ady < TAP_PX) { apply("tap"); return; }
-      // Hard drop on touchend is disabled. Soft drop (in the natural-
-      // travel direction) already fired live during onMove. An against-
-      // gravity swipe (P1 down, P2 up) is intentionally a no-op.
+      // Hard drop on lift: fires once when total vertical travel exceeds
+      // DROP_PX deadzone so accidental small movements do not trigger it.
+      // Direction must match natural travel (P1 up = dy negative, P2 down
+      // = dy positive). Opposite direction is intentionally a no-op.
+      if (side === 2) {
+        if (dy >= DROP_PX) apply("down");
+      } else {
+        if (dy <= -DROP_PX) apply("up");
+      }
     };
     // Attach to a transparent full-height gesture surface that spans from
     // x=0 to x=SIDEBAR_X (the entire left portion of the screen) so the
