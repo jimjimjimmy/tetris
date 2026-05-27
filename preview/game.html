@@ -1472,9 +1472,7 @@ function TetrisGame2P() {
     // Text sits at the live boundary, on the LOCAL player's side.
     // P1 territory is below boundary -> text below live line.
     // P2 territory is above boundary -> text above live line.
-    const textTop = playerSide === 1
-      ? boundaryY + GAIN_TEXT_OFFSET
-      : boundaryY - GAIN_TEXT_OFFSET - 12;
+    const textTop = (originY + boundaryY) / 2 - 5;  // midpoint between origin and live line, minus half font-height (10px/2)
     bdyView = { sign, rows, colorHex, dashRgba, bracketTop, bracketH, capTop, textTop };
   }
 
