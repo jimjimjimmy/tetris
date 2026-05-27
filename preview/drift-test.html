@@ -125,6 +125,7 @@ const PLAY_Y        = 0;            // play area top edge
 
 // Drift lane layout
 const LANE_INTERVAL = 4;            // rows between lanes, measured from origin
+const MIN_EDGE_GAP  = 2;            // min empty rows between outermost lane and frame edge
 const LANE_OPACITY  = 0.10;         // conveyor stripe opacity (0=invisible, 1=solid)
 const STRIPE_PX     = 3;            // stripe width in px (gap = CELL - STRIPE_PX)
 const GRID_COLOR    = "rgba(255,255,255,0.04)";
@@ -142,7 +143,7 @@ function buildLanes() {
   let idx = 0;
   for (
     let dist = LANE_INTERVAL;
-    BDY_2P + dist < ROWS_2P || BDY_2P - dist >= 0;
+    BDY_2P + dist + MIN_EDGE_GAP < ROWS_2P && BDY_2P - dist - MIN_EDGE_GAP >= 0;
     dist += LANE_INTERVAL
   ) {
     idx++;
