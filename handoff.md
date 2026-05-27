@@ -43,13 +43,12 @@ None. Working tree clean (only .DS_Store, bug_report.md, test_plan.md untracked 
 ```bash
 cd ~/Library/CloudStorage/Dropbox/04\ Projects/AI\ Shared/Tetris
 git pull
-# Live preview already running at http://localhost:3000/preview/game.html
+# Live preview already running at http://localhost:3000/preview/
 # (tetris-storybook server via .claude/launch.json)
 ```
 
-Live URLs:
-- Fullscreen game: https://jimjimjimmy.github.io/tetris/preview/game.html
-- Storybook: https://jimjimjimmy.github.io/tetris/preview/index.html
+Live URL:
+- Game: https://jimjimjimmy.github.io/tetris/preview/
 
 ## Machine / account notes
 - Generated on: MacFQ (FQ-M-DQ13K4NV)
@@ -58,6 +57,6 @@ Live URLs:
   GITHUB_TOKEN=$(gh auth token --hostname github.com -u jimjimjimmy 2>/dev/null)
   git push "https://jimjimjimmy:${GITHUB_TOKEN}@github.com/jimjimjimmy/tetris.git" main
   ```
-- Every game.html commit MUST update both APP_COMMIT (short hash) and APP_BUILD_DATE (local time via `date +"%Y-%m-%dT%H:%M:%S"` - never UTC)
+- Every index.html commit MUST update both APP_COMMIT (short hash) and APP_BUILD_DATE (local time via `date +"%Y-%m-%dT%H:%M:%S"` - never UTC). The bump commit updates BOTH fields, not just APP_COMMIT.
 - Pre-commit hook blocks em-dashes. Hyphens only.
 - DEBUG_PIECES must be false before every push.

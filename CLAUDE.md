@@ -5,7 +5,7 @@
   Whichever machine (MacFQ or Gandalf) adds a component, updates a file,
   or makes a structural change: update this file before ending the session.
   Both machines depend on this as the single source of truth.
-  Last updated: 2026-05-21 - Gandalf (game.html: ghost opacity 0.075, lane guide opacity 0.10 (rgba for background-agnostic theming); P2_LOCKED_COLOR #4a4a4a fully opaque; human player always gets bright locked color regardless of P1/P2 side; APP_BUILD_DATE + relTime() helper for version stamp with s/m/h/d precision; stamp font 12, flex layout. APP_COMMIT ba417d1.)
+  Last updated: 2026-05-27 - MacFQ (preview/game.html renamed to preview/index.html; old storybook deleted; settings screen + haptics wired. APP_COMMIT 11db71b.)
 -->
 
 ## Required reading before building
@@ -30,34 +30,22 @@ No bundler, no build step. Single HTML file rendered by Babel CDN in the browser
 ## Key file
 
 ```
-preview/index.html   <- THE file. All components live here.
-                            Never create separate standalone preview files.
-preview/game.html    <- Standalone fullscreen entry point that renders ONLY
-                            TetrisGame2P. For mobile testing (Xcode Simulator)
-                            and the eventual Capacitor wrapper. Has its own
-                            inlined copy of TetrisGame2P + dependencies.
-                            P1 is HUMAN-controlled here (no AI scoring block):
-                              tap   = rotate CW (Space key parallel)
-                              swipeL/R = move horizontally (Arrow keys)
-                              swipeUp  = hard-drop UP / buoyancy boost (ArrowUp)
-                              swipeDown = +1 row toward floor (ArrowDown)
-                            Gesture handler is scoped to a playRef element
-                            (NOT document) so taps on the right-sidebar
-                            chrome do not trigger P1 inputs.
-                            P2 still AI. EXCEPTION to the rule above: never
-                            add other components here. Keep it minimal.
-                            Skinned to Figma node 124-1377 (Portfolio-2026):
-                            CELL=20, play area 200x400 centered vertically,
-                            right sidebar (info, gear, pause, NEXT). The
-                            ergonomic pause hit box is 48x48 around the
-                            12x16 visible bars. 2-deep P1 NEXT queue
-                            (p1Next + p1NextNext) -- newer pieces enter
-                            the TOP slot and shift down as they spawn.
+preview/index.html   <- THE file. The game. All code lives here.
+                            Renamed from game.html on 2026-05-27; old
+                            storybook (index.html) was deleted.
+                            TetrisGame2P is the only component rendered.
+                            P1 is HUMAN-controlled:
+                              tap        = rotate CW (Space key parallel)
+                              swipeL/R   = move horizontally (Arrow keys)
+                              swipeUp    = hard-drop UP (ArrowUp)
+                              swipeDown  = hard-drop DOWN (ArrowDown)
+                            P2 is AI. Gesture handler scoped to a transparent
+                            capture div (x=0..SIDEBAR_X=320) so taps on the
+                            right sidebar do not trigger P1 inputs.
 ```
 
-Live URLs:
-- Storybook (all components): https://jimjimjimmy.github.io/tetris/preview/index.html
-- Fullscreen game (mobile/Capacitor): https://jimjimjimmy.github.io/tetris/preview/game.html
+Live URL:
+- Game: https://jimjimjimmy.github.io/tetris/preview/
 
 ---
 
@@ -142,12 +130,10 @@ Wind indicator: planned for v2 (not in v1).
 ## Folder structure
 
 ```
-preview/index.html      <- storybook (design QA)
+preview/index.html      <- THE game file (renamed from game.html 2026-05-27)
 components/                 <- engineering deliverables (.jsx per component)
   tokens.js                   design tokens as JS exports
 assets/                     <- any static assets (none for v1, ASCII only)
-BUILD-PLAN.md               <- project roadmap
-COMPONENT-INDEX.md          <- engineering reference with component notes
 CLAUDE.md                   <- this file
 ```
 
@@ -168,7 +154,7 @@ git push "https://jimjimjimmy:${GITHUB_TOKEN}@github.com/jimjimjimmy/tetris.git"
 ```
 
 ### REQUIRED before every commit - update version stamps
-Every commit to `preview/game.html` MUST update both constants before staging:
+Every commit to `preview/index.html` MUST update both constants before staging:
 1. `APP_COMMIT` - set to the short hash of the commit being made (run `git commit` first in a separate step, then copy the hash, OR do a two-commit pattern: content commit then version bump commit)
 2. `APP_BUILD_DATE` - set to current LOCAL time (NOT UTC): `date +"%Y-%m-%dT%H:%M:%S"`
 
@@ -444,14 +430,14 @@ function useReveal(duration) {
     across the boundary line. Boundary slide animation already in place
     via BoardViewport `transition: top 260ms cubic-bezier(0.22, 1, 0.36, 1)`
     (animateBoundary prop passed from TetrisGame2P).
-  - Haptics (cdb6b6a): module-level `haptic` helper with light/medium/heavy/
-    gameOver methods. Each wraps `navigator.vibrate` in a feature check +
-    try/catch, fails silently on iOS Safari, swap target for
-    @capacitor/haptics in v3. Wiring:
-    move/rotate -> light (30ms) inside applyP1/applyP2 on every successful
-    input; piece lock -> medium (60ms) gated on HUMAN side's piece-type
-    change; row clear + territory shift -> heavy (100ms); game over ->
-    pattern [200, 100, 200].
+  - Haptics (c2f4ff1): module-level `haptic` object with configure(settings)
+    synced every render. Gates on settings.haptics toggle. 5 named moment
+    methods, each scales pattern by settings.hapticIntensity (light/medium/strong):
+    pieceLock 10/20/30ms; lineClear 30/50/80ms; boundaryGain [10,50,10]/
+    [20,50,20]/[30,50,30]ms; boundaryLoss 40/70/100ms; gameOver 200/400/600ms.
+    light() (move/rotate) 8/12/18ms. Fails silently on iOS Safari (no
+    navigator.vibrate); swap for @capacitor/haptics in v3 without changing
+    call sites. No haptics on AI moves (human piece-type change detection).
   - P1_LOCKED_COLOR "#b1b2b3" (bright). P2_LOCKED_COLOR "#4a4a4a" (dark, fully opaque). Human player always renders as bright regardless of side chosen; AI always renders dark. cellColor map computed at render from playerSide state.
   - GHOST_COLOR "rgba(177,178,179,0.075)". LANE_COLOR "rgba(255,255,255,0.10)". Both rgba for background-agnostic theming.
   - APP_BUILD_DATE constant (ISO datetime string). relTime() helper renders as "Xs ago / Xm ago / Xh ago / Xd ago / Mon D / Mon D, YYYY". Version stamp: font 12, flex space-between, build date on right.
