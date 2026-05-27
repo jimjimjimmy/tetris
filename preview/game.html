@@ -948,13 +948,11 @@ function TetrisGame2P() {
           return { ...s, p1: { ...p1, y, lockPendingTs: Date.now() - LOCK_DELAY_MS, lockResets: MAX_LOCK_RESETS } };
         }
       } else if (action === "soft") {
-        // Soft drop for P1: one row DOWN (y+1), backward from boundary.
-        // P1 floats UP naturally; "soft" is the manual backward step
-        // used to dodge / reposition. Treated as a successful input so
-        // it refreshes the lock-delay timer like any other move.
-        if (isValid2P(getCells(p1.type, p1.rot, p1.x, p1.y + 1), board, boundary, 1)) {
+        // Soft drop for P1: one row UP (y-1), with natural travel toward boundary.
+        // Refreshes the lock-delay timer like any other successful input.
+        if (isValid2P(getCells(p1.type, p1.rot, p1.x, p1.y - 1), board, boundary, 1)) {
           haptic.light();
-          return { ...s, p1: { ...p1, y: p1.y + 1, ...lockReset(p1) } };
+          return { ...s, p1: { ...p1, y: p1.y - 1, ...lockReset(p1) } };
         }
       }
       return s;
@@ -1003,12 +1001,11 @@ function TetrisGame2P() {
           return { ...s, p2: { ...p2, y, lockPendingTs: Date.now() - LOCK_DELAY_MS, lockResets: MAX_LOCK_RESETS } };
         }
       } else if (action === "soft") {
-        // Soft drop for P2: one row UP (y-1), backward from boundary.
-        // P2 falls DOWN naturally; "soft" is the manual backward step.
-        // Refreshes the lock-delay timer like any other move.
-        if (isValid2P(getCells(p2.type, p2.rot, p2.x, p2.y - 1), board, boundary, 2)) {
+        // Soft drop for P2: one row DOWN (y+1), with natural travel toward boundary.
+        // Refreshes the lock-delay timer like any other successful input.
+        if (isValid2P(getCells(p2.type, p2.rot, p2.x, p2.y + 1), board, boundary, 2)) {
           haptic.light();
-          return { ...s, p2: { ...p2, y: p2.y - 1, ...lockReset(p2) } };
+          return { ...s, p2: { ...p2, y: p2.y + 1, ...lockReset(p2) } };
         }
       }
       return s;
@@ -1023,7 +1020,7 @@ function TetrisGame2P() {
 
   // Keyboard: "0" reset, "p"/"P" pause, arrows + space drive whichever
   // side the user picked on the start screen. The ONLY vertical input
-  // is the soft drop in the away-from-boundary direction; the opposite
+  // is the soft drop in the natural-travel direction; the opposite
   // arrow is intentionally a no-op (mirrors the touch gesture rule:
   // gestures never act against the piece's natural float direction).
   //   ArrowLeft / ArrowRight -- horizontal move
@@ -1038,8 +1035,8 @@ function TetrisGame2P() {
       const apply = side === 2 ? applyP2 : applyP1;
       if      (e.key === "ArrowLeft")  apply("left");
       else if (e.key === "ArrowRight") apply("right");
-      else if (e.key === "ArrowUp")    { if (side === 2) apply("soft"); }
-      else if (e.key === "ArrowDown")  { if (side !== 2) apply("soft"); }
+      else if (e.key === "ArrowUp")    { if (side !== 2) apply("soft"); }
+      else if (e.key === "ArrowDown")  { if (side === 2) apply("soft"); }
       else if (e.key === " ")          apply("tap");
     };
     window.addEventListener("keydown", onKey);
@@ -1059,9 +1056,8 @@ function TetrisGame2P() {
     // (every CELL/STEP_PX pixels of drag) so the piece tracks the finger
     // live -- no waiting on touchend. Tap rotates on release if the finger
     // never moved much. The ONLY vertical gesture is the soft drop in the
-    // away-from-boundary direction (P1 swipe-down, P2 swipe-up); the
-    // toward-boundary swipe is intentionally a no-op so the player can't
-    // drag a piece against its natural fall direction.
+    // natural-travel direction: P1 swipe-up, P2 swipe-down. The
+    // against-gravity swipe is intentionally a no-op.
     const STEP_PX  = 30;   // ratchet step: each 30px of drag advances one cell.
     const TAP_PX   = 10;   // movement under this counts as a tap
     let startX = 0, startY = 0;
@@ -1087,9 +1083,9 @@ function TetrisGame2P() {
       // The boost direction (P1 up, P2 down) is intentionally not ratched
       // here -- it fires hard drop on touch end.
       if (side === 2) {
-        while (lastDy - dy >= STEP_PX) { apply("soft"); lastDy -= STEP_PX; moved = true; }
-      } else {
         while (dy - lastDy >= STEP_PX) { apply("soft"); lastDy += STEP_PX; moved = true; }
+      } else {
+        while (lastDy - dy >= STEP_PX) { apply("soft"); lastDy -= STEP_PX; moved = true; }
       }
     };
     const onEnd = (e) => {
@@ -1102,10 +1098,9 @@ function TetrisGame2P() {
       // Tap rotates only if the finger barely moved AND no cells were
       // applied during touchmove (prevents "rotate on lift" after swipe).
       if (!moved && adx < TAP_PX && ady < TAP_PX) { apply("tap"); return; }
-      // Hard drop on touchend is disabled. Soft drop (in the away-from-
-      // boundary direction) already fired live during onMove. A swipe
-      // in the toward-boundary direction (P1 up, P2 down) is ignored
-      // so the player can never drag a piece against its float.
+      // Hard drop on touchend is disabled. Soft drop (in the natural-
+      // travel direction) already fired live during onMove. An against-
+      // gravity swipe (P1 down, P2 up) is intentionally a no-op.
     };
     // Attach to a transparent full-height gesture surface that spans from
     // x=0 to x=SIDEBAR_X (the entire left portion of the screen) so the

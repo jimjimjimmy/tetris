@@ -353,15 +353,14 @@ function useReveal(duration) {
     via useEffect setTimeout, reference-equality guard so a fast
     second clear doesn't cancel the first. New constant
     CLEAR_FLASH_MS = 100.
-  - Soft drop (be798e9, closes #2): the previously-unbound backward
-    direction is now wired as a per-step manual move.
-      P1: swipe down / ArrowDown -> y+1 (one row down per STEP_PX)
-      P2: swipe up   / ArrowUp   -> y-1 (one row up   per STEP_PX)
-    Implemented via a new "soft" action on applyP1/applyP2, ratched
-    from the touch handler's onMove using lastDy + STEP_PX (mirror
-    of the horizontal ratchet). Refreshes lock-delay timer like any
-    other successful input. Hard drop still fires on touchend in
-    the boost direction (P1 up / P2 down).
+  - Soft drop (be798e9/corrected): soft drop fires in the natural-travel
+    direction -- same way the piece moves automatically.
+      P1 (floats UP): swipe-up / ArrowUp -> y-1 (one row UP per STEP_PX)
+      P2 (falls DOWN): swipe-down / ArrowDown -> y+1 (one row DOWN per STEP_PX)
+    Opposite swipe is intentionally a no-op (against gravity).
+    Keyboard: ArrowUp fires P1 soft (side!=2); ArrowDown fires P2 soft (side==2).
+    Touch onMove: P1 fires on negative dy (swipe-up); P2 fires on positive dy (swipe-down).
+    Both refresh the lock-delay timer like any other successful input.
   - Lock delay (55bbc55, closes #1): 250ms grace before a piece commits.
     Each piece carries lockPendingTs + lockResets. Tick: piece that
     can't move forward starts the timer; LOCK_DELAY_MS later (or sooner
