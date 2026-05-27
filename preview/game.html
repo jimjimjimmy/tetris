@@ -1019,13 +1019,12 @@ function TetrisGame2P() {
   playerSideRef.current = state.playerSide;
 
   // Keyboard: "0" reset, "p"/"P" pause, arrows + space drive whichever
-  // side the user picked on the start screen. The ONLY vertical input
-  // is the soft drop in the natural-travel direction; the opposite
-  // arrow is intentionally a no-op (mirrors the touch gesture rule:
-  // gestures never act against the piece's natural float direction).
+  // side the user picked on the start screen. Vertical arrows fire the
+  // hard drop toward the boundary; the opposite arrow is a no-op.
+  // Touch soft drop (one row) remains on the swipe gesture.
   //   ArrowLeft / ArrowRight -- horizontal move
-  //   ArrowUp                -- P2 soft drop (y-1) / P1 no-op
-  //   ArrowDown              -- P1 soft drop (y+1) / P2 no-op
+  //   ArrowUp                -- P1 hard drop (all the way up) / P2 no-op
+  //   ArrowDown              -- P2 hard drop (all the way down) / P1 no-op
   //   Space                  -- rotate
   React.useEffect(() => {
     const onKey = (e) => {
@@ -1035,8 +1034,8 @@ function TetrisGame2P() {
       const apply = side === 2 ? applyP2 : applyP1;
       if      (e.key === "ArrowLeft")  apply("left");
       else if (e.key === "ArrowRight") apply("right");
-      else if (e.key === "ArrowUp")    { if (side !== 2) apply("soft"); }
-      else if (e.key === "ArrowDown")  { if (side === 2) apply("soft"); }
+      else if (e.key === "ArrowUp")    { if (side !== 2) apply("up"); }
+      else if (e.key === "ArrowDown")  { if (side === 2) apply("down"); }
       else if (e.key === " ")          apply("tap");
     };
     window.addEventListener("keydown", onKey);

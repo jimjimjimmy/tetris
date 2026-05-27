@@ -366,6 +366,9 @@ function useReveal(duration) {
     Touch soft drop is one-shot per gesture: softFired flag set on first
     STEP_PX threshold crossing, then locked until the next touchstart.
     Horizontal movement still uses the full while-ratchet (tracks finger).
+    Keyboard arrow keys fire HARD DROP (not soft): ArrowUp = P1 "up"
+    action (all the way to lock position), ArrowDown = P2 "down" action.
+    Opposite arrow is no-op. Touch swipe remains the one-row soft drop.
   - Lock delay (55bbc55, closes #1): 250ms grace before a piece commits.
     Each piece carries lockPendingTs + lockResets. Tick: piece that
     can't move forward starts the timer; LOCK_DELAY_MS later (or sooner
