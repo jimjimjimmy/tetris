@@ -179,7 +179,8 @@ const DASH_SEG         = 4;      // dash on, dash off (Figma 4/4 pattern)
 const DASH_LEFT_X      = -3;     // left dashed segment left edge (Figma -3)
 const DASH_LEFT_W      = 60;     // Figma 60 -- dashes flow right-to-left so the partial dash bleeds off the frame's LEFT edge (clipped by frame overflow:hidden), and the last full dash lands flush at x=57, 4px before PLAY_X=61
 const DASH_RIGHT_X     = 265;    // starts 4px right of play edge (261)
-const DASH_RIGHT_W     = 0;      // right stub removed; line clips at play area right edge
+const DASH_RIGHT_W     = 0;      // boundary stub removed; boundary dashed line clips at play area right edge
+const ORIGIN_RIGHT_W   = 52;     // origin solid line extends into right gutter (original width before bug fix zeroed DASH_RIGHT_W)
 // ORIGIN line -- the fixed neutral reference at ROWS_2P / 2 that never
 // moves. Always rendered alongside the live boundary so the gap between
 // the two lines tells the game's territory story at a glance. Brighter
@@ -1544,31 +1545,20 @@ function TetrisGame2P() {
         pointerEvents: "none",
       }} />
 
-      {/* ── Live boundary line (Figma 152-1747 / 152-2247). Dashed 4/4
-          pattern in the margins; the play area itself stays clear so
-          pieces are never sliced. The `top` animates when the boundary
-          shifts so the dashes glide. Color: green (gain) / red (loss)
-          when boundary != BDY_2P; white DASH_COLOR at neutral. CSS
-          can't transition gradient stops, so the color flip is instant
-          -- the vertical slide still eases. ── */}
-      <div style={{
-        position: "absolute",
-        left: DASH_LEFT_X, top: boundaryY, width: DASH_LEFT_W, height: 1,
-        backgroundImage: `linear-gradient(90deg, ${bdyView ? bdyView.dashRgba : DASH_COLOR} 0, ${bdyView ? bdyView.dashRgba : DASH_COLOR} ${DASH_SEG}px, transparent ${DASH_SEG}px, transparent ${DASH_SEG * 2}px)`,
-        backgroundSize: `${DASH_SEG * 2}px 1px`,
-        backgroundRepeat: "repeat-x",
-        pointerEvents: "none",
-        transition: `top ${BRACKET_EASE}`,
-      }} />
-
-      {/* ── Origin (neutral reference). Solid 1px line fixed at
-          ROWS_2P / 2, never moves. Brighter alpha (0.7) than the live
-          dashed boundary's 0.4 so the player can read the gap at a
-          glance. Rendered AFTER the live boundary so it stacks on top
-          when they overlap at game start or after a return-to-zero. ── */}
+      {/* ── Origin line (left + right). Solid 1px fixed at ROWS_2P / 2,
+          never moves. Left stub at DASH_LEFT_X, right stub at
+          DASH_RIGHT_X with ORIGIN_RIGHT_W. The live boundary dashed
+          line is intentionally omitted from both margins -- the right-
+          side bdyView indicator carries that information. ── */}
       <div style={{
         position: "absolute",
         left: DASH_LEFT_X, top: originY, width: DASH_LEFT_W, height: 1,
+        background: ORIGIN_DASH_COLOR,
+        pointerEvents: "none",
+      }} />
+      <div style={{
+        position: "absolute",
+        left: DASH_RIGHT_X, top: originY, width: ORIGIN_RIGHT_W, height: 1,
         background: ORIGIN_DASH_COLOR,
         pointerEvents: "none",
       }} />
