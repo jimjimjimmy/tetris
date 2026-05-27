@@ -1022,10 +1022,13 @@ function TetrisGame2P() {
   playerSideRef.current = state.playerSide;
 
   // Keyboard: "0" reset, "p"/"P" pause, arrows + space drive whichever
-  // side the user picked on the start screen.
+  // side the user picked on the start screen. The ONLY vertical input
+  // is the soft drop in the away-from-boundary direction; the opposite
+  // arrow is intentionally a no-op (mirrors the touch gesture rule:
+  // gestures never act against the piece's natural float direction).
   //   ArrowLeft / ArrowRight -- horizontal move
-  //   ArrowUp                -- P1 hard drop (boost) / P2 soft drop (backward step)
-  //   ArrowDown              -- P1 soft drop (backward step) / P2 hard drop (boost)
+  //   ArrowUp                -- P2 soft drop (y-1) / P1 no-op
+  //   ArrowDown              -- P1 soft drop (y+1) / P2 no-op
   //   Space                  -- rotate
   React.useEffect(() => {
     const onKey = (e) => {
@@ -1035,8 +1038,8 @@ function TetrisGame2P() {
       const apply = side === 2 ? applyP2 : applyP1;
       if      (e.key === "ArrowLeft")  apply("left");
       else if (e.key === "ArrowRight") apply("right");
-      else if (e.key === "ArrowUp")    apply(side === 2 ? "soft" : "up");
-      else if (e.key === "ArrowDown")  apply(side === 2 ? "down" : "soft");
+      else if (e.key === "ArrowUp")    { if (side === 2) apply("soft"); }
+      else if (e.key === "ArrowDown")  { if (side !== 2) apply("soft"); }
       else if (e.key === " ")          apply("tap");
     };
     window.addEventListener("keydown", onKey);
@@ -1055,8 +1058,10 @@ function TetrisGame2P() {
     // Continuous gesture tracking. Horizontal moves fire DURING the touch
     // (every CELL/STEP_PX pixels of drag) so the piece tracks the finger
     // live -- no waiting on touchend. Tap rotates on release if the finger
-    // never moved much. Swipe-up (buoyancy boost) hard-drops on release.
-    // Down-swipes do NOTHING -- P1 cannot move backward against its float.
+    // never moved much. The ONLY vertical gesture is the soft drop in the
+    // away-from-boundary direction (P1 swipe-down, P2 swipe-up); the
+    // toward-boundary swipe is intentionally a no-op so the player can't
+    // drag a piece against its natural fall direction.
     const STEP_PX  = 30;   // ratchet step: each 30px of drag advances one cell.
     const TAP_PX   = 10;   // movement under this counts as a tap
     let startX = 0, startY = 0;
@@ -1097,13 +1102,10 @@ function TetrisGame2P() {
       // Tap rotates only if the finger barely moved AND no cells were
       // applied during touchmove (prevents "rotate on lift" after swipe).
       if (!moved && adx < TAP_PX && ady < TAP_PX) { apply("tap"); return; }
-      // Swipe-toward-boundary = hard drop. Direction depends on side:
-      // P1 boost = UP (dy <= -STEP_PX); P2 boost = DOWN (dy >= STEP_PX).
-      if (side === 2) {
-        if (dy >=  STEP_PX && ady > adx) apply("down");
-      } else {
-        if (dy <= -STEP_PX && ady > adx) apply("up");
-      }
+      // Hard drop on touchend is disabled. Soft drop (in the away-from-
+      // boundary direction) already fired live during onMove. A swipe
+      // in the toward-boundary direction (P1 up, P2 down) is ignored
+      // so the player can never drag a piece against its float.
     };
     // Attach to a transparent full-height gesture surface that spans from
     // x=0 to x=SIDEBAR_X (the entire left portion of the screen) so the
