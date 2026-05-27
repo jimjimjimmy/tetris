@@ -97,7 +97,7 @@ const AI_LEVEL_CONFIG  = {
 // just before each commit.
 const APP_VERSION    = "v0.1";
 const APP_COMMIT     = "c6051c3";
-const APP_BUILD_DATE = "2026-05-27T12:09:49";
+const APP_BUILD_DATE = "2026-05-27T12:38:05";
 
 // Default fall interval (used as a fallback when state.aiLevel is invalid).
 // Real tick rate comes from AI_LEVEL_CONFIG[aiLevel].tickMs, looked up at
@@ -577,7 +577,17 @@ function useSettings() {
   return [s, update];
 }
 
-function SettingsScreen({ settings, onUpdate, onClose }) {
+function SettingsScreen({ settings, onUpdate, onClose, initialSection }) {
+  const scrollRef = React.useRef(null);
+  const gameSecRef = React.useRef(null);
+
+  React.useEffect(() => {
+    if (initialSection === "game" && scrollRef.current && gameSecRef.current) {
+      const top = gameSecRef.current.offsetTop - 56;
+      scrollRef.current.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+    }
+  }, []);
+
   // ---- shared style helpers (plain objects, not components, to avoid hook rules) ----
   const secLabel = {
     fontFamily: "monospace", fontSize: 10, fontWeight: 600,
@@ -602,7 +612,7 @@ function SettingsScreen({ settings, onUpdate, onClose }) {
   };
 
   return (
-    <div style={{
+    <div ref={scrollRef} style={{
       position: "absolute", inset: 0,
       width: FRAME_W, height: GAME_2P_H,
       background: "#0a0a0a",
@@ -721,7 +731,7 @@ function SettingsScreen({ settings, onUpdate, onClose }) {
         </div>
 
         {/* GAME section */}
-        <div>
+        <div ref={gameSecRef}>
           <div style={secLabel}>Game</div>
           {/* Level */}
           <div style={row}>
@@ -746,7 +756,7 @@ function SettingsScreen({ settings, onUpdate, onClose }) {
           <div style={row}>
             <div style={rowLbl}>Side</div>
             <div style={{ display: "flex" }}>
-              {[{ s: 1, label: "P1  ↑" }, { s: 2, label: "P2  ↓" }].map(({ s, label }) => (
+              {[{ s: 1, label: "P1↑" }, { s: 2, label: "P2↓" }].map(({ s, label }) => (
                 <div key={s}
                   onPointerDown={() => onUpdate("side", s)}
                   onTouchStart={e => e.stopPropagation()}
@@ -788,7 +798,17 @@ function SettingsScreen({ settings, onUpdate, onClose }) {
 function TetrisGame2P() {
   const [settings, updateSetting] = useSettings();
   const [showSettings, setShowSettings] = React.useState(false);
+  const [settingsSection, setSettingsSection] = React.useState(null);
   const [state, setState] = React.useState(makeInitState2P);
+
+  const openSettings = (section) => {
+    setSettingsSection(section || null);
+    setShowSettings(true);
+  };
+  const closeSettings = () => {
+    setShowSettings(false);
+    setSettingsSection(null);
+  };
 
   React.useEffect(() => {
     const id = setInterval(() => {
@@ -1498,7 +1518,7 @@ function TetrisGame2P() {
 
         {/* Gear icon -- top-right, same position as in-game */}
         <div
-          onPointerDown={() => setShowSettings(true)}
+          onPointerDown={() => openSettings()}
           onTouchStart={e => e.stopPropagation()}
           style={{
             position: "absolute",
@@ -1534,12 +1554,17 @@ function TetrisGame2P() {
             textTransform: "uppercase",
           }}>Select your side</div>
 
-          {/* Level indicator -- read-only, tapping gear opens settings to change it */}
-          <div style={{
-            fontFamily: "monospace", fontSize: 10, fontWeight: 600,
-            letterSpacing: 4, color: "rgba(255,255,255,0.25)",
-            textTransform: "uppercase",
-          }}>Level &nbsp; {settings.level}</div>
+          {/* Level indicator -- tapping opens settings scrolled to Game section */}
+          <div
+            onPointerDown={() => openSettings("game")}
+            onTouchStart={e => e.stopPropagation()}
+            style={{
+              fontFamily: "monospace", fontSize: 10, fontWeight: 600,
+              letterSpacing: 4, color: "rgba(255,255,255,0.25)",
+              textTransform: "uppercase",
+              cursor: "pointer",
+            }}
+          >Level &nbsp; {settings.level}</div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 24, alignItems: "stretch", width: 280 }}>
             <div
@@ -1555,7 +1580,7 @@ function TetrisGame2P() {
                 cursor: "pointer",
                 userSelect: "none",
               }}
-            >[ P1 &nbsp; ↑ ]</div>
+            >[ P1↑ ]</div>
 
             <div
               onPointerDown={selectSide(2)}
@@ -1570,7 +1595,7 @@ function TetrisGame2P() {
                 cursor: "pointer",
                 userSelect: "none",
               }}
-            >[ P2 &nbsp; ↓ ]</div>
+            >[ P2↓ ]</div>
           </div>
         </div>
 
@@ -1595,11 +1620,12 @@ function TetrisGame2P() {
         {showSettings && (
           <SettingsScreen
             settings={settings}
+            initialSection={settingsSection}
             onUpdate={(key, val) => {
               updateSetting(key, val);
               if (key === "level") setState(s => ({ ...s, aiLevel: val }));
             }}
-            onClose={() => setShowSettings(false)}
+            onClose={closeSettings}
           />
         )}
       </div>
@@ -2008,7 +2034,7 @@ function TetrisGame2P() {
 
       {/* Gear icon -- white SVG at opacity 0.3 (Figma 124:2233). Tapping opens settings. */}
       <div
-        onPointerDown={() => setShowSettings(true)}
+        onPointerDown={() => openSettings()}
         onTouchStart={e => e.stopPropagation()}
         style={{
           position: "absolute",
@@ -2166,11 +2192,12 @@ function TetrisGame2P() {
       {showSettings && (
         <SettingsScreen
           settings={settings}
+          initialSection={settingsSection}
           onUpdate={(key, val) => {
             updateSetting(key, val);
             if (key === "level") setState(s => ({ ...s, aiLevel: val }));
           }}
-          onClose={() => setShowSettings(false)}
+          onClose={closeSettings}
         />
       )}
     </div>
