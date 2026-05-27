@@ -327,6 +327,8 @@ function useReveal(duration) {
     between play area and sidebar -- no overhang into either.
     DASH_RIGHT_W set to 0: the right-side dash stub was removed so the
     boundary line clips exactly at the play area right edge (x=261).
+    Right-side dash divs (live boundary and origin line) removed from JSX
+    entirely -- no DOM elements, no ghost pixels past x=261.
   - 1:1 boundary shift + DEBUG_PIECES (0a3b9ef): removed the decay
     accumulator (decayShiftAt/sumDecayShift, DECAY_RATE, MIN_SHIFT,
     p1ShiftAcc, p2ShiftAcc). Each row cleared moves the boundary by

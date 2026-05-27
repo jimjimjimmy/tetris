@@ -1560,15 +1560,6 @@ function TetrisGame2P() {
         pointerEvents: "none",
         transition: `top ${BRACKET_EASE}`,
       }} />
-      <div style={{
-        position: "absolute",
-        left: DASH_RIGHT_X, top: boundaryY, width: DASH_RIGHT_W, height: 1,
-        backgroundImage: `linear-gradient(90deg, ${bdyView ? bdyView.dashRgba : DASH_COLOR} 0, ${bdyView ? bdyView.dashRgba : DASH_COLOR} ${DASH_SEG}px, transparent ${DASH_SEG}px, transparent ${DASH_SEG * 2}px)`,
-        backgroundSize: `${DASH_SEG * 2}px 1px`,
-        backgroundRepeat: "repeat-x",
-        pointerEvents: "none",
-        transition: `top ${BRACKET_EASE}`,
-      }} />
 
       {/* ── Origin (neutral reference). Solid 1px line fixed at
           ROWS_2P / 2, never moves. Brighter alpha (0.7) than the live
@@ -1578,12 +1569,6 @@ function TetrisGame2P() {
       <div style={{
         position: "absolute",
         left: DASH_LEFT_X, top: originY, width: DASH_LEFT_W, height: 1,
-        background: ORIGIN_DASH_COLOR,
-        pointerEvents: "none",
-      }} />
-      <div style={{
-        position: "absolute",
-        left: DASH_RIGHT_X, top: originY, width: DASH_RIGHT_W, height: 1,
         background: ORIGIN_DASH_COLOR,
         pointerEvents: "none",
       }} />
