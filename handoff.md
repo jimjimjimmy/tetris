@@ -1,102 +1,104 @@
-# Handoff - Tetris (jimjimjimmy/tetris) - 2026-05-21
+# Handoff - Tetris (DRIFT) - 2026-05-28
 
 ## What this is
 
-Personal 2-player mobile Tetris project on MacFQ. This session added two
-gameplay-feel improvements (discrete-swipe ratchet + ghost piece) and a
-build-identity stamp on the start screen. Ended mid-task on a ghost-opacity
-tweak the user interrupted to call handoff.
+Personal 2-player mobile Tetris on MacFQ (jimjimjimmy/tetris). This
+session: shipped the QA backlog (lock delay, soft drop, line clear
+flash, wall kicks), fixed the +1->+2 boundary fencepost, added the
+DEBUG_PIECES smoke-test BAR piece, applied Figma 152-1747 / 152-2247
+status-color polish to the boundary indicator, corrected an
+origin/live solid-vs-dashed swap, and disabled the toward-boundary
+hard drop so vertical gestures only ever act away from the boundary.
 
 ## Current state
 
 Working and shipped:
-- `preview/game.html` v26 with full Figma chrome (icons, pause, NEXT, gradients,
-  grid, dashed boundary, stack brackets, "+N" gain indicator) + start screen
-  with P1/P2 side selection + side-aware human/AI routing.
-- Both queues two-deep: p1Next+p1NextNext, p2Next+p2NextNext. NEXT sidebar
-  shows whichever side the human is playing.
-- **Discrete swipe ratchet (this session, daeeefc):** STEP_PX 10 -> 30. Each
-  30px of horizontal drag fires exactly one cell move. Long drags step
-  discretely. No more continuous-slide feel.
-- **Ghost piece (this session, daeeefc):** active piece projected straight up
-  (P1) or down (P2) to landing position, painted at GHOST_COLOR
-  rgba(177,178,179,0.2) before active piece is painted. Only for the human
-  player's piece; AI piece has no ghost.
-- **Build-identity stamp (this session, a76c713):** APP_VERSION = "v0.1",
-  APP_COMMIT = "daeeefc" constants. Renders "v0.1 . daeeefc" at bottom-center
-  of the start screen only, monospace 10px / 2px letter-spacing / opacity 0.35.
-- Pause icon vertically centered on starting boundary line (y=440).
-- iOS Safari gradient compensation. Status-bar overlay + chrome top safe-area.
-  NEXT bottom safe-area. Haptics via Web Vibration API (Android only).
+- All four backlog tickets closed (#1 lock delay, #2 soft drop, #3
+  line clear flash, #4 wall kicks).
+- Boundary shift is now 1:1 -- `newBdy = boundary - n1 + n2`. The old
+  `decayShiftAt` decimal accumulator (0.952, 0.909...) was the root
+  cause of the +1->+2 / -1->-2 / simul-2-at-+1 bugs. Removed entirely.
+- DEBUG_PIECES smoke-test mode: when `true`, every piece spawns as
+  a 10x1 BAR for deterministic single-row clears. `spawnX(type)`
+  returns 0 for BAR, 3 otherwise. Always `false` before push.
+- Status-color indicator (Figma 152-1747 / 152-2247):
+  - Live boundary line: dashed 4/4, color `#2fff00` (gain) /
+    `#ff0000` (loss) / `DASH_COLOR` white (neutral).
+  - Origin line: solid at midline, `ORIGIN_DASH_COLOR` (white 0.7).
+    Distinguishes neutral reference from displacing live boundary.
+  - Bracket: stem 1px wide at opacity 0.15, cap 4x1 at LIVE end at
+    opacity 0.5.
+  - "+N" / "-N" text: Inter Regular 10/2px uppercase, opacity 0.5,
+    same color as bracket.
+- Vertical gesture / arrow rule (this session's final commit `9f57cc7`):
+  the only vertical input is the AWAY-from-boundary direction.
+    P1 swipe-down / ArrowDown -> soft drop +1
+    P1 swipe-up   / ArrowUp   -> no-op
+    P2 swipe-up   / ArrowUp   -> soft drop -1
+    P2 swipe-down / ArrowDown -> no-op
+  Hard-drop apply branches kept in applyP*/applyP* but no caller
+  triggers them. One-line wiring change to re-enable.
+- Mobile dvh viewport fix (`f1ffe21`) so the app covers the full
+  screen on iOS Safari, no bottom black bar.
+- Per-level fall speed: L1=600ms, L2=440, L3=320, L4=220, L5=140.
 
 Partially done / interrupted:
-- User asked to reduce ghost opacity from 0.2 to ~0.15 because the ghost
-  looks identical to P2's locked stack (same alpha as P2_LOCKED_COLOR) and
-  reads as a placed piece. Was about to ship a one-line GHOST_COLOR change
-  when user called handoff. Not committed.
+- None this session. Backlog cleared.
 
-Known limitations carrying over:
-- iPhone PWA gradient verification still on user's side. If rgba(36,38,44,0.55)
-  still reads near-black on real iPhone, bump to rgba(50,53,60,0.55).
-- Start screen is placeholder ASCII style. Figma frame not yet started.
-- AI_DIFFICULTY constant exists but no logic gates off it.
-- Vibration API is iOS-unsupported; Capacitor @capacitor/haptics needed for
-  native haptics.
-- APP_COMMIT must be updated manually before each commit (no build step).
-
-No known regressions. All game mechanics untouched this session.
+Known untracked working docs (local, NOT committed):
+- `bug_report.md` -- queue of bugs + features.
+    B1 "Soft drop works against gravity" is now shipped as
+    `9f57cc7`. User should move it to Done.
+- `test_plan.md` -- recurring smoke test checklist using DEBUG_PIECES.
 
 ## Files changed this session
 
 | File | Status | What changed |
 |------|--------|-------------|
-| preview/game.html | committed (daeeefc) | STEP_PX 10->30 (discrete swipe ratchet); ghost piece overlay added (GHOST_COLOR + computation in render before active-piece overlay) |
-| preview/game.html | committed (a76c713) | APP_VERSION + APP_COMMIT constants; version stamp rendered at bottom of start screen |
-| CLAUDE.md | committed (both) | Last-updated entry refreshed after each commit |
-| .DS_Store | untracked (ignored) | macOS Finder metadata, not committed |
+| preview/game.html | committed (multiple) | Lock delay + soft drop + line clear flash + wall kicks + 1:1 boundary shift + DEBUG_PIECES BAR + status-color indicator + origin/live solid/dashed swap + hard-drop disable |
+| CLAUDE.md | committed | Per-commit notes for each of the above |
+| bug_report.md | untracked | User-maintained bug + feature queue (pre-existing) |
+| test_plan.md | untracked | User-maintained smoke-test plan (pre-existing) |
+| .DS_Store | untracked (ignored) | macOS finder metadata |
 
 ## Uncommitted work
 
-None on disk. The pending ghost-opacity tweak (rgba alpha 0.2 -> 0.15) was
-planned but interrupted before any edit. Working tree is clean except for
-`.DS_Store`.
+None on `preview/game.html` or `CLAUDE.md`. The two `.md` files in
+the working tree (bug_report.md, test_plan.md) are user-maintained
+local tracking docs and were not touched by this session.
 
 ## Open questions / decisions pending
 
-1. **Ghost opacity (interrupted task).** Current GHOST_COLOR = rgba(177,178,179,0.2)
-   which is identical to P2_LOCKED_COLOR, so ghost looks like a placed piece.
-   User asked to drop to 0.15 (or lower). Next session: change the constant,
-   verify ghost is visibly distinct from locked pieces, ship.
-2. iPhone PWA gradient: still unverified on device.
-3. Start screen Figma frame: design pass needed.
-4. AI_DIFFICULTY tiers: not wired.
-5. APP_COMMIT automation: optional pre-commit hook to run `git rev-parse
-   --short HEAD` and substitute into the file.
+1. Update bug_report.md B1 status. Soft-drop-against-gravity bug
+   was shipped as commit `9f57cc7`. Move B1 from Pending to Done.
+2. Hard drop returnability. Disabled this session. If gameplay
+   feels too slow without it, the apply* internals are intact --
+   one-line restore in the keyboard / onEnd handler.
+3. Sound FX + music (F1, F2 in bug_report.md). Spec says
+   placeholder options UI first, then wire ~6-8 CC0 sounds.
+4. Score / win streak tracker (F3). Not started.
+5. Game-over / rematch screen (F4). Currently uses an inline
+   summary overlay with REMATCH button; no proper end screen.
 
 ## What to do next
 
-1. **Finish ghost-opacity fix.** Change GHOST_COLOR in preview/game.html from
-   "rgba(177, 178, 179, 0.2)" to "rgba(177, 178, 179, 0.15)" (or lower).
-   Reload, confirm ghost is faint hint not solid piece. Update CLAUDE.md.
-   Update APP_COMMIT to current HEAD before commit. Push. Done.
-2. **iPhone PWA verification.** Delete + re-add game.html on iOS home screen
-   (picks up status-bar config). Verify gradient depth, NEXT clears home
-   indicator, both sides selectable + controllable, version stamp visible.
-3. **Start screen Figma pass.** Pull a frame, skin properly.
-4. **AI difficulty tiers.** Wire AI_DIFFICULTY to scoring weights.
-5. **Real-World Conditions spike** (from GAME-IDEAS.md): weather API at game
-   start -> WIND_FORCE constant -> lateral drift per tick.
+1. User: tick off B1 in bug_report.md. Move "Soft drop works
+   against gravity" to Done with commit `9f57cc7`.
+2. Run the test_plan.md smoke pass on device. Set
+   `DEBUG_PIECES = true` locally and walk through the 10+
+   boundary transitions plus the new vertical-gesture rules.
+3. Pick the next feature from bug_report.md (F1 sound FX
+   placeholder UI is the explicit next-up).
+4. APP_COMMIT housekeeping: current is `9f57cc7`. Always bump
+   to the new short hash before pushing a behavioral commit.
 
 ## How to resume
 
 ```bash
-# From either MacFQ or Gandalf
 cd "$HOME/Library/CloudStorage/Dropbox/04 Projects/AI Shared/Tetris"
 git pull
 
 # Local server (matches the working-dir layout used by tetris-storybook).
-# The repo serves preview/game.html via the parent http-server config in
-# Dropbox/04 Projects/AI Shared/.claude/launch.json (cwd=./Tetris).
 python3 -m http.server 7654
 # then open http://localhost:7654/preview/game.html
 
@@ -105,21 +107,21 @@ GITHUB_TOKEN=$(gh auth token --hostname github.com -u jimjimjimmy 2>/dev/null)
 git push "https://jimjimjimmy:${GITHUB_TOKEN}@github.com/jimjimjimmy/tetris.git" main
 ```
 
-Live URLs (auto-updated from main):
-- Storybook: https://jimjimjimmy.github.io/tetris/preview/index.html
-- Fullscreen game (target for Simulator + Capacitor):
-  https://jimjimjimmy.github.io/tetris/preview/game.html
+Live URLs (auto-update from main):
+- Fullscreen game: https://jimjimjimmy.github.io/tetris/preview/game.html
+  Footer shows `APP_COMMIT="9f57cc7"` after Pages refresh.
 
 ## Machine / account notes
 
-- Generated on **MacFQ**.
-- Personal repo on `jimjimjimmy` GitHub account, NOT FloQast. Always push
-  with the explicit token form shown above.
-- Cross-machine state lives in Dropbox `04 Projects/AI Shared/Tetris/`. Both
-  MacFQ and Gandalf can edit; CLAUDE.md is the single source of truth.
-- Pre-commit hook blocks em-dashes. Use hyphens only in commits, code, docs.
-- TEST_SPEED constant must be `false` before every push. Verified clean.
-- APP_COMMIT must be updated to short hash of HEAD just before commit so
-  the start-screen stamp reflects the build being shipped.
-- Current build identity: APP_VERSION = "v0.1", APP_COMMIT = "daeeefc"
-  (pre-handoff). After next commit, bump APP_COMMIT first.
+- Generated on MacFQ.
+- Personal repo on `jimjimjimmy` GitHub account, NOT FloQast. Always
+  push with the explicit token form above.
+- Cross-machine state lives in Dropbox `04 Projects/AI Shared/Tetris/`.
+  Both MacFQ and Gandalf can edit; CLAUDE.md is the single source
+  of truth.
+- Pre-commit hook blocks em-dashes. Use hyphens only.
+- `TEST_SPEED` AND `DEBUG_PIECES` must both be `false` before every
+  push. Verified clean.
+- `APP_COMMIT` must be updated to short hash of HEAD just before
+  commit so the start-screen stamp reflects the build being shipped.
+- Current build identity: `APP_VERSION = "v0.1"`, `APP_COMMIT = "9f57cc7"`.
