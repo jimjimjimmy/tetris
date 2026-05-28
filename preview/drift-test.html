@@ -138,29 +138,6 @@ let beatInBar = 0;  // 0=beat1 ... 3=beat4 (accent)
 let accent    = false;
 
 // ================================================================
-//  ARROW HELPER
-// ================================================================
-//  Draws a filled triangle at (cx, cy) pointing in dir (+1 right, -1 left).
-//  `size` is total tip-to-tail length in px.
-
-function drawArrow(cx, cy, dir, size) {
-  const hw = size / 2;        // half the tip-to-tail length
-  const hh = size * 0.38;     // half the height (slightly flatter triangle)
-  ctx.beginPath();
-  if (dir > 0) {              // right-pointing
-    ctx.moveTo(cx - hw, cy - hh);
-    ctx.lineTo(cx + hw, cy);
-    ctx.lineTo(cx - hw, cy + hh);
-  } else {                    // left-pointing
-    ctx.moveTo(cx + hw, cy - hh);
-    ctx.lineTo(cx - hw, cy);
-    ctx.lineTo(cx + hw, cy + hh);
-  }
-  ctx.closePath();
-  ctx.fill();
-}
-
-// ================================================================
 //  DRAW: BASE GRID
 // ================================================================
 
@@ -257,20 +234,19 @@ function drawPatternOverlays() {
       }
 
       case "arrow": {
-        // Two small arrows (~7px) pointing in lane.dir, spaced half-row apart.
-        // Vertical stagger: columns at even index sit in upper third of cell,
-        // odd index in lower third -- so the pair is never at the same height.
-        // The two positions are always 5 cells apart, so they always stagger.
-        const alpha = accent ? 0.88 : 0.22;
-        const size  = accent ? 8 : 6;
-        const cols  = [lane.pos, (lane.pos + 5) % COLS];
-        ctx.fillStyle = "rgba(255,255,255," + alpha + ")";
+        // Two text arrows pointing in lane.dir, spaced half-row apart.
+        // Vertical stagger by column parity (5-col gap = always opposite parity).
+        const alpha  = accent ? 0.88 : 0.22;
+        const glyph  = lane.dir > 0 ? "→" : "←";
+        const cols   = [lane.pos, (lane.pos + 5) % COLS];
+        ctx.fillStyle    = "rgba(255,255,255," + alpha + ")";
+        ctx.font         = "9px monospace";
+        ctx.textAlign    = "center";
+        ctx.textBaseline = "middle";
         cols.forEach(col => {
-          const cx  = PLAY_X + col * CELL + CELL / 2;
-          // Alternate vertical position by column parity.
-          // Cols 5 apart always have opposite parity (5 is odd), so they stagger.
-          const cy  = y + (col % 2 === 0 ? CELL * 0.32 : CELL * 0.68);
-          drawArrow(cx, cy, lane.dir, size);
+          const cx = PLAY_X + col * CELL + CELL / 2;
+          const cy = y + (col % 2 === 0 ? CELL * 0.32 : CELL * 0.68);
+          ctx.fillText(glyph, cx, cy);
         });
         break;
       }
