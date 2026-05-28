@@ -40,9 +40,8 @@
       min-width: 200px;
     }
     #debug.hidden { opacity: 0; pointer-events: none; }
-    #dbg-toggle {
+    #dbg-toggle, #pause-toggle {
       position: fixed;
-      bottom: max(20px, env(safe-area-inset-bottom));
       left: 50%;
       transform: translateX(-50%);
       color: rgba(255,255,255,0.25);
@@ -54,11 +53,15 @@
       -webkit-user-select: none;
       z-index: 200;
     }
+    #dbg-toggle   { bottom: max(20px, env(safe-area-inset-bottom)); }
+    #pause-toggle { bottom: calc(max(20px, env(safe-area-inset-bottom)) + 20px); }
+    #pause-toggle.paused { color: rgba(255,255,255,0.55); }
   </style>
 </head>
 <body>
   <div id="frame"><canvas id="canvas"></canvas></div>
   <div id="debug" class="hidden"></div>
+  <div id="pause-toggle">[ pause ]</div>
   <div id="dbg-toggle">[ debug ]</div>
 
 <script>
@@ -330,6 +333,14 @@ function drawFrame() {
 // ================================================================
 
 let lastBeatTime = performance.now();
+let paused       = false;
+
+function togglePause() {
+  paused = !paused;
+  const el = document.getElementById("pause-toggle");
+  el.textContent = paused ? "[ play ]" : "[ pause ]";
+  el.classList.toggle("paused", paused);
+}
 
 function onBeat() {
   beatCount++;
@@ -345,7 +356,9 @@ function onBeat() {
 }
 
 function tick(now) {
-  if (now - lastBeatTime >= BEAT_MS) {
+  if (paused) {
+    lastBeatTime = now;  // keep current so resume starts clean
+  } else if (now - lastBeatTime >= BEAT_MS) {
     lastBeatTime += BEAT_MS;
     onBeat();
   }
@@ -389,8 +402,11 @@ function renderDebug() {
 
 document.getElementById("dbg-toggle")
   .addEventListener("pointerdown", toggleDebug);
+document.getElementById("pause-toggle")
+  .addEventListener("pointerdown", togglePause);
 document.addEventListener("keydown", e => {
   if (e.key === "d" || e.key === "D") toggleDebug();
+  if (e.key === " ") { e.preventDefault(); togglePause(); }
 });
 </script>
 </body>
