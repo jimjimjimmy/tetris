@@ -106,8 +106,8 @@ const LANES = [
   { name: "DOT x1",   type: "dot-1",  row: 3,  dir: +1, pos: 0 },
   { name: "CORNER",   type: "corner", row: 8,  dir: +1, pos: 0 },
   { name: "DOT x2",   type: "dot-2",  row: 13, dir: +1, pos: 0 },
-  { name: "ARROW ->", type: "arrow",  row: 18, dir: +1, pos: 0, phaseOff: 0              },
-  { name: "ARROW <-", type: "arrow",  row: 23, dir: -1, pos: 0, phaseOff: ROW_BEAT_OFFSET },
+  { name: "ARROW ->", type: "arrow",  row: 18, dir: +1, pos: 0, phaseOff: 0,              opacityScale: 0.5 },
+  { name: "ARROW <-", type: "arrow",  row: 23, dir: -1, pos: 0, phaseOff: ROW_BEAT_OFFSET, opacityScale: 1.0 },
 ];
 const LANE_BY_ROW = new Map(LANES.map(l => [l.row, l]));
 
@@ -253,7 +253,7 @@ function drawPatternOverlays() {
         const pOff = lane.phaseOff || 0;
         for (let c = 0; c < COLS; c++) {
           const phase = ((beatCount - 1 - c - pOff) % 4 + 4) % 4;
-          ctx.globalAlpha = OPACITIES[phase];
+          ctx.globalAlpha = OPACITIES[phase] * (lane.opacityScale || 1);
           const cellX = PLAY_X + c * CELL;
           if (lane.dir < 0) {
             ctx.save();
