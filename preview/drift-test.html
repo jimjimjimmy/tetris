@@ -3,10 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>DRIFT - Lane Test</title>
+  <title>DRIFT - Pattern Sampler</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
     html { height: 100%; height: 100dvh; }
     body {
       width: 100%; height: 100%; height: 100dvh;
@@ -17,7 +16,6 @@
       justify-content: center;
       font-family: monospace;
     }
-
     #frame {
       position: relative;
       transform-origin: top center;
@@ -25,24 +23,14 @@
       overflow: hidden;
       flex-shrink: 0;
     }
-
-    /* origin line sits above canvas */
-    #origin-line {
-      position: absolute;
-      height: 2px;
-      background: rgba(255, 255, 255, 0.65);
-      pointer-events: none;
-      z-index: 2;
-    }
-
     #debug {
       position: fixed;
       top: max(12px, env(safe-area-inset-top));
       right: max(12px, env(safe-area-inset-right));
       padding: 10px 12px;
-      background: rgba(0, 0, 0, 0.82);
-      border: 1px solid rgba(255, 255, 255, 0.18);
-      color: rgba(255, 255, 255, 0.65);
+      background: rgba(0,0,0,0.82);
+      border: 1px solid rgba(255,255,255,0.18);
+      color: rgba(255,255,255,0.65);
       font-size: 9px;
       letter-spacing: 0.5px;
       line-height: 1.7;
@@ -52,13 +40,12 @@
       min-width: 200px;
     }
     #debug.hidden { opacity: 0; pointer-events: none; }
-
     #dbg-toggle {
       position: fixed;
       bottom: max(20px, env(safe-area-inset-bottom));
       left: 50%;
       transform: translateX(-50%);
-      color: rgba(255, 255, 255, 0.25);
+      color: rgba(255,255,255,0.25);
       font-size: 9px;
       letter-spacing: 3px;
       text-transform: uppercase;
@@ -70,98 +57,58 @@
   </style>
 </head>
 <body>
-  <div id="frame">
-    <canvas id="canvas"></canvas>
-    <div id="origin-line"></div>
-  </div>
+  <div id="frame"><canvas id="canvas"></canvas></div>
   <div id="debug" class="hidden"></div>
   <div id="dbg-toggle">[ debug ]</div>
 
 <script>
 // ================================================================
-//  CONSTANTS -- tweak here, nowhere else
+//  CONSTANTS -- tweak BPM freely
 // ================================================================
-
 const BPM           = 120;
-const BEAT_MS       = 60000 / BPM;   // 500ms at 120bpm
+const BEAT_MS       = 60000 / BPM;
+const BEATS_PER_BAR = 4;
 
-// Board geometry (mirrors index.html exactly)
+// Board geometry (matches index.html exactly)
 const CELL          = 20;
 const COLS          = 10;
-const ROWS_2P       = 44;
-const BDY_2P        = ROWS_2P / 2;   // 22
 const FRAME_W       = 402;
-const GAME_2P_H     = ROWS_2P * CELL; // 880
 const PLAY_X        = 61;
-const PLAY_W        = COLS * CELL;    // 200
-const PLAY_Y        = 0;
+const PLAY_W        = COLS * CELL;   // 200
 
-// Lane layout
-const LANE_INTERVAL = 4;
-const MIN_EDGE_GAP  = 2;
+// Frame: 35 rows. Origin midline at row 17.5 = y 350 = FRAME_H / 2.
+// 4 lanes above origin (rows 3,7,11,15) + 4 below (rows 19,23,27,31).
+const FRAME_ROWS    = 35;
+const FRAME_H       = FRAME_ROWS * CELL;  // 700
+const ORIGIN_Y      = FRAME_H / 2;        // 350
 
-// Grid
-// GRID_COLOR slightly brighter than the original (0.04) so the traveling
-// gap is perceptible -- the gap IS the visual, there are no fills.
-const GRID_COLOR    = "rgba(255,255,255,0.07)";
+// Colors
+const GRID_COLOR    = "rgba(255,255,255,0.06)";
 
 // ================================================================
-//  LANE DATA
+//  PATTERN LANE DEFINITIONS
 // ================================================================
-//
-//  The "drift" effect is expressed purely through the grid lines.
-//  Each drift lane has an `offset` (0..COLS-1). On each beat step,
-//  offset advances by dir, cycling with period = COLS.
-//
-//  In drawGrid(), the interior column line at position `offset` is
-//  OMITTED for that row, making two adjacent cells appear double-wide
-//  (a "fault"). The fault travels one column per beat in direction dir.
-//
-//  When offset = 0 the row looks identical to a non-drift row.
-//
-//  P1 lanes (below origin): dir = +1 (fault travels right)
-//  P2 lanes (above origin): dir = -1 (fault travels left)
-//  This creates outward symmetry from the center.
-
-function buildLanes() {
-  const lanes = [];
-  let idx = 0;
-  for (
-    let dist = LANE_INTERVAL;
-    BDY_2P + dist + MIN_EDGE_GAP < ROWS_2P && BDY_2P - dist - MIN_EDGE_GAP >= 0;
-    dist += LANE_INTERVAL
-  ) {
-    idx++;
-    const dir = idx % 2 === 1 ? 1 : -1;
-    lanes.push({
-      id: "p1-" + idx, row: BDY_2P + dist, dist, side: 1,
-      dir, index: idx,
-      offset: 0, beatAccum: 0, beatsPerStep: 1,
-      period: COLS,  // fault cycles through all COLS column positions
-    });
-    lanes.push({
-      id: "p2-" + idx, row: BDY_2P - dist, dist, side: 2,
-      dir: -dir, index: idx,
-      offset: 0, beatAccum: 0, beatsPerStep: 1,
-      period: COLS,
-    });
-  }
-  return lanes;
-}
-
-const LANES    = buildLanes();
-const LANE_MAP = new Map(LANES.map(l => [l.row, l]));
+const LANES = [
+  { name: "PULSE",      type: "pulse",        row: 3  },
+  { name: "TRAV BRIGHT",type: "trav-bright",  row: 7  },
+  { name: "GAP TRAVEL", type: "gap-travel",   row: 11 },
+  { name: "DOT CRAWL",  type: "dot-crawl",    row: 15 },
+  { name: "CORNER",     type: "corner-flash", row: 19 },
+  { name: "FILL STEP",  type: "fill-step",    row: 23 },
+  { name: "WIPE",       type: "wipe",         row: 27 },
+  { name: "INVERSE",    type: "inverse",      row: 31 },
+];
+const LANE_BY_ROW = new Map(LANES.map(l => [l.row, l]));
 
 // ================================================================
 //  FRAME + SCALE
 // ================================================================
-
 const frame = document.getElementById("frame");
-frame.style.width  = FRAME_W   + "px";
-frame.style.height = GAME_2P_H + "px";
+frame.style.width  = FRAME_W + "px";
+frame.style.height = FRAME_H + "px";
 
 function applyScale() {
-  const s = Math.min(window.innerWidth / FRAME_W, window.innerHeight / GAME_2P_H);
+  const s = Math.min(window.innerWidth / FRAME_W, window.innerHeight / FRAME_H);
   frame.style.transform = "scale(" + s + ")";
 }
 applyScale();
@@ -170,77 +117,141 @@ window.addEventListener("resize", applyScale);
 // ================================================================
 //  CANVAS
 // ================================================================
-
 const canvas = document.getElementById("canvas");
 canvas.width  = FRAME_W;
-canvas.height = GAME_2P_H;
-canvas.style.cssText = "position:absolute;inset:0;pointer-events:none;z-index:1;";
+canvas.height = FRAME_H;
+canvas.style.cssText = "position:absolute;inset:0;";
 const ctx = canvas.getContext("2d");
 
 // ================================================================
-//  ORIGIN LINE
+//  BEAT STATE (global, shared by all lanes)
+// ================================================================
+let beatCount = 0;
+let beatInBar = 0;  // 0=beat1 ... 3=beat4 (accent)
+let stepPos   = 0;  // 0..COLS-1, advances every beat
+
+// Derived helpers (recomputed each draw)
+let accent = false;
+
+// ================================================================
+//  DRAW: PATTERN FILLS (rendered UNDER grid lines)
 // ================================================================
 
-const originLine = document.getElementById("origin-line");
-originLine.style.left  = PLAY_X + "px";
-originLine.style.width = PLAY_W  + "px";
-originLine.style.top   = (PLAY_Y + BDY_2P * CELL) + "px";
+function drawPatternFills() {
+  LANES.forEach(lane => {
+    const y = lane.row * CELL;
+
+    switch (lane.type) {
+
+      case "pulse":
+        // Entire row pulses -- dim on beats 1-3, bright flash on beat 4
+        ctx.fillStyle = accent
+          ? "rgba(255,255,255,0.18)"
+          : "rgba(255,255,255,0.02)";
+        ctx.fillRect(PLAY_X, y, PLAY_W, CELL);
+        break;
+
+      case "trav-bright":
+        // One bright cell travels L-to-R. Beat 4: wider glow, higher alpha.
+        if (accent) {
+          if (stepPos > 0) {
+            ctx.fillStyle = "rgba(255,255,255,0.08)";
+            ctx.fillRect(PLAY_X + (stepPos - 1) * CELL, y, CELL, CELL);
+          }
+          ctx.fillStyle = "rgba(255,255,255,0.28)";
+          ctx.fillRect(PLAY_X + stepPos * CELL, y, CELL, CELL);
+          if (stepPos < COLS - 1) {
+            ctx.fillStyle = "rgba(255,255,255,0.08)";
+            ctx.fillRect(PLAY_X + (stepPos + 1) * CELL, y, CELL, CELL);
+          }
+        } else {
+          ctx.fillStyle = "rgba(255,255,255,0.08)";
+          ctx.fillRect(PLAY_X + stepPos * CELL, y, CELL, CELL);
+        }
+        break;
+
+      case "gap-travel":
+        // Gap handled in drawBaseGrid (omits one interior line).
+        // Add faint row tint on beat 4 so the effect is easier to read.
+        if (accent) {
+          ctx.fillStyle = "rgba(255,255,255,0.05)";
+          ctx.fillRect(PLAY_X, y, PLAY_W, CELL);
+        }
+        break;
+
+      case "fill-step": {
+        // Cells fill progressively each beat; full row on beat 4.
+        const counts = [2, 5, 8, COLS];
+        ctx.fillStyle = accent
+          ? "rgba(255,255,255,0.18)"
+          : "rgba(255,255,255,0.07)";
+        ctx.fillRect(PLAY_X, y, counts[beatInBar] * CELL, CELL);
+        break;
+      }
+
+      case "wipe": {
+        // Highlight sweeps L-to-R across the bar; full row on beat 4.
+        const progress = (beatInBar + 1) / BEATS_PER_BAR;
+        ctx.fillStyle = accent
+          ? "rgba(255,255,255,0.18)"
+          : "rgba(255,255,255,0.06)";
+        ctx.fillRect(PLAY_X, y, Math.round(progress * PLAY_W), CELL);
+        break;
+      }
+
+      case "inverse":
+        // Row briefly "inverts" (lightens sharply) on beat 4.
+        ctx.fillStyle = accent
+          ? "rgba(255,255,255,0.22)"
+          : "rgba(255,255,255,0.02)";
+        ctx.fillRect(PLAY_X, y, PLAY_W, CELL);
+        break;
+    }
+  });
+}
 
 // ================================================================
-//  DRAW
+//  DRAW: BASE GRID (on top of fills)
 // ================================================================
-//
-//  The grid IS the visual -- no cell fills, no overlaid layers.
-//
-//  Drift rows look exactly like non-drift rows when offset=0.
-//  When offset=1..COLS-1, one interior vertical line segment is
-//  absent in that row, creating a double-wide "fault" cell that
-//  travels one column per beat.
-//
-//  Column grid inside play area is PLAY_X-aligned so cell boundaries
-//  match exactly. Outside play area uses the global CELL-grid.
 
-function drawGrid() {
-  ctx.clearRect(0, 0, FRAME_W, GAME_2P_H);
+function drawBaseGrid() {
   ctx.strokeStyle = GRID_COLOR;
   ctx.lineWidth   = 1;
   ctx.beginPath();
 
-  // --- horizontal lines: full width, every row ---
-  for (let r = 0; r <= ROWS_2P; r++) {
+  // Horizontal lines -- full width, every row
+  for (let r = 0; r <= FRAME_ROWS; r++) {
     ctx.moveTo(0,       r * CELL + 0.5);
     ctx.lineTo(FRAME_W, r * CELL + 0.5);
   }
 
-  // --- vertical lines outside play area: global CELL-grid ---
+  // Vertical lines outside play area (global CELL-grid)
   for (let x = 0; x <= FRAME_W; x += CELL) {
     if (x > PLAY_X && x < PLAY_X + PLAY_W) continue;
     ctx.moveTo(x + 0.5, 0);
-    ctx.lineTo(x + 0.5, GAME_2P_H);
+    ctx.lineTo(x + 0.5, FRAME_H);
   }
 
-  // --- play area left/right boundaries: always present, full height ---
+  // Play area left/right boundaries (full height, always present)
   ctx.moveTo(PLAY_X          + 0.5, 0);
-  ctx.lineTo(PLAY_X          + 0.5, GAME_2P_H);
+  ctx.lineTo(PLAY_X          + 0.5, FRAME_H);
   ctx.moveTo(PLAY_X + PLAY_W + 0.5, 0);
-  ctx.lineTo(PLAY_X + PLAY_W + 0.5, GAME_2P_H);
+  ctx.lineTo(PLAY_X + PLAY_W + 0.5, FRAME_H);
 
-  // --- interior column lines inside play area: per-row with drift gap ---
-  //
-  //  For each row, draw interior lines at PLAY_X + c*CELL for c=1..COLS-1.
-  //  For drift rows: skip the line at c = lane.offset (the traveling fault).
-  //  When lane.offset = 0, no line is skipped (row looks normal).
-  for (let r = 0; r < ROWS_2P; r++) {
-    const y1 = r * CELL + 0.5;
-    const y2 = (r + 1) * CELL + 0.5;
-    const lane    = LANE_MAP.get(r);
-    const gapCol  = lane ? lane.offset : 0; // 0 means no gap
+  // Interior column lines (per-row). gap-travel rows omit one line.
+  for (let r = 0; r < FRAME_ROWS; r++) {
+    const y1   = r * CELL + 0.5;
+    const y2   = (r + 1) * CELL + 0.5;
+    const lane = LANE_BY_ROW.get(r);
+    // gapC: column line to omit (1..COLS-1). -1 = none.
+    const gapC = (lane && lane.type === "gap-travel" && stepPos + 1 < COLS)
+      ? stepPos + 1
+      : -1;
 
     for (let c = 1; c < COLS; c++) {
-      if (c === gapCol) continue;           // fault: omit this line
-      const x = PLAY_X + c * CELL + 0.5;
-      ctx.moveTo(x, y1);
-      ctx.lineTo(x, y2);
+      if (c === gapC) continue;
+      ctx.moveTo(PLAY_X + c * CELL + 0.5, y1);
+      ctx.lineTo(PLAY_X + c * CELL + 0.5, y2);
     }
   }
 
@@ -248,22 +259,136 @@ function drawGrid() {
 }
 
 // ================================================================
+//  DRAW: PATTERN OVERLAYS (on top of grid lines)
+// ================================================================
+
+function drawPatternOverlays() {
+  LANES.forEach(lane => {
+    const y = lane.row * CELL;
+
+    switch (lane.type) {
+
+      case "pulse":
+        // Beat 4: bright horizontal borders for this row
+        if (accent) {
+          ctx.strokeStyle = "rgba(255,255,255,0.42)";
+          ctx.lineWidth   = 1;
+          ctx.beginPath();
+          ctx.moveTo(PLAY_X, y + 0.5);
+          ctx.lineTo(PLAY_X + PLAY_W, y + 0.5);
+          ctx.moveTo(PLAY_X, y + CELL + 0.5);
+          ctx.lineTo(PLAY_X + PLAY_W, y + CELL + 0.5);
+          ctx.stroke();
+        }
+        break;
+
+      case "dot-crawl": {
+        // Small square dot at cell intersection, travels L-to-R.
+        // Beat 4: larger and brighter.
+        const alpha = accent ? 0.90 : 0.28;
+        const sz    = accent ? 3 : 2;
+        const half  = Math.floor(sz / 2);
+        const dx    = PLAY_X + stepPos * CELL - half;
+        ctx.fillStyle = "rgba(255,255,255," + alpha + ")";
+        ctx.fillRect(dx, y - half,        sz, sz);  // top intersection
+        ctx.fillRect(dx, y + CELL - half, sz, sz);  // bottom intersection
+        break;
+      }
+
+      case "corner-flash": {
+        // 4 corner brackets on current cell, travels L-to-R.
+        // Beat 4: larger and brighter.
+        const alpha = accent ? 0.90 : 0.28;
+        const cs    = accent ? 4 : 2;
+        const x1    = PLAY_X + stepPos * CELL;
+        const y1    = y;
+        const x2    = x1 + CELL;
+        const y2    = y1 + CELL;
+        ctx.fillStyle = "rgba(255,255,255," + alpha + ")";
+        ctx.fillRect(x1,      y1,      cs, cs);
+        ctx.fillRect(x2 - cs, y1,      cs, cs);
+        ctx.fillRect(x1,      y2 - cs, cs, cs);
+        ctx.fillRect(x2 - cs, y2 - cs, cs, cs);
+        break;
+      }
+    }
+  });
+}
+
+// ================================================================
+//  DRAW: LABELS
+// ================================================================
+
+function drawLabels() {
+  ctx.font         = "bold 7px monospace";
+  ctx.textAlign    = "right";
+  ctx.textBaseline = "middle";
+
+  LANES.forEach(lane => {
+    ctx.fillStyle = accent
+      ? "rgba(255,255,255,0.36)"
+      : "rgba(255,255,255,0.22)";
+    ctx.fillText(lane.name, PLAY_X - 4, lane.row * CELL + CELL / 2);
+  });
+}
+
+// ================================================================
+//  DRAW: BEAT INDICATOR (4 pips near top center)
+// ================================================================
+
+function drawBeatIndicator() {
+  const pipW   = 5;
+  const pipH   = 2;
+  const pipGap = 5;
+  const totalW = BEATS_PER_BAR * pipW + (BEATS_PER_BAR - 1) * pipGap;
+  const sx     = Math.round((FRAME_W - totalW) / 2);
+  const sy     = 7;
+
+  for (let i = 0; i < BEATS_PER_BAR; i++) {
+    const isNow    = i === beatInBar;
+    const isAccent = i === BEATS_PER_BAR - 1;
+    ctx.fillStyle  = isNow
+      ? (isAccent ? "rgba(255,255,255,0.92)" : "rgba(255,255,255,0.55)")
+      : "rgba(255,255,255,0.10)";
+    ctx.fillRect(sx + i * (pipW + pipGap), sy, pipW, pipH);
+  }
+}
+
+// ================================================================
+//  DRAW: MAIN
+// ================================================================
+
+function drawFrame() {
+  ctx.clearRect(0, 0, FRAME_W, FRAME_H);
+
+  accent = beatInBar === BEATS_PER_BAR - 1;
+
+  drawPatternFills();    // fills first -- under grid
+  drawBaseGrid();        // grid on top of fills
+  drawPatternOverlays(); // dots/corners on top of grid
+  drawLabels();
+  drawBeatIndicator();
+
+  // Origin midline (topmost layer)
+  ctx.strokeStyle = "rgba(255,255,255,0.50)";
+  ctx.lineWidth   = 1;
+  ctx.beginPath();
+  ctx.moveTo(PLAY_X, ORIGIN_Y + 0.5);
+  ctx.lineTo(PLAY_X + PLAY_W, ORIGIN_Y + 0.5);
+  ctx.stroke();
+}
+
+// ================================================================
 //  BEAT CLOCK
 // ================================================================
 
-let beatCount    = 0;
 let lastBeatTime = performance.now();
 
 function onBeat() {
   beatCount++;
-  LANES.forEach(lane => {
-    lane.beatAccum++;
-    if (lane.beatAccum >= lane.beatsPerStep) {
-      lane.beatAccum = 0;
-      lane.offset = ((lane.offset + lane.dir) % lane.period + lane.period) % lane.period;
-    }
-  });
-  drawGrid();
+  beatInBar = (beatCount - 1) % BEATS_PER_BAR;
+  stepPos   = (beatCount - 1) % COLS;
+  drawFrame();
   if (debugVisible) renderDebug();
 }
 
@@ -275,7 +400,7 @@ function tick(now) {
   requestAnimationFrame(tick);
 }
 
-drawGrid();
+drawFrame();
 requestAnimationFrame(tick);
 
 // ================================================================
@@ -292,35 +417,23 @@ function toggleDebug() {
 }
 
 function renderDebug() {
-  const header = [
-    "BPM       " + BPM,
-    "BEAT MS   " + BEAT_MS.toFixed(0) + "ms",
-    "BEAT #    " + beatCount,
-    "CELL      " + CELL + "px",
-    "FAULT     traveling gap (1 line/beat)",
-    "PERIOD    " + COLS + " beats",
-    "ORIGIN    row " + BDY_2P + "  y=" + (BDY_2P * CELL) + "px",
-    "LANES     " + LANES.length,
+  debugEl.textContent = [
+    "BPM          " + BPM,
+    "BEAT MS      " + BEAT_MS.toFixed(0) + "ms",
+    "BEAT #       " + beatCount,
+    "BEAT IN BAR  " + (beatInBar + 1) + " / " + BEATS_PER_BAR,
+    "STEP POS     col " + stepPos,
+    "ACCENT       " + (accent ? "YES - beat 4" : "no"),
+    "BAR #        " + Math.ceil(beatCount / BEATS_PER_BAR),
     "",
-    "IDX  SIDE  ROW  DIST  DIR  OFF  GAP",
-    "---  ----  ---  ----  ---  ---  ---",
-  ];
-  const rows = LANES
-    .slice()
-    .sort((a, b) => a.row - b.row)
-    .map(l => {
-      const gapStr = l.offset === 0 ? "none" : "col " + l.offset;
-      return (
-        " " + l.index +
-        "    P" + l.side +
-        "    " + String(l.row).padStart(2, " ") +
-        "    +" + l.dist +
-        "   " + (l.dir > 0 ? " ->" : "<- ") +
-        "   " + l.offset +
-        "  " + gapStr
-      );
-    });
-  debugEl.textContent = header.concat(rows).join("\n");
+    "LANE         ROW   Y",
+    "----------   ---   ----",
+    ...LANES.map(l =>
+      l.name.padEnd(12) + " " +
+      String(l.row).padStart(3) + "   " +
+      String(l.row * CELL) + "px"
+    ),
+  ].join("\n");
 }
 
 document.getElementById("dbg-toggle")
