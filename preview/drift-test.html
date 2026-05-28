@@ -69,34 +69,41 @@ const BPM           = 120;
 const BEAT_MS       = 60000 / BPM;
 const BEATS_PER_BAR = 4;
 
-// Board geometry (matches index.html exactly)
+// Board geometry (matches index.html)
 const CELL          = 20;
 const COLS          = 10;
 const FRAME_W       = 402;
 const PLAY_X        = 61;
 const PLAY_W        = COLS * CELL;   // 200
 
-// Frame: 35 rows. Origin midline at row 17.5 = y 350 = FRAME_H / 2.
-// 4 lanes above origin (rows 3,7,11,15) + 4 below (rows 19,23,27,31).
-const FRAME_ROWS    = 35;
-const FRAME_H       = FRAME_ROWS * CELL;  // 700
-const ORIGIN_Y      = FRAME_H / 2;        // 350
+// Frame: 5 lanes at rows 3, 8, 13, 18, 23. 26 rows total.
+// ORIGIN_Y divides the reference group (lanes 1-2) from focused patterns (3-5).
+// Placed in the 4-row gap between row 8 (ref) and row 13 (focused): y=220.
+const FRAME_ROWS    = 26;
+const FRAME_H       = FRAME_ROWS * CELL;  // 520
+const ORIGIN_Y      = 220;               // between ref and focused groups
 
-// Colors
 const GRID_COLOR    = "rgba(255,255,255,0.06)";
 
 // ================================================================
-//  PATTERN LANE DEFINITIONS
+//  LANE DEFINITIONS
 // ================================================================
+//
+//  Each lane carries:
+//    row          - grid row for this lane
+//    type         - drawing mode
+//    dir          - +1 (right) or -1 (left): travel direction
+//    pos          - current lead position (0..COLS-1), updated each beat
+//
+//  Lanes 1-2: reference patterns carried over from previous build
+//  Lanes 3-5: focused patterns being evaluated
+
 const LANES = [
-  { name: "PULSE",      type: "pulse",        row: 3  },
-  { name: "TRAV BRIGHT",type: "trav-bright",  row: 7  },
-  { name: "GAP TRAVEL", type: "gap-travel",   row: 11 },
-  { name: "DOT CRAWL",  type: "dot-crawl",    row: 15 },
-  { name: "CORNER",     type: "corner-flash", row: 19 },
-  { name: "FILL STEP",  type: "fill-step",    row: 23 },
-  { name: "WIPE",       type: "wipe",         row: 27 },
-  { name: "INVERSE",    type: "inverse",      row: 31 },
+  { name: "DOT x1",   type: "dot-1",  row: 3,  dir: +1, pos: 0 },
+  { name: "CORNER",   type: "corner", row: 8,  dir: +1, pos: 0 },
+  { name: "DOT x2",   type: "dot-2",  row: 13, dir: +1, pos: 0 },
+  { name: "ARROW ->", type: "arrow",  row: 18, dir: +1, pos: 0 },
+  { name: "ARROW <-", type: "arrow",  row: 23, dir: -1, pos: 0 },
 ];
 const LANE_BY_ROW = new Map(LANES.map(l => [l.row, l]));
 
@@ -124,94 +131,37 @@ canvas.style.cssText = "position:absolute;inset:0;";
 const ctx = canvas.getContext("2d");
 
 // ================================================================
-//  BEAT STATE (global, shared by all lanes)
+//  BEAT STATE
 // ================================================================
 let beatCount = 0;
 let beatInBar = 0;  // 0=beat1 ... 3=beat4 (accent)
-let stepPos   = 0;  // 0..COLS-1, advances every beat
-
-// Derived helpers (recomputed each draw)
-let accent = false;
+let accent    = false;
 
 // ================================================================
-//  DRAW: PATTERN FILLS (rendered UNDER grid lines)
+//  ARROW HELPER
 // ================================================================
+//  Draws a filled triangle at (cx, cy) pointing in dir (+1 right, -1 left).
+//  `size` is total tip-to-tail length in px.
 
-function drawPatternFills() {
-  LANES.forEach(lane => {
-    const y = lane.row * CELL;
-
-    switch (lane.type) {
-
-      case "pulse":
-        // Entire row pulses -- dim on beats 1-3, bright flash on beat 4
-        ctx.fillStyle = accent
-          ? "rgba(255,255,255,0.18)"
-          : "rgba(255,255,255,0.02)";
-        ctx.fillRect(PLAY_X, y, PLAY_W, CELL);
-        break;
-
-      case "trav-bright":
-        // One bright cell travels L-to-R. Beat 4: wider glow, higher alpha.
-        if (accent) {
-          if (stepPos > 0) {
-            ctx.fillStyle = "rgba(255,255,255,0.08)";
-            ctx.fillRect(PLAY_X + (stepPos - 1) * CELL, y, CELL, CELL);
-          }
-          ctx.fillStyle = "rgba(255,255,255,0.28)";
-          ctx.fillRect(PLAY_X + stepPos * CELL, y, CELL, CELL);
-          if (stepPos < COLS - 1) {
-            ctx.fillStyle = "rgba(255,255,255,0.08)";
-            ctx.fillRect(PLAY_X + (stepPos + 1) * CELL, y, CELL, CELL);
-          }
-        } else {
-          ctx.fillStyle = "rgba(255,255,255,0.08)";
-          ctx.fillRect(PLAY_X + stepPos * CELL, y, CELL, CELL);
-        }
-        break;
-
-      case "gap-travel":
-        // Gap handled in drawBaseGrid (omits one interior line).
-        // Add faint row tint on beat 4 so the effect is easier to read.
-        if (accent) {
-          ctx.fillStyle = "rgba(255,255,255,0.05)";
-          ctx.fillRect(PLAY_X, y, PLAY_W, CELL);
-        }
-        break;
-
-      case "fill-step": {
-        // Cells fill progressively each beat; full row on beat 4.
-        const counts = [2, 5, 8, COLS];
-        ctx.fillStyle = accent
-          ? "rgba(255,255,255,0.18)"
-          : "rgba(255,255,255,0.07)";
-        ctx.fillRect(PLAY_X, y, counts[beatInBar] * CELL, CELL);
-        break;
-      }
-
-      case "wipe": {
-        // Highlight sweeps L-to-R across the bar; full row on beat 4.
-        const progress = (beatInBar + 1) / BEATS_PER_BAR;
-        ctx.fillStyle = accent
-          ? "rgba(255,255,255,0.18)"
-          : "rgba(255,255,255,0.06)";
-        ctx.fillRect(PLAY_X, y, Math.round(progress * PLAY_W), CELL);
-        break;
-      }
-
-      case "inverse":
-        // Row briefly "inverts" (lightens sharply) on beat 4.
-        ctx.fillStyle = accent
-          ? "rgba(255,255,255,0.22)"
-          : "rgba(255,255,255,0.02)";
-        ctx.fillRect(PLAY_X, y, PLAY_W, CELL);
-        break;
-    }
-  });
+function drawArrow(cx, cy, dir, size) {
+  const hw = size / 2;        // half the tip-to-tail length
+  const hh = size * 0.38;     // half the height (slightly flatter triangle)
+  ctx.beginPath();
+  if (dir > 0) {              // right-pointing
+    ctx.moveTo(cx - hw, cy - hh);
+    ctx.lineTo(cx + hw, cy);
+    ctx.lineTo(cx - hw, cy + hh);
+  } else {                    // left-pointing
+    ctx.moveTo(cx + hw, cy - hh);
+    ctx.lineTo(cx - hw, cy);
+    ctx.lineTo(cx + hw, cy + hh);
+  }
+  ctx.closePath();
+  ctx.fill();
 }
 
 // ================================================================
-//  DRAW: BASE GRID (on top of fills)
+//  DRAW: BASE GRID
 // ================================================================
 
 function drawBaseGrid() {
@@ -219,37 +169,30 @@ function drawBaseGrid() {
   ctx.lineWidth   = 1;
   ctx.beginPath();
 
-  // Horizontal lines -- full width, every row
+  // Horizontal lines (full width)
   for (let r = 0; r <= FRAME_ROWS; r++) {
     ctx.moveTo(0,       r * CELL + 0.5);
     ctx.lineTo(FRAME_W, r * CELL + 0.5);
   }
 
-  // Vertical lines outside play area (global CELL-grid)
+  // Vertical lines outside play area
   for (let x = 0; x <= FRAME_W; x += CELL) {
     if (x > PLAY_X && x < PLAY_X + PLAY_W) continue;
     ctx.moveTo(x + 0.5, 0);
     ctx.lineTo(x + 0.5, FRAME_H);
   }
 
-  // Play area left/right boundaries (full height, always present)
+  // Play area left/right boundaries
   ctx.moveTo(PLAY_X          + 0.5, 0);
   ctx.lineTo(PLAY_X          + 0.5, FRAME_H);
   ctx.moveTo(PLAY_X + PLAY_W + 0.5, 0);
   ctx.lineTo(PLAY_X + PLAY_W + 0.5, FRAME_H);
 
-  // Interior column lines (per-row). gap-travel rows omit one line.
+  // Interior column lines (uniform for all rows - no gap effects here)
   for (let r = 0; r < FRAME_ROWS; r++) {
-    const y1   = r * CELL + 0.5;
-    const y2   = (r + 1) * CELL + 0.5;
-    const lane = LANE_BY_ROW.get(r);
-    // gapC: column line to omit (1..COLS-1). -1 = none.
-    const gapC = (lane && lane.type === "gap-travel" && stepPos + 1 < COLS)
-      ? stepPos + 1
-      : -1;
-
+    const y1 = r * CELL + 0.5;
+    const y2 = (r + 1) * CELL + 0.5;
     for (let c = 1; c < COLS; c++) {
-      if (c === gapC) continue;
       ctx.moveTo(PLAY_X + c * CELL + 0.5, y1);
       ctx.lineTo(PLAY_X + c * CELL + 0.5, y2);
     }
@@ -259,7 +202,7 @@ function drawBaseGrid() {
 }
 
 // ================================================================
-//  DRAW: PATTERN OVERLAYS (on top of grid lines)
+//  DRAW: PATTERN OVERLAYS (on top of grid)
 // ================================================================
 
 function drawPatternOverlays() {
@@ -268,39 +211,24 @@ function drawPatternOverlays() {
 
     switch (lane.type) {
 
-      case "pulse":
-        // Beat 4: bright horizontal borders for this row
-        if (accent) {
-          ctx.strokeStyle = "rgba(255,255,255,0.42)";
-          ctx.lineWidth   = 1;
-          ctx.beginPath();
-          ctx.moveTo(PLAY_X, y + 0.5);
-          ctx.lineTo(PLAY_X + PLAY_W, y + 0.5);
-          ctx.moveTo(PLAY_X, y + CELL + 0.5);
-          ctx.lineTo(PLAY_X + PLAY_W, y + CELL + 0.5);
-          ctx.stroke();
-        }
-        break;
-
-      case "dot-crawl": {
-        // Small square dot at cell intersection, travels L-to-R.
-        // Beat 4: larger and brighter.
+      case "dot-1": {
+        // Single intersection dot, traveling in lane.dir.
+        // Drawn at top and bottom edges of the row (where grid lines cross).
         const alpha = accent ? 0.90 : 0.28;
         const sz    = accent ? 3 : 2;
         const half  = Math.floor(sz / 2);
-        const dx    = PLAY_X + stepPos * CELL - half;
+        const dx    = PLAY_X + lane.pos * CELL - half;
         ctx.fillStyle = "rgba(255,255,255," + alpha + ")";
         ctx.fillRect(dx, y - half,        sz, sz);  // top intersection
         ctx.fillRect(dx, y + CELL - half, sz, sz);  // bottom intersection
         break;
       }
 
-      case "corner-flash": {
-        // 4 corner brackets on current cell, travels L-to-R.
-        // Beat 4: larger and brighter.
+      case "corner": {
+        // 4-corner brackets on current cell, traveling in lane.dir.
         const alpha = accent ? 0.90 : 0.28;
         const cs    = accent ? 4 : 2;
-        const x1    = PLAY_X + stepPos * CELL;
+        const x1    = PLAY_X + lane.pos * CELL;
         const y1    = y;
         const x2    = x1 + CELL;
         const y2    = y1 + CELL;
@@ -309,6 +237,41 @@ function drawPatternOverlays() {
         ctx.fillRect(x2 - cs, y1,      cs, cs);
         ctx.fillRect(x1,      y2 - cs, cs, cs);
         ctx.fillRect(x2 - cs, y2 - cs, cs, cs);
+        break;
+      }
+
+      case "dot-2": {
+        // Two intersection dots spaced half the row width apart (5 cells).
+        // They travel together, always half-row apart, creating a slow pulse.
+        const alpha = accent ? 0.90 : 0.28;
+        const sz    = accent ? 3 : 2;
+        const half  = Math.floor(sz / 2);
+        const cols  = [lane.pos, (lane.pos + 5) % COLS];
+        ctx.fillStyle = "rgba(255,255,255," + alpha + ")";
+        cols.forEach(col => {
+          const dx = PLAY_X + col * CELL - half;
+          ctx.fillRect(dx, y - half,        sz, sz);
+          ctx.fillRect(dx, y + CELL - half, sz, sz);
+        });
+        break;
+      }
+
+      case "arrow": {
+        // Two small arrows (~7px) pointing in lane.dir, spaced half-row apart.
+        // Vertical stagger: columns at even index sit in upper third of cell,
+        // odd index in lower third -- so the pair is never at the same height.
+        // The two positions are always 5 cells apart, so they always stagger.
+        const alpha = accent ? 0.88 : 0.22;
+        const size  = accent ? 8 : 6;
+        const cols  = [lane.pos, (lane.pos + 5) % COLS];
+        ctx.fillStyle = "rgba(255,255,255," + alpha + ")";
+        cols.forEach(col => {
+          const cx  = PLAY_X + col * CELL + CELL / 2;
+          // Alternate vertical position by column parity.
+          // Cols 5 apart always have opposite parity (5 is odd), so they stagger.
+          const cy  = y + (col % 2 === 0 ? CELL * 0.32 : CELL * 0.68);
+          drawArrow(cx, cy, lane.dir, size);
+        });
         break;
       }
     }
@@ -324,16 +287,25 @@ function drawLabels() {
   ctx.textAlign    = "right";
   ctx.textBaseline = "middle";
 
-  LANES.forEach(lane => {
-    ctx.fillStyle = accent
-      ? "rgba(255,255,255,0.36)"
-      : "rgba(255,255,255,0.22)";
+  LANES.forEach((lane, i) => {
+    // Reference lanes (0-1) slightly dimmer than focused lanes (2-4)
+    const isRef   = i < 2;
+    ctx.fillStyle = isRef
+      ? "rgba(255,255,255,0.16)"
+      : "rgba(255,255,255,0.28)";
     ctx.fillText(lane.name, PLAY_X - 4, lane.row * CELL + CELL / 2);
+  });
+
+  // "REF" tag for reference lanes
+  ctx.fillStyle = "rgba(255,255,255,0.10)";
+  ctx.font      = "6px monospace";
+  LANES.slice(0, 2).forEach(lane => {
+    ctx.fillText("REF", PLAY_X - 4, lane.row * CELL + CELL / 2 + 8);
   });
 }
 
 // ================================================================
-//  DRAW: BEAT INDICATOR (4 pips near top center)
+//  DRAW: BEAT INDICATOR
 // ================================================================
 
 function drawBeatIndicator() {
@@ -345,17 +317,17 @@ function drawBeatIndicator() {
   const sy     = 7;
 
   for (let i = 0; i < BEATS_PER_BAR; i++) {
-    const isNow    = i === beatInBar;
-    const isAccent = i === BEATS_PER_BAR - 1;
-    ctx.fillStyle  = isNow
-      ? (isAccent ? "rgba(255,255,255,0.92)" : "rgba(255,255,255,0.55)")
+    const isNow  = i === beatInBar;
+    const isAcc  = i === BEATS_PER_BAR - 1;
+    ctx.fillStyle = isNow
+      ? (isAcc ? "rgba(255,255,255,0.92)" : "rgba(255,255,255,0.55)")
       : "rgba(255,255,255,0.10)";
     ctx.fillRect(sx + i * (pipW + pipGap), sy, pipW, pipH);
   }
 }
 
 // ================================================================
-//  DRAW: MAIN
+//  DRAW: MAIN FRAME
 // ================================================================
 
 function drawFrame() {
@@ -363,14 +335,13 @@ function drawFrame() {
 
   accent = beatInBar === BEATS_PER_BAR - 1;
 
-  drawPatternFills();    // fills first -- under grid
-  drawBaseGrid();        // grid on top of fills
-  drawPatternOverlays(); // dots/corners on top of grid
+  drawBaseGrid();
+  drawPatternOverlays();
   drawLabels();
   drawBeatIndicator();
 
-  // Origin midline (topmost layer)
-  ctx.strokeStyle = "rgba(255,255,255,0.50)";
+  // Origin divider (between ref group and focused group)
+  ctx.strokeStyle = "rgba(255,255,255,0.45)";
   ctx.lineWidth   = 1;
   ctx.beginPath();
   ctx.moveTo(PLAY_X, ORIGIN_Y + 0.5);
@@ -387,7 +358,12 @@ let lastBeatTime = performance.now();
 function onBeat() {
   beatCount++;
   beatInBar = (beatCount - 1) % BEATS_PER_BAR;
-  stepPos   = (beatCount - 1) % COLS;
+
+  // Advance each lane's position in its own direction
+  LANES.forEach(l => {
+    l.pos = ((l.pos + l.dir) % COLS + COLS) % COLS;
+  });
+
   drawFrame();
   if (debugVisible) renderDebug();
 }
@@ -422,16 +398,15 @@ function renderDebug() {
     "BEAT MS      " + BEAT_MS.toFixed(0) + "ms",
     "BEAT #       " + beatCount,
     "BEAT IN BAR  " + (beatInBar + 1) + " / " + BEATS_PER_BAR,
-    "STEP POS     col " + stepPos,
-    "ACCENT       " + (accent ? "YES - beat 4" : "no"),
+    "ACCENT       " + (accent ? "YES" : "no"),
     "BAR #        " + Math.ceil(beatCount / BEATS_PER_BAR),
     "",
-    "LANE         ROW   Y",
-    "----------   ---   ----",
+    "LANE         DIR  POS",
+    "----------   ---  ---",
     ...LANES.map(l =>
       l.name.padEnd(12) + " " +
-      String(l.row).padStart(3) + "   " +
-      String(l.row * CELL) + "px"
+      (l.dir > 0 ? " +1" : " -1") + "  " +
+      l.pos
     ),
   ].join("\n");
 }
