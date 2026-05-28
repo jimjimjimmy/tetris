@@ -4,36 +4,39 @@
 Personal 2-player mobile Tetris game (jimjimjimmy/tetris), Gandalf machine, sync-everything session - no active feature work this session.
 
 ## Current state
-- 2P game fully playable: shared board, dynamic boundary line, AI opponent (P2), gesture controls
+- 2P game fully playable: shared board, dynamic boundary line, AI opponent, gesture controls
 - Best-of-3 score tracking and match/set-over screens in place (aa26d90)
 - Level tick speeds rebalanced - L3 = standard Tetris reference pace (8130977)
-- Diagonal swipe bug fixed - no longer triggers both horizontal move and hard drop (f2cbfd8)
-- Key file renamed: preview/game.html -> preview/index.html (2026-05-27, MacFQ)
+- Diagonal swipe bug fixed (f2cbfd8)
+- DEVLOG.md added by MacFQ (e980cfc) - full development journal from scaffold to current state
+- Key file: preview/index.html (renamed from game.html on 2026-05-27)
 - No known bugs or regressions
 
 ## Files changed this session
-No feature work on Gandalf this session. Uncommitted changes are from a prior session:
+No feature work on Gandalf this session. MacFQ added DEVLOG.md since last Gandalf handoff.
+Uncommitted changes from a prior session still pending:
 
 | File | Status | What changed |
 |------|--------|-------------|
-| BUILD-PLAN.md | staged deletion | File deleted - contents migrated to GAME-IDEAS.md |
+| DEVLOG.md | committed (e980cfc, MacFQ) | Full development journal added |
+| BUILD-PLAN.md | staged deletion | Deleted - contents migrated to GAME-IDEAS.md |
 | GAME-IDEAS.md | unstaged modification | 79 lines added, absorbed BUILD-PLAN content |
-| assets/Sound fx/ | untracked | Sound effects directory added but not committed |
+| assets/Sound fx/ | untracked | Sound effects directory, not yet committed |
 | test_plan.md | untracked | Test plan file, not yet committed |
 
 ## Uncommitted work
-- BUILD-PLAN.md deletion is staged, GAME-IDEAS.md update is unstaged - safe to commit together as a content reorganization
-- assets/Sound fx/ and test_plan.md are untracked - decide whether to commit or .gitignore before next push
+- BUILD-PLAN.md deletion staged + GAME-IDEAS.md update unstaged - safe to commit together
+- assets/Sound fx/ and test_plan.md untracked - decide whether to commit or .gitignore
 
 ## Open questions / decisions pending
-- Sound assets: commit assets/Sound fx/ or .gitignore it?
+- Sound assets: commit assets/Sound fx/ or .gitignore?
 - test_plan.md: commit or .gitignore?
-- Next game feature: check GAME-IDEAS.md for queued ideas
+- Next game feature: check GAME-IDEAS.md
 
 ## What to do next
-1. Commit BUILD-PLAN.md deletion + GAME-IDEAS.md update together
+1. Commit BUILD-PLAN.md deletion + GAME-IDEAS.md update
 2. Decide on sound assets and test_plan.md
-3. Read GAME-IDEAS.md for next feature
+3. Read GAME-IDEAS.md for next feature to build
 
 ## How to resume
 ```bash
