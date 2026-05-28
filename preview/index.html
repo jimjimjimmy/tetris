@@ -98,7 +98,7 @@ const AI_LEVEL_CONFIG  = {
 // just before each commit.
 const APP_VERSION    = "v0.1";
 const APP_COMMIT     = "aa26d90";
-const APP_BUILD_DATE = "2026-05-27T20:41:13";
+const APP_BUILD_DATE = "2026-05-27T20:45:11";
 
 // Default fall interval (used as a fallback when state.aiLevel is invalid).
 // Real tick rate comes from AI_LEVEL_CONFIG[aiLevel].tickMs, looked up at
@@ -1365,27 +1365,41 @@ function TetrisGame2P() {
     // are ignored. Tap rotates on release if the finger barely moved.
     // Direction: P1 swipe-up fires "up"; P2 swipe-down fires "down".
     // Against-gravity swipes are intentionally no-ops.
-    const STEP_PX  = 30;   // ratchet step: each 30px of drag advances one cell.
-    const TAP_PX   = 10;   // movement under this counts as a tap
-    const DROP_PX  = 44;   // minimum vertical travel before hard drop fires on lift
+    const STEP_PX    = 30;  // ratchet: each 30px of horizontal drag = one cell
+    const TAP_PX     = 10;  // movement under this on both axes = tap (rotate)
+    const DROP_PX    = 44;  // min vertical travel before hard drop fires on lift
+    const LOCK_PX    = 10;  // min travel before axis is committed
+    const AXIS_RATIO = 2;   // ady >= AXIS_RATIO * adx -> commit to vertical
+    // axisLock: null (undecided), "h" (horizontal only), "v" (vertical only).
+    // Set once per gesture when travel first exceeds LOCK_PX; reset on new touch.
+    // "v" suppresses all horizontal steps (pure drop gesture).
+    // "h" suppresses the drop on lift (pure move gesture).
     let startX = 0, startY = 0;
-    let lastDx = 0;
-    let moved  = false;
+    let lastDx   = 0;
+    let moved    = false;
+    let axisLock = null;
     const onStart = (e) => {
       if (e.touches.length !== 1) return;
       startX = e.touches[0].clientX;
       startY = e.touches[0].clientY;
-      lastDx = 0; moved = false;
+      lastDx = 0; moved = false; axisLock = null;
     };
     const onMove = (e) => {
       if (e.touches.length !== 1) return;
-      const dx = e.touches[0].clientX - startX;
+      const dx  = e.touches[0].clientX - startX;
+      const dy  = e.touches[0].clientY - startY;
+      const adx = Math.abs(dx), ady = Math.abs(dy);
       const side  = playerSideRef.current;
       const apply = side === 2 ? applyP2 : applyP1;
-      // Drain horizontal motion: one cell per STEP_PX dragged either way.
-      // Vertical drop is NOT tracked here -- it fires once on touchend.
-      while (dx - lastDx >=  STEP_PX) { apply("right"); lastDx += STEP_PX; moved = true; }
-      while (dx - lastDx <= -STEP_PX) { apply("left");  lastDx -= STEP_PX; moved = true; }
+      // Commit to an axis once travel is enough to read intent.
+      if (axisLock === null && (adx > LOCK_PX || ady > LOCK_PX)) {
+        axisLock = ady >= AXIS_RATIO * adx ? "v" : "h";
+      }
+      // Horizontal steps only when not locked to vertical.
+      if (axisLock !== "v") {
+        while (dx - lastDx >=  STEP_PX) { apply("right"); lastDx += STEP_PX; moved = true; }
+        while (dx - lastDx <= -STEP_PX) { apply("left");  lastDx -= STEP_PX; moved = true; }
+      }
     };
     const onEnd = (e) => {
       if (e.changedTouches.length !== 1) return;
@@ -1394,17 +1408,16 @@ function TetrisGame2P() {
       const adx = Math.abs(dx), ady = Math.abs(dy);
       const side  = playerSideRef.current;
       const apply = side === 2 ? applyP2 : applyP1;
-      // Tap rotates only if the finger barely moved AND no cells were
-      // applied during touchmove (prevents "rotate on lift" after swipe).
+      // Tap: finger barely moved on both axes and no cells were stepped.
       if (!moved && adx < TAP_PX && ady < TAP_PX) { apply("tap"); return; }
-      // Hard drop on lift: fires once when total vertical travel exceeds
-      // DROP_PX deadzone so accidental small movements do not trigger it.
-      // Direction must match natural travel (P1 up = dy negative, P2 down
-      // = dy positive). Opposite direction is intentionally a no-op.
-      if (side === 2) {
-        if (dy >= DROP_PX) apply("down");
-      } else {
-        if (dy <= -DROP_PX) apply("up");
+      // Hard drop: only when axis is vertical or still undecided.
+      // Horizontal-locked gestures never trigger a drop.
+      if (axisLock !== "h") {
+        if (side === 2) {
+          if (dy >= DROP_PX) apply("down");
+        } else {
+          if (dy <= -DROP_PX) apply("up");
+        }
       }
     };
     // Attach to a transparent full-height gesture surface that spans from
