@@ -79,15 +79,14 @@ const TEST_SPEED    = false; // set true for 5x speed during development -- ALWA
 // smoke-test tool. Always false before push.
 const DEBUG_PIECES  = false;
 const AI_LEVEL_DEFAULT = 3;
-// tickMs = fall interval per level. ~1.5x faster each step so the
-// difference is felt at the hands: L1 beginner-pleasant, L5 expert-
-// snappy. L1 -> L5 is ~4.3x speedup (600 / 140). Applied to both
-// players. TEST_SPEED overrides this to 110ms for dev playback.
+// tickMs = fall interval per level. L3 = moderate/average pace (standard
+// Tetris reference). L1->L5: 900->700->500->320->140ms. L5 unchanged.
+// TEST_SPEED overrides this to 110ms for dev playback.
 const AI_LEVEL_CONFIG  = {
-  1: { randomRatio: 0.8, aiPeriod: 3, holePenalty: 5,  bumpPenalty: 0.5, tickMs: 600 },
-  2: { randomRatio: 0.5, aiPeriod: 2, holePenalty: 15, bumpPenalty: 1,   tickMs: 440 },
-  3: { randomRatio: 0.1, aiPeriod: 1, holePenalty: 30, bumpPenalty: 2,   tickMs: 320 },
-  4: { randomRatio: 0.0, aiPeriod: 1, holePenalty: 40, bumpPenalty: 3,   tickMs: 220 },
+  1: { randomRatio: 0.8, aiPeriod: 3, holePenalty: 5,  bumpPenalty: 0.5, tickMs: 900 },
+  2: { randomRatio: 0.5, aiPeriod: 2, holePenalty: 15, bumpPenalty: 1,   tickMs: 700 },
+  3: { randomRatio: 0.1, aiPeriod: 1, holePenalty: 30, bumpPenalty: 2,   tickMs: 500 },
+  4: { randomRatio: 0.0, aiPeriod: 1, holePenalty: 40, bumpPenalty: 3,   tickMs: 320 },
   5: { randomRatio: 0.0, aiPeriod: 1, holePenalty: 60, bumpPenalty: 5,   tickMs: 140 },
 };
 
@@ -98,7 +97,7 @@ const AI_LEVEL_CONFIG  = {
 // just before each commit.
 const APP_VERSION    = "v0.1";
 const APP_COMMIT     = "f2cbfd8";
-const APP_BUILD_DATE = "2026-05-27T20:45:22";
+const APP_BUILD_DATE = "2026-05-27T21:06:44";
 
 // Default fall interval (used as a fallback when state.aiLevel is invalid).
 // Real tick rate comes from AI_LEVEL_CONFIG[aiLevel].tickMs, looked up at
