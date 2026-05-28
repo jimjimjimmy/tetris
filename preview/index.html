@@ -58,6 +58,7 @@
       background: #0a0a0a;
       overflow: hidden;
     }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
   </style>
 </head>
 <body>
@@ -97,7 +98,7 @@ const AI_LEVEL_CONFIG  = {
 // just before each commit.
 const APP_VERSION    = "v0.1";
 const APP_COMMIT     = "4c3713c";
-const APP_BUILD_DATE = "2026-05-27T14:43:28";
+const APP_BUILD_DATE = "2026-05-27T20:39:11";
 
 // Default fall interval (used as a fallback when state.aiLevel is invalid).
 // Real tick rate comes from AI_LEVEL_CONFIG[aiLevel].tickMs, looked up at
@@ -121,6 +122,7 @@ const PLAY_Y       = 0;                     // play area starts at frame top
 const GAME_2P_H    = ROWS_2P * CELL;        // = 880  -- frame matches play exactly
 const P2_COLOR_2P  = "#4a4a4a";
 const DEMO_DURATION_S = 300;
+const WINS_TO_WIN  = 2;   // best-of-3: first player to reach this wins the set
 
 // Right sidebar (Figma absolute coords inside the 402x874 frame)
 const SIDEBAR_X        = 320;
@@ -839,7 +841,10 @@ function TetrisGame2P() {
   const [settings, updateSetting] = useSettings();
   const [showSettings, setShowSettings] = React.useState(false);
   const [settingsSection, setSettingsSection] = React.useState(null);
-  const [state, setState] = React.useState(makeInitState2P);
+  const [state, setState]   = React.useState(makeInitState2P);
+  // Session win counts -- persist across rematches, reset on MENU or PLAY AGAIN.
+  const [p1Wins, setP1Wins] = React.useState(0);
+  const [p2Wins, setP2Wins] = React.useState(0);
 
   // Keep the module-level haptic object in sync with React settings state.
   // Called synchronously every render so applyP1/applyP2 callbacks always
@@ -1745,6 +1750,31 @@ function TetrisGame2P() {
     setState(s => ({...s, paused: !s.paused}));
   };
 
+  // ── Match / set outcome handlers ──────────────────────────────────────
+  // Increment the winner's tally, then restart the match immediately
+  // in the same side + level config. Phase goes straight to "playing"
+  // so the user never sees the start screen again mid-set.
+  const handleRematch = (winnerSide) => {
+    setP1Wins(w => w + (winnerSide === 1 ? 1 : 0));
+    setP2Wins(w => w + (winnerSide === 2 ? 1 : 0));
+    setState(s => ({...makeInitState2P(), phase: "playing", playerSide: s.playerSide, aiLevel: s.aiLevel}));
+  };
+
+  // Reset the whole session (wins + match) and go back to start screen.
+  const handleMenu = () => {
+    setP1Wins(0);
+    setP2Wins(0);
+    setState(s => ({...makeInitState2P(), playerSide: s.playerSide, aiLevel: s.aiLevel}));
+  };
+
+  // Set is over -- reset wins to 0-0 and start a fresh set immediately
+  // in the same side + level config (no start screen).
+  const handlePlayAgain = (winnerSide) => {
+    setP1Wins(0);
+    setP2Wins(0);
+    setState(s => ({...makeInitState2P(), phase: "playing", playerSide: s.playerSide, aiLevel: s.aiLevel}));
+  };
+
   // ── Stack-height brackets (Figma 128-3004) ───────────────────────────
   // For each player, find how many rows of their territory currently
   // contain at least one of their cells. The bracket length equals
@@ -2105,6 +2135,37 @@ function TetrisGame2P() {
         <GearIcon />
       </div>
 
+      {/* Score pips -- best-of-3 session wins. P2 wins above the pause
+          icon (P2 territory side), P1 wins below it (P1 territory side).
+          One pip per potential win; filled circle = won, open = remaining.
+          Same chrome opacity/style as icons. Phase "over" shows tentative
+          incremented tally so the display is consistent with the overlay. */}
+      {(() => {
+        const disp1 = p1Wins + (phase === "over" && winner === 1 ? 1 : 0);
+        const disp2 = p2Wins + (phase === "over" && winner === 2 ? 1 : 0);
+        const pipStyle = {
+          fontFamily: "monospace",
+          fontSize: 8,
+          letterSpacing: 4,
+          color: "#fff",
+          opacity: CHROME_OPACITY,
+          textAlign: "center",
+          position: "absolute",
+          width: SIDEBAR_W,
+          left: SIDEBAR_X,
+          pointerEvents: "none",
+          userSelect: "none",
+        };
+        const p2Pips = Array.from({length: WINS_TO_WIN}, (_, i) => i < disp2 ? "●" : "○").join("");
+        const p1Pips = Array.from({length: WINS_TO_WIN}, (_, i) => i < disp1 ? "●" : "○").join("");
+        return (
+          <React.Fragment>
+            <div style={{...pipStyle, top: PAUSE_Y - 28}}>{p2Pips}</div>
+            <div style={{...pipStyle, top: PAUSE_Y + PAUSE_BAR_H + 12}}>{p1Pips}</div>
+          </React.Fragment>
+        );
+      })()}
+
       {/* Pause button: two #d9d9d9 bars (Figma 124:2218). The visible icon
           is 12x16; a transparent 48x48 hit box centered on it enlarges the
           touch target for ergonomic thumb reach. */}
@@ -2219,31 +2280,102 @@ function TetrisGame2P() {
         </div>
       )}
 
-      {/* Game over overlay */}
-      {phase === "over" && (
-        <div style={{
+      {/* Match-over overlay and set-over overlay -- both gated on phase "over".
+          displayP1/displayP2 show the UPDATED tally (win credited instantly
+          so the score on-screen matches the pips). setOver = one player has
+          reached WINS_TO_WIN. Winner text fades in via CSS keyframe fadeIn. */}
+      {phase === "over" && (() => {
+        const displayP1 = p1Wins + (winner === 1 ? 1 : 0);
+        const displayP2 = p2Wins + (winner === 2 ? 1 : 0);
+        const setOver   = displayP1 >= WINS_TO_WIN || displayP2 >= WINS_TO_WIN;
+        const setWinner = displayP1 >= WINS_TO_WIN ? 1 : 2;
+
+        const overlayBase = {
           position: "absolute", inset: 0,
           background: "rgba(0,0,0,0.88)",
           display: "flex", flexDirection: "column",
           alignItems: "center", justifyContent: "center",
-        }}>
-          <div style={{fontSize: 32, fontWeight: 700, letterSpacing: 6, color: "#fff", marginBottom: 8}}>
-            {winner ? "P" + winner + " WINS" : "GAME OVER"}
-          </div>
-          <div style={{fontSize: 11, letterSpacing: 2, marginBottom: 28, color: "rgba(255,255,255,0.4)"}}>
-            {winner === 1 ? "territory claimed" : winner === 2 ? "territory claimed" : "stack overflow"}
-          </div>
-          <div
-            onPointerDown={() => setState(s => ({...makeInitState2P(), aiLevel: s.aiLevel}))}
-            style={{
-              padding: "12px 36px", background: "#ff3333",
-              color: "#fff", borderRadius: 6,
-              fontSize: 12, fontWeight: 700, letterSpacing: 3,
-              cursor: "pointer",
-            }}
-          >REMATCH</div>
-        </div>
-      )}
+          animation: "fadeIn 0.35s ease-out both",
+        };
+        const btnBase = {
+          padding: "11px 28px",
+          color: "#fff", borderRadius: 2,
+          fontSize: 11, fontWeight: 700, letterSpacing: 3,
+          cursor: "pointer",
+          fontFamily: "monospace",
+        };
+
+        if (!setOver) {
+          // Match over -- set continues. Show score, offer REMATCH or MENU.
+          return (
+            <div style={overlayBase}>
+              <div style={{
+                fontSize: 30, fontWeight: 700, letterSpacing: 7,
+                color: "#fff", marginBottom: 6,
+                animation: "fadeIn 0.5s ease-out both",
+              }}>
+                {"P" + winner + " WINS"}
+              </div>
+              <div style={{
+                fontSize: 11, letterSpacing: 3,
+                color: "rgba(255,255,255,0.28)",
+                marginBottom: 32,
+                fontFamily: "monospace",
+              }}>
+                {displayP1} - {displayP2}
+              </div>
+              <div style={{display: "flex", gap: 12}}>
+                <div
+                  onPointerDown={() => handleRematch(winner)}
+                  style={{...btnBase, background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.18)"}}
+                >REMATCH</div>
+                <div
+                  onPointerDown={handleMenu}
+                  style={{...btnBase, background: "transparent", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.4)"}}
+                >MENU</div>
+              </div>
+            </div>
+          );
+        } else {
+          // Set over -- one player won the best-of-3.
+          return (
+            <div style={overlayBase}>
+              <div style={{
+                fontSize: 11, letterSpacing: 4,
+                color: "rgba(255,255,255,0.35)",
+                marginBottom: 10,
+                fontFamily: "monospace",
+                textTransform: "uppercase",
+              }}>THE SET</div>
+              <div style={{
+                fontSize: 30, fontWeight: 700, letterSpacing: 7,
+                color: "#fff", marginBottom: 6,
+                animation: "fadeIn 0.5s ease-out both",
+              }}>
+                {"P" + setWinner + " WINS"}
+              </div>
+              <div style={{
+                fontSize: 11, letterSpacing: 3,
+                color: "rgba(255,255,255,0.28)",
+                marginBottom: 36,
+                fontFamily: "monospace",
+              }}>
+                {displayP1} - {displayP2}
+              </div>
+              <div style={{display: "flex", gap: 12}}>
+                <div
+                  onPointerDown={() => handlePlayAgain(setWinner)}
+                  style={{...btnBase, background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.18)"}}
+                >PLAY AGAIN</div>
+                <div
+                  onPointerDown={handleMenu}
+                  style={{...btnBase, background: "transparent", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.4)"}}
+                >MENU</div>
+              </div>
+            </div>
+          );
+        }
+      })()}
 
       {/* Settings overlay -- rendered on top of everything, accessible from
           any phase (start, playing-paused, over). When level changes, sync
