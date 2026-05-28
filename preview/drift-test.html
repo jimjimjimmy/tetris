@@ -87,6 +87,7 @@ const FRAME_H       = FRAME_ROWS * CELL;  // 520
 const ORIGIN_Y      = 220;               // between ref and focused groups
 
 const GRID_COLOR    = "rgba(255,255,255,0.06)";
+const ROW_BEAT_OFFSET = 1;  // beat stagger between arrow rows (try 1 or 2)
 
 // ================================================================
 //  LANE DEFINITIONS
@@ -105,8 +106,8 @@ const LANES = [
   { name: "DOT x1",   type: "dot-1",  row: 3,  dir: +1, pos: 0 },
   { name: "CORNER",   type: "corner", row: 8,  dir: +1, pos: 0 },
   { name: "DOT x2",   type: "dot-2",  row: 13, dir: +1, pos: 0 },
-  { name: "ARROW ->", type: "arrow",  row: 18, dir: +1, pos: 0 },
-  { name: "ARROW <-", type: "arrow",  row: 23, dir: -1, pos: 0 },
+  { name: "ARROW ->", type: "arrow",  row: 18, dir: +1, pos: 0, phaseOff: 0              },
+  { name: "ARROW <-", type: "arrow",  row: 23, dir: -1, pos: 0, phaseOff: ROW_BEAT_OFFSET },
 ];
 const LANE_BY_ROW = new Map(LANES.map(l => [l.row, l]));
 
@@ -132,6 +133,11 @@ canvas.width  = FRAME_W;
 canvas.height = FRAME_H;
 canvas.style.cssText = "position:absolute;inset:0;";
 const ctx = canvas.getContext("2d");
+
+// Arrow SVG image (loaded once, used in case "arrow")
+const arrowImg = new Image();
+arrowImg.src = "../assets/icons/Arrow.svg";
+arrowImg.onload = () => drawFrame();
 
 // ================================================================
 //  BEAT STATE
@@ -237,20 +243,29 @@ function drawPatternOverlays() {
       }
 
       case "arrow": {
-        // Two text arrows pointing in lane.dir, spaced half-row apart.
-        // Vertical stagger by column parity (5-col gap = always opposite parity).
-        const alpha  = accent ? 0.88 : 0.22;
-        const glyph  = lane.dir > 0 ? "→" : "←";
-        const cols   = [lane.pos, (lane.pos + 5) % COLS];
-        ctx.fillStyle    = "rgba(255,255,255," + alpha + ")";
-        ctx.font         = "9px monospace";
-        ctx.textAlign    = "center";
-        ctx.textBaseline = "middle";
-        cols.forEach(col => {
-          const cx = PLAY_X + col * CELL + CELL / 2;
-          const cy = y + (col % 2 === 0 ? CELL * 0.32 : CELL * 0.68);
-          ctx.fillText(glyph, cx, cy);
-        });
+        // Full row of Arrow.svg icons with a traveling opacity wave.
+        // Each cell steps through 20/40/60/80% -- peak travels left to right.
+        // Each cell is 1 beat behind its left neighbor (right-of-left = delayed).
+        // Rows are staggered by ROW_BEAT_OFFSET beats for a vertical ripple.
+        // Left-pointing lanes are rotated 180deg via canvas transform.
+        if (!arrowImg.complete || !arrowImg.naturalWidth) break;
+        const OPACITIES = [0.20, 0.40, 0.60, 0.80];
+        const pOff = lane.phaseOff || 0;
+        for (let c = 0; c < COLS; c++) {
+          const phase = ((beatCount - 1 - c - pOff) % 4 + 4) % 4;
+          ctx.globalAlpha = OPACITIES[phase];
+          const cellX = PLAY_X + c * CELL;
+          if (lane.dir < 0) {
+            ctx.save();
+            ctx.translate(cellX + CELL / 2, y + CELL / 2);
+            ctx.rotate(Math.PI);
+            ctx.drawImage(arrowImg, -CELL / 2, -CELL / 2, CELL, CELL);
+            ctx.restore();
+          } else {
+            ctx.drawImage(arrowImg, cellX, y, CELL, CELL);
+          }
+        }
+        ctx.globalAlpha = 1;
         break;
       }
     }
