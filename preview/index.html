@@ -2147,36 +2147,8 @@ function TetrisGame2P() {
         <GearIcon />
       </div>
 
-      {/* Score pips -- best-of-3 session wins. P2 wins above the pause
-          icon (P2 territory side), P1 wins below it (P1 territory side).
-          One pip per potential win; filled circle = won, open = remaining.
-          Same chrome opacity/style as icons. Phase "over" shows tentative
-          incremented tally so the display is consistent with the overlay. */}
-      {(() => {
-        const disp1 = p1Wins + (phase === "over" && winner === 1 ? 1 : 0);
-        const disp2 = p2Wins + (phase === "over" && winner === 2 ? 1 : 0);
-        const pipStyle = {
-          fontFamily: "monospace",
-          fontSize: 8,
-          letterSpacing: 4,
-          color: "#fff",
-          opacity: CHROME_OPACITY,
-          textAlign: "center",
-          position: "absolute",
-          width: SIDEBAR_W,
-          left: SIDEBAR_X,
-          pointerEvents: "none",
-          userSelect: "none",
-        };
-        const p2Pips = Array.from({length: WINS_TO_WIN}, (_, i) => i < disp2 ? "●" : "○").join("");
-        const p1Pips = Array.from({length: WINS_TO_WIN}, (_, i) => i < disp1 ? "●" : "○").join("");
-        return (
-          <React.Fragment>
-            <div style={{...pipStyle, top: PAUSE_Y - 28}}>{p2Pips}</div>
-            <div style={{...pipStyle, top: PAUSE_Y + PAUSE_BAR_H + 12}}>{p1Pips}</div>
-          </React.Fragment>
-        );
-      })()}
+      {/* Score pips hidden -- win tracking logic intact (p1Wins, p2Wins,
+          WINS_TO_WIN), display treatment TBD. */}
 
       {/* Pause button: two #d9d9d9 bars (Figma 124:2218). The visible icon
           is 12x16; a transparent 48x48 hit box centered on it enlarges the
