@@ -670,7 +670,7 @@ const sfx = {
   },
 
   pieceLock()     { this._play("pieceLock"); },
-  lineClear(n)    { this._play(n > 1 ? "lineClearMulti" : "lineClearSingle"); },
+  lineClear(n)    { this._play("lineClearSingle"); },
   boundaryGain()  { this._play("boundaryGain"); },
   boundaryLoss()  { this._play("boundaryLoss"); },
   gameOver()      { this._play("gameOver"); },
