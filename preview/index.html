@@ -1448,7 +1448,7 @@ function TetrisGame2P() {
     // Direction: P1 swipe-up fires "up"; P2 swipe-down fires "down".
     // Against-gravity swipes are intentionally no-ops.
     const STEP_PX    = 30;  // ratchet: each 30px of horizontal drag = one cell
-    const TAP_PX     = 10;  // movement under this on both axes = tap (rotate)
+    const TAP_PX     = 20;  // movement under this on both axes = tap (rotate)
     const DROP_PX    = 44;  // min vertical travel before hard drop fires on lift
     const LOCK_PX    = 10;  // min travel before axis is committed
     const AXIS_RATIO = 2;   // ady >= AXIS_RATIO * adx -> commit to vertical
