@@ -595,6 +595,88 @@ const haptic = {
 };
 
 // ============================================================
+// SOUND FX  (Web Audio API -- preloaded on game start)
+// ============================================================
+//
+// Mirrors the haptic object: same event sites, same configure() pattern.
+// Files live in assets/Sound fx/ and assets/Sound fx/Picked/.
+//
+// Preload is triggered by the user's side-selection tap (first user
+// gesture), satisfying the browser autoplay policy. AudioContext is
+// created lazily in _getCtx() for the same reason.
+//
+// Volume: settings.volume 1-10 mapped linearly to GainNode 0.1-1.0.
+// Overlap: each _play() creates a fresh BufferSourceNode so rapid
+// sequential calls (e.g. two piece locks) stack naturally.
+// Line clear: n==1 uses the CLEAR file; n>1 uses the heavier DROP file.
+// ============================================================
+const sfx = {
+  _s:       { soundFX: true, volume: 7 },
+  _ctx:     null,
+  _buffers: {},
+
+  configure(settings) {
+    this._s = settings;
+    if (this._ctx && this._ctx.state === "suspended") this._ctx.resume();
+  },
+
+  _getCtx() {
+    if (!this._ctx) {
+      this._ctx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (this._ctx.state === "suspended") this._ctx.resume();
+    return this._ctx;
+  },
+
+  async preload() {
+    const B = "../assets/Sound%20fx/";
+    const P = B + "Picked/";
+    const files = {
+      pieceLock:       B + "102130__noirpantalon__hard_subby_kick.mp3",
+      lineClearSingle: P + "CLEAR%2016596__phylum-sinter__bd-kawasaki-low.wav",
+      lineClearMulti:  P + "DROP%2022500__johnnypanic__ultimatequickkick.wav",
+      boundaryGain:    P + "MORE%20SPACE%20531730__magnuswaker__elasto-bass.wav",
+      boundaryLoss:    P + "LESS%20850133__cat-fox_alex__sub-pitch-down-sub-3.wav",
+      gameOver:        P + "GAME%20OVER%20567208__sergequadrado__announcement-sound.wav",
+    };
+    const ctx = this._getCtx();
+    await Promise.all(Object.entries(files).map(async ([key, url]) => {
+      try {
+        const res = await fetch(url);
+        const arr = await res.arrayBuffer();
+        this._buffers[key] = await ctx.decodeAudioData(arr);
+      } catch (e) {
+        console.warn("[sfx] preload failed:", key, e);
+      }
+    }));
+  },
+
+  _play(key) {
+    if (!this._s.soundFX) return;
+    const buf = this._buffers[key];
+    if (!buf) return;
+    try {
+      const ctx  = this._getCtx();
+      const gain = ctx.createGain();
+      gain.gain.value = Math.max(0.05, this._s.volume / 10);
+      gain.connect(ctx.destination);
+      const src  = ctx.createBufferSource();
+      src.buffer = buf;
+      src.connect(gain);
+      src.start();
+    } catch (e) {
+      console.warn("[sfx] play failed:", key, e);
+    }
+  },
+
+  pieceLock()     { this._play("pieceLock"); },
+  lineClear(n)    { this._play(n > 1 ? "lineClearMulti" : "lineClearSingle"); },
+  boundaryGain()  { this._play("boundaryGain"); },
+  boundaryLoss()  { this._play("boundaryLoss"); },
+  gameOver()      { this._play("gameOver"); },
+};
+
+// ============================================================
 // SETTINGS  (localStorage-backed, no asset calls yet)
 // ============================================================
 
@@ -845,10 +927,11 @@ function TetrisGame2P() {
   const [p1Wins, setP1Wins] = React.useState(0);
   const [p2Wins, setP2Wins] = React.useState(0);
 
-  // Keep the module-level haptic object in sync with React settings state.
-  // Called synchronously every render so applyP1/applyP2 callbacks always
-  // read the current toggle + intensity without stale-closure issues.
+  // Keep the module-level haptic and sfx objects in sync with React
+  // settings state. Called synchronously every render so callbacks always
+  // read the current toggles without stale-closure issues.
   haptic.configure(settings);
+  sfx.configure(settings);
 
   const openSettings = (section) => {
     setSettingsSection(section || null);
@@ -1509,20 +1592,22 @@ function TetrisGame2P() {
       : state.p1.type !== prevP1TypeRef.current;
     if (humanTypeChanged && state.phase === "playing") {
       haptic.pieceLock();
+      sfx.pieceLock();
     }
     prevP1TypeRef.current = state.p1.type;
     prevP2TypeRef.current = state.p2.type;
 
-    // Line clear: any lines cleared this tick (either side counts -- the
-    // board effect is always visible to the human player).
+    // Line clear: any lines cleared this tick (either side counts).
+    // linesThisTick carries the count so sfx can pick single vs multi.
     const totalLines = state.p1Lines + state.p2Lines;
-    if (totalLines > prevLinesRef.current) {
+    const linesThisTick = totalLines - prevLinesRef.current;
+    if (linesThisTick > 0) {
       haptic.lineClear();
+      sfx.lineClear(linesThisTick);
     }
     prevLinesRef.current = totalLines;
 
-    // Boundary shift: gain vs loss depends on which direction the line moved
-    // relative to the human player's side.
+    // Boundary shift: gain vs loss relative to the human player's side.
     // boundary decreasing = P1 gaining territory
     // boundary increasing = P2 gaining territory
     if (state.boundary !== prevBoundaryRef.current) {
@@ -1532,14 +1617,17 @@ function TetrisGame2P() {
                        || (state.playerSide === 2 && !p1Gained);
       if (humanGained) {
         haptic.boundaryGain();
+        sfx.boundaryGain();
       } else {
         haptic.boundaryLoss();
+        sfx.boundaryLoss();
       }
     }
     prevBoundaryRef.current = state.boundary;
 
     if (state.phase === "over" && prevPhaseRef.current !== "over") {
       haptic.gameOver();
+      sfx.gameOver();
     }
     prevPhaseRef.current = state.phase;
   });
@@ -1563,6 +1651,7 @@ function TetrisGame2P() {
   const selectSide = (side) => (e) => {
     if (e && e.stopPropagation) e.stopPropagation();
     updateSetting("side", side);
+    sfx.preload();   // first user gesture -- satisfies browser autoplay policy
     setState(s => ({ ...s, phase: "playing", playerSide: side, aiLevel: settings.level }));
   };
 
