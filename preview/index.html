@@ -1590,21 +1590,24 @@ function TetrisGame2P() {
     const humanTypeChanged = state.playerSide === 2
       ? state.p2.type !== prevP2TypeRef.current
       : state.p1.type !== prevP1TypeRef.current;
-    if (humanTypeChanged && state.phase === "playing") {
-      haptic.pieceLock();
-      sfx.pieceLock();
-    }
-    prevP1TypeRef.current = state.p1.type;
-    prevP2TypeRef.current = state.p2.type;
-
     // Line clear: any lines cleared this tick (either side counts).
     // linesThisTick carries the count so sfx can pick single vs multi.
+    // Computed before pieceLock so the lock sound can be suppressed on
+    // clear frames (new piece always spawns same tick as a clear, which
+    // would fire both sounds simultaneously).
     const totalLines = state.p1Lines + state.p2Lines;
     const linesThisTick = totalLines - prevLinesRef.current;
     if (linesThisTick > 0) {
       haptic.lineClear();
       sfx.lineClear(linesThisTick);
     }
+
+    if (humanTypeChanged && state.phase === "playing" && linesThisTick === 0) {
+      haptic.pieceLock();
+      sfx.pieceLock();
+    }
+    prevP1TypeRef.current = state.p1.type;
+    prevP2TypeRef.current = state.p2.type;
     prevLinesRef.current = totalLines;
 
     // Boundary shift: gain vs loss relative to the human player's side.
