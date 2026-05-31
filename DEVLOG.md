@@ -616,7 +616,7 @@ The following need physical iPhone testing before App Store submission:
 ### What comes next for F7
 
 - Developer provisioning profile (requires Apple Developer Program)
-- Bundle ID `com.freeradicals.drift` registered in App Store Connect
+- Bundle ID `com.typographic.drift` registered in App Store Connect
 - Final app icon and splash design
 - `@capacitor/splash-screen` hide-on-ready wiring
 - Native haptics swap verification on device
