@@ -607,52 +607,50 @@ const haptic = {
     this._vibrate(d === "light" ? 10 : d === "strong" ? 30 : 20);
   },
 
-  // Line clear -- satisfying triple tap.
-  // Native: notification SUCCESS (3-tap pattern, feels like a reward).
+  // Line clear -- strong full vibration (most noticeable sensation).
+  // Native: vibrate() triggers the full phone vibration motor, much
+  // stronger than any impact or notification tap pattern.
   lineClear() {
     if (!this._s.haptics) return;
     const H = window.Capacitor?.Plugins?.Haptics;
     if (H) {
-      try { H.notification({ type: "SUCCESS" }); } catch (_) {}
+      try { H.vibrate({ duration: 80 }); } catch (_) {}
       return;
     }
     const d = this._s.hapticIntensity;
     this._vibrate(d === "light" ? 30 : d === "strong" ? 80 : 50);
   },
 
-  // Boundary shift gain -- same triple-tap reward as line clear.
-  // Native: notification SUCCESS.
+  // Boundary shift gain -- strong vibration, reward feel.
   boundaryGain() {
     if (!this._s.haptics) return;
     const H = window.Capacitor?.Plugins?.Haptics;
     if (H) {
-      try { H.notification({ type: "SUCCESS" }); } catch (_) {}
+      try { H.vibrate({ duration: 100 }); } catch (_) {}
       return;
     }
     const d = this._s.hapticIntensity;
     this._vibrate(d === "light" ? [10, 50, 10] : d === "strong" ? [30, 50, 30] : [20, 50, 20]);
   },
 
-  // Boundary shift loss -- ominous double-medium tap.
-  // Native: notification WARNING (2-tap pattern, feels like a warning).
+  // Boundary shift loss -- strong vibration, warning feel.
   boundaryLoss() {
     if (!this._s.haptics) return;
     const H = window.Capacitor?.Plugins?.Haptics;
     if (H) {
-      try { H.notification({ type: "WARNING" }); } catch (_) {}
+      try { H.vibrate({ duration: 100 }); } catch (_) {}
       return;
     }
     const d = this._s.hapticIntensity;
     this._vibrate(d === "light" ? 40 : d === "strong" ? 100 : 70);
   },
 
-  // Game over -- dramatic triple-heavy.
-  // Native: notification ERROR (3 heavy taps, strongest notification type).
+  // Game over -- long full vibration.
   gameOver() {
     if (!this._s.haptics) return;
     const H = window.Capacitor?.Plugins?.Haptics;
     if (H) {
-      try { H.notification({ type: "ERROR" }); } catch (_) {}
+      try { H.vibrate({ duration: 400 }); } catch (_) {}
       return;
     }
     const d = this._s.hapticIntensity;
@@ -1758,10 +1756,6 @@ function TetrisGame2P() {
     if (e && e.stopPropagation) e.stopPropagation();
     updateSetting("side", side);
     sfx.preload();   // first user gesture -- satisfies browser autoplay policy
-    // Haptic debug: log bridge availability and fire a test impact.
-    const H = window.Capacitor?.Plugins?.Haptics;
-    console.log("[haptic] Capacitor:", !!window.Capacitor, "Plugins:", !!window.Capacitor?.Plugins, "Haptics:", !!H);
-    if (H) { try { H.impact({ style: "HEAVY" }); console.log("[haptic] test impact fired"); } catch(e) { console.warn("[haptic] test impact failed:", e); } }
     setState(s => ({ ...s, phase: "playing", playerSide: side, aiLevel: settings.level }));
   };
 
