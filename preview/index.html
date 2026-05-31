@@ -64,6 +64,15 @@
 <body>
 <div id="root"></div>
 <script type="text/babel">
+// Global error handler -- surfaces uncaught JS exceptions in Xcode console
+// with file + line info. Remove before App Store submission.
+window.addEventListener("error", (ev) => {
+  console.error("[JS ERROR]", ev.message, "at", ev.filename + ":" + ev.lineno + ":" + ev.colno, ev.error);
+});
+window.addEventListener("unhandledrejection", (ev) => {
+  console.error("[JS PROMISE]", ev.reason);
+});
+
 const { useState, useEffect, useRef } = React;
 
 // ============================================================
@@ -1526,21 +1535,18 @@ function TetrisGame2P() {
     let moved    = false;
     let axisLock = null;
     const onStart = (e) => {
-      if (e.touches.length !== 1) return;
-      // preventDefault on touchstart tells WKWebView "JS owns this event" --
-      // bypasses UIKit gesture recognizer competition so events arrive with
-      // no hold delay. Safe here because touch-action:none already disables
-      // scroll/zoom on this element.
+      // preventDefault BEFORE any early return: non-passive listeners must
+      // always call (or explicitly skip) preventDefault or WKWebView may
+      // throw when the handler exits without it on a non-passive contract.
       e.preventDefault();
+      if (e.touches.length !== 1) return;
       startX = e.touches[0].clientX;
       startY = e.touches[0].clientY;
       lastDx = 0; moved = false; axisLock = null;
     };
     const onMove = (e) => {
-      if (e.touches.length !== 1) return;
-      // preventDefault on touchmove ensures no scroll-cancellation holdoff
-      // from WKWebView even if touch-action inheritance is ambiguous.
       e.preventDefault();
+      if (e.touches.length !== 1) return;
       const dx  = e.touches[0].clientX - startX;
       const dy  = e.touches[0].clientY - startY;
       const adx = Math.abs(dx), ady = Math.abs(dy);
