@@ -3,7 +3,7 @@
   "appName": "DRIFT",
   "webDir": "preview",
   "ios": {
-    "contentInset": "always",
+    "contentInset": "never",
     "backgroundColor": "#0a0a0a",
     "preferredContentMode": "mobile"
   },
