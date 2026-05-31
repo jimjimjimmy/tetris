@@ -1758,6 +1758,10 @@ function TetrisGame2P() {
     if (e && e.stopPropagation) e.stopPropagation();
     updateSetting("side", side);
     sfx.preload();   // first user gesture -- satisfies browser autoplay policy
+    // Haptic debug: log bridge availability and fire a test impact.
+    const H = window.Capacitor?.Plugins?.Haptics;
+    console.log("[haptic] Capacitor:", !!window.Capacitor, "Plugins:", !!window.Capacitor?.Plugins, "Haptics:", !!H);
+    if (H) { try { H.impact({ style: "HEAVY" }); console.log("[haptic] test impact fired"); } catch(e) { console.warn("[haptic] test impact failed:", e); } }
     setState(s => ({ ...s, phase: "playing", playerSide: side, aiLevel: settings.level }));
   };
 
