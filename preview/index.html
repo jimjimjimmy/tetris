@@ -580,8 +580,16 @@ const haptic = {
     try { navigator.vibrate(pattern); } catch (_) {}
   },
 
-  // UI interactions: rotate / move / soft-drop (short unobtrusive tick)
+  // UI interactions: rotate / move / soft-drop (short unobtrusive tick).
+  // On native iOS, selectionChanged() is the canonical Taptic Engine call
+  // for UI selection feedback -- more precise than impact({ style: LIGHT }).
   light() {
+    if (!this._s.haptics) return;
+    const H = window.Capacitor?.Plugins?.Haptics;
+    if (H) {
+      try { H.selectionChanged(); } catch (_) {}
+      return;
+    }
     const d = this._s.hapticIntensity;
     this._vibrate(d === "light" ? 8 : d === "strong" ? 18 : 12);
   },
@@ -679,14 +687,27 @@ const sfx = {
     const buf = this._buffers[key];
     if (!buf) return;
     try {
-      const ctx  = this._getCtx();
-      const gain = ctx.createGain();
-      gain.gain.value = Math.max(0.05, this._s.volume / 10);
-      gain.connect(ctx.destination);
-      const src  = ctx.createBufferSource();
-      src.buffer = buf;
-      src.connect(gain);
-      src.start();
+      const ctx    = this._getCtx();
+      const vol    = Math.max(0.05, this._s.volume / 10);
+      const doPlay = () => {
+        try {
+          const gain = ctx.createGain();
+          gain.gain.value = vol;
+          gain.connect(ctx.destination);
+          const src  = ctx.createBufferSource();
+          src.buffer = buf;
+          src.connect(gain);
+          src.start();
+        } catch (e) { console.warn("[sfx] play failed:", key, e); }
+      };
+      // If AudioContext is suspended (e.g. app was backgrounded on iOS),
+      // resume it before starting -- otherwise src.start() fires silently
+      // into a frozen context.
+      if (ctx.state === "running") {
+        doPlay();
+      } else {
+        ctx.resume().then(doPlay).catch(() => {});
+      }
     } catch (e) {
       console.warn("[sfx] play failed:", key, e);
     }
@@ -1357,6 +1378,12 @@ function TetrisGame2P() {
           y--;
         }
         if (y !== p1.y) {
+          // Fire pieceLock sound + haptic immediately -- don't wait for the
+          // next tick (up to TICK_MS ms delay). hardDropFiredRef prevents
+          // the tick-based useEffect from double-firing the same event.
+          haptic.pieceLock();
+          sfx.pieceLock();
+          hardDropFiredRef.current = true;
           return { ...s, p1: { ...p1, y, lockPendingTs: Date.now() - LOCK_DELAY_MS, lockResets: MAX_LOCK_RESETS } };
         }
       } else if (action === "soft") {
@@ -1410,6 +1437,10 @@ function TetrisGame2P() {
           y++;
         }
         if (y !== p2.y) {
+          // Mirror of P1 hard drop: immediate sound + haptic.
+          haptic.pieceLock();
+          sfx.pieceLock();
+          hardDropFiredRef.current = true;
           return { ...s, p2: { ...p2, y, lockPendingTs: Date.now() - LOCK_DELAY_MS, lockResets: MAX_LOCK_RESETS } };
         }
       } else if (action === "soft") {
@@ -1602,11 +1633,15 @@ function TetrisGame2P() {
   // When multiple events land in the same tick, the last call cancels the
   // previous one and only its pattern fires -- "most important event wins"
   // (game-over > shift > clear > lock).
-  const prevP1TypeRef   = React.useRef(state.p1.type);
-  const prevP2TypeRef   = React.useRef(state.p2.type);
-  const prevLinesRef    = React.useRef(state.p1Lines + state.p2Lines);
-  const prevBoundaryRef = React.useRef(state.boundary);
-  const prevPhaseRef    = React.useRef(state.phase);
+  const prevP1TypeRef    = React.useRef(state.p1.type);
+  const prevP2TypeRef    = React.useRef(state.p2.type);
+  const prevLinesRef     = React.useRef(state.p1Lines + state.p2Lines);
+  const prevBoundaryRef  = React.useRef(state.boundary);
+  const prevPhaseRef     = React.useRef(state.phase);
+  // Set to true when a hard drop fires sound+haptic immediately.
+  // Prevents the tick-based useEffect from double-firing the same pieceLock
+  // sound when the piece actually commits on the next tick.
+  const hardDropFiredRef = React.useRef(false);
   React.useEffect(() => {
     // Piece lock: fires only when the HUMAN player's active piece type
     // changes (i.e. a new piece spawned). AI side is intentionally excluded.
@@ -1626,8 +1661,18 @@ function TetrisGame2P() {
     }
 
     if (humanTypeChanged && state.phase === "playing" && linesThisTick === 0) {
-      haptic.pieceLock();
-      sfx.pieceLock();
+      // Skip if hard drop already fired the sound immediately (suppresses
+      // the up-to-one-tick duplicate caused by the tick-loop delay).
+      if (!hardDropFiredRef.current) {
+        haptic.pieceLock();
+        sfx.pieceLock();
+      }
+    }
+    // Always reset the flag when a new piece spawns, even if a line cleared
+    // the same tick (in that case linesThisTick > 0 skips the block above,
+    // but the flag still needs to clear for the next normal lock).
+    if (humanTypeChanged) {
+      hardDropFiredRef.current = false;
     }
     prevP1TypeRef.current = state.p1.type;
     prevP2TypeRef.current = state.p2.type;
