@@ -544,45 +544,49 @@ function relTime(dateStr) {
 // call sites in this file do not need to change.
 const haptic = {
   // Synced on every render via haptic.configure(settings).
-  // Keeps the module-level object in lockstep with React state without
-  // requiring hooks or prop-drilling into applyP1/applyP2 callbacks.
   _s: { haptics: true, hapticIntensity: "medium" },
 
   configure(s) { this._s = s; },
 
-  _vibrate(pattern) {
-    if (!this._s.haptics) return;
-    // Under Capacitor: use @capacitor/haptics for native iOS feedback.
-    // window.Capacitor.Plugins.Haptics is injected by the runtime --
-    // no import needed in a no-bundler setup.
+  // Scale a base ImpactStyle by the intensity setting.
+  // "light" shifts one step softer; "strong" shifts one step harder.
+  _scale(base) {
+    const styles = ["LIGHT", "MEDIUM", "HEAVY"];
+    let idx = styles.indexOf(base);
     const d = this._s.hapticIntensity;
-    const H = window.Capacitor?.Plugins?.Haptics;
-    if (H) {
-      try {
-        if (Array.isArray(pattern)) {
-          // Pulse pattern (e.g. boundary gain) -> SUCCESS notification
-          H.notification({ type: "SUCCESS" });
-        } else {
-          // Map duration to ImpactStyle, then scale by intensity setting.
-          // <= 15ms -> LIGHT, <= 50ms -> MEDIUM, > 50ms -> HEAVY.
-          const styles = ["LIGHT", "MEDIUM", "HEAVY"];
-          let idx = pattern <= 15 ? 0 : pattern <= 50 ? 1 : 2;
-          if (d === "light"  && idx > 0) idx--;
-          if (d === "strong" && idx < 2) idx++;
-          H.impact({ style: styles[idx] });
-        }
-      } catch (_) {}
-      return;
-    }
-    // Web / Android fallback (silent on iOS Safari without Capacitor).
-    if (typeof navigator === "undefined") return;
-    if (typeof navigator.vibrate !== "function") return;
-    try { navigator.vibrate(pattern); } catch (_) {}
+    if (d === "light"  && idx > 0) idx--;
+    if (d === "strong" && idx < 2) idx++;
+    return styles[idx];
   },
 
-  // UI interactions: rotate / move / soft-drop (short unobtrusive tick).
-  // On native iOS, selectionChanged() is the canonical Taptic Engine call
-  // for UI selection feedback -- more precise than impact({ style: LIGHT }).
+  // Fire one Capacitor impact (native) or a navigator.vibrate fallback.
+  // vibrateMs is the web/Android fallback duration only.
+  _impact(baseStyle, vibrateMs) {
+    if (!this._s.haptics) return;
+    const H = window.Capacitor?.Plugins?.Haptics;
+    if (H) {
+      try { H.impact({ style: this._scale(baseStyle) }); } catch (_) {}
+      return;
+    }
+    if (typeof navigator?.vibrate === "function") {
+      try { navigator.vibrate(vibrateMs); } catch (_) {}
+    }
+  },
+
+  // Fire a timed sequence of impacts.
+  // steps: [{ style, vibrateMs, delay }] -- delay=0 fires immediately.
+  _pattern(steps) {
+    steps.forEach(({ style, vibrateMs, delay }) => {
+      if (!delay) {
+        this._impact(style, vibrateMs);
+      } else {
+        setTimeout(() => this._impact(style, vibrateMs), delay);
+      }
+    });
+  },
+
+  // Rotate / move -- subtle selection tick (selectionChanged on native,
+  // short buzz on web).
   light() {
     if (!this._s.haptics) return;
     const H = window.Capacitor?.Plugins?.Haptics;
@@ -591,70 +595,40 @@ const haptic = {
       return;
     }
     const d = this._s.hapticIntensity;
-    this._vibrate(d === "light" ? 8 : d === "strong" ? 18 : 12);
+    if (typeof navigator?.vibrate === "function") {
+      try { navigator.vibrate(d === "light" ? 8 : d === "strong" ? 18 : 12); } catch (_) {}
+    }
   },
 
-  // Piece lock -- hard single thud.
-  // Native: impact HEAVY (strongest single tap the Taptic Engine has).
+  // 1. Piece lock -- short tap (LIGHT)
   pieceLock() {
-    if (!this._s.haptics) return;
-    const H = window.Capacitor?.Plugins?.Haptics;
-    if (H) {
-      try { H.impact({ style: "HEAVY" }); } catch (_) {}
-      return;
-    }
-    const d = this._s.hapticIntensity;
-    this._vibrate(d === "light" ? 10 : d === "strong" ? 30 : 20);
+    this._pattern([{ style: "LIGHT", vibrateMs: 15, delay: 0 }]);
   },
 
-  // Line clear -- strong full vibration (most noticeable sensation).
-  // Native: vibrate() triggers the full phone vibration motor, much
-  // stronger than any impact or notification tap pattern.
-  lineClear() {
-    if (!this._s.haptics) return;
-    const H = window.Capacitor?.Plugins?.Haptics;
-    if (H) {
-      try { H.vibrate({ duration: 80 }); } catch (_) {}
-      return;
-    }
-    const d = this._s.hapticIntensity;
-    this._vibrate(d === "light" ? 30 : d === "strong" ? 80 : 50);
+  // 2/3. Line clear -- x1: MEDIUM pulse | x2+: HEAVY pulse
+  lineClear(n) {
+    this._pattern([{ style: n > 1 ? "HEAVY" : "MEDIUM", vibrateMs: n > 1 ? 80 : 50, delay: 0 }]);
   },
 
-  // Boundary shift gain -- strong vibration, reward feel.
+  // 4. Boundary shift gain -- double tap (MEDIUM, 50ms gap, MEDIUM)
   boundaryGain() {
-    if (!this._s.haptics) return;
-    const H = window.Capacitor?.Plugins?.Haptics;
-    if (H) {
-      try { H.vibrate({ duration: 100 }); } catch (_) {}
-      return;
-    }
-    const d = this._s.hapticIntensity;
-    this._vibrate(d === "light" ? [10, 50, 10] : d === "strong" ? [30, 50, 30] : [20, 50, 20]);
+    this._pattern([
+      { style: "MEDIUM", vibrateMs: 20, delay:  0 },
+      { style: "MEDIUM", vibrateMs: 20, delay: 50 },
+    ]);
   },
 
-  // Boundary shift loss -- strong vibration, warning feel.
+  // 5. Boundary shift loss -- single long pulse (HEAVY)
   boundaryLoss() {
-    if (!this._s.haptics) return;
-    const H = window.Capacitor?.Plugins?.Haptics;
-    if (H) {
-      try { H.vibrate({ duration: 100 }); } catch (_) {}
-      return;
-    }
-    const d = this._s.hapticIntensity;
-    this._vibrate(d === "light" ? 40 : d === "strong" ? 100 : 70);
+    this._pattern([{ style: "HEAVY", vibrateMs: 100, delay: 0 }]);
   },
 
-  // Game over -- long full vibration.
+  // 6. Game over -- long rumble (HEAVY, 100ms gap, HEAVY)
   gameOver() {
-    if (!this._s.haptics) return;
-    const H = window.Capacitor?.Plugins?.Haptics;
-    if (H) {
-      try { H.vibrate({ duration: 400 }); } catch (_) {}
-      return;
-    }
-    const d = this._s.hapticIntensity;
-    this._vibrate(d === "light" ? 200 : d === "strong" ? 600 : 400);
+    this._pattern([
+      { style: "HEAVY", vibrateMs: 200, delay:   0 },
+      { style: "HEAVY", vibrateMs: 200, delay: 100 },
+    ]);
   },
 };
 
@@ -1689,7 +1663,7 @@ function TetrisGame2P() {
     const totalLines = state.p1Lines + state.p2Lines;
     const linesThisTick = totalLines - prevLinesRef.current;
     if (linesThisTick > 0) {
-      haptic.lineClear();
+      haptic.lineClear(linesThisTick);
       sfx.lineClear(linesThisTick);
     }
 
