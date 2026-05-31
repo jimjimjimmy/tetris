@@ -111,7 +111,7 @@ whose weather conditions apply? Options:
 - Server location (neutral)
 - Average of both players' conditions
 - Each player experiences their own conditions (asymmetric - interesting)
-- Random coin flip between the two players' locations
+- Random coin flip between the two players' conditions
 
 **Implementation note:** use a weather API at game start to fetch local conditions.
 Cache for the duration of the match so conditions don't change mid-game.
@@ -127,6 +127,83 @@ sourced from real-world wind data (see Real-World Conditions above).
 Wind indicator UI showing direction and strength - players can see exactly
 what they are dealing with before and during the match.
 Planned for after core 2-player mechanic is solid.
+
+---
+
+## The Drift Mechanic (confirmed core mechanic)
+
+The board is static and fixed -- it never moves. But certain rows and columns
+act as conveyor belts, applying a constant horizontal or vertical force to
+any free-falling piece that occupies them. Locked pieces are unaffected --
+the conveyor runs silently underneath them. If locked pieces are cleared,
+the conveyor row is revealed and active again for the next piece.
+
+Think of it like a river: the banks don't move, but the current flows
+through fixed channels. A piece floating in that channel gets carried
+along until it hits a wall or leaves the row.
+
+**Core rules:**
+- The board is fixed -- rows and columns do not move
+- Drift lanes are fixed positions -- always there, always active
+- Free-falling pieces touching a drift row are moved one unit per beat
+- Locked pieces are never affected -- the conveyor runs beneath them
+- If a piece hits the left or right wall, it stops drifting but continues falling
+- No looping -- wall is the hard stop
+- Both P1 and P2 are affected by the same drift lanes -- shared current, like a river
+- When the boundary shifts, drift lanes keep their direction and rhythm regardless of territory
+- Drift direction and speed are the same for both players (same river, same current)
+
+**Lane placement philosophy:**
+Lane positions are placed by design, not formula. Lanes are positioned
+where they create interesting decisions and tension -- near the boundary for
+high stakes, stacked together for fast zones, spaced apart for breathing room.
+Two lanes can be stacked side by side, one faster than the other, for layered
+complexity. Players discover the lanes through play and learn to use them.
+There is no rigid interval rule -- the layout is the design.
+
+**Rhythm:**
+- Drift moves on a 4/4 beat -- one unit per beat accent (beat 4)
+- Subtle visual cue on beats 1-3, most prominent on beat 4
+- Rhythm syncs with music later for audio-visual lock
+- As levels increase, beat frequency increases -- faster drift at higher levels
+
+**Visual design:**
+- Drift lanes indicated by a subtle pattern inside that row -- dot crawl (2 traveling
+  dots) or small directional arrows (~7px), staggered placement so they don't look
+  like wallpaper
+- Pattern is very subtle on beats 1-3, accents on beat 4
+- Direction controlled by rotation of the pattern asset -- one asset, four directions
+- Locked pieces cover the pattern but the current runs beneath
+- When locked pieces clear, the pattern is revealed again
+
+**Horizontal drift rows:**
+- Move free pieces left or right
+- Different lanes can move in different directions
+- Different lanes can move at different speeds
+- Stacked lanes create layered current zones
+
+**Vertical drift columns (future expansion):**
+- Move free pieces up or down within that column
+- Combined with horizontal rows, creates intersection hotspots
+- Diagonal movement patterns emerge naturally
+
+**Connection to wind mechanic:**
+- Wind sets the global drift direction and speed
+- Calm wind = slow subtle drift
+- Storm = fast aggressive drift, lanes may reverse direction
+- Makes the drift feel alive and connected to the real world
+
+**Connection to planetary environments:**
+- Each planet sets drift behavior
+- Moon: very slow drift
+- Jupiter: fast aggressive drift
+- Deep Space: no drift at all -- pure puzzle mode
+
+**Strategic depth:**
+- Slow lanes: safer, easier to control placement
+- Fast lanes: risky but can slide pieces into hard-to-reach gaps
+- Stacked opposing lanes: chaotic, skill-testing
+- Lane near boundary: high risk -- one drift could cost a row
 
 ---
 
