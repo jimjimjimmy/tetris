@@ -1492,10 +1492,10 @@ function TetrisGame2P() {
     return () => window.removeEventListener("keydown", onKey);
   }, [applyP1, applyP2]);
 
-  // Touch gestures: tap rotates, swipe (>=20px) moves. Tap window is <10px.
-  // Distances in between are ignored (dead zone) so a wobbly tap does not
-  // accidentally swipe. Attaches to document so the entire screen accepts
-  // input -- the FullscreenGame wrapper already blocks default scroll/zoom.
+  // Touch gestures: tap rotates (< STEP_PX=30px movement), swipe moves.
+  // TAP_PX matches STEP_PX so there is no dead zone between the two.
+  // Non-passive touchstart/touchmove + preventDefault() bypasses WKWebView
+  // UIKit gesture recognizer competition for near-zero dispatch latency.
   const playRef = React.useRef(null);
   const gestureRef = React.useRef(null);
   React.useEffect(() => {
@@ -1509,7 +1509,11 @@ function TetrisGame2P() {
     // Direction: P1 swipe-up fires "up"; P2 swipe-down fires "down".
     // Against-gravity swipes are intentionally no-ops.
     const STEP_PX    = 30;  // ratchet: each 30px of horizontal drag = one cell
-    const TAP_PX     = 20;  // movement under this on both axes = tap (rotate)
+    const TAP_PX     = 30;  // movement under this on both axes = tap (rotate).
+                            // Must match STEP_PX so there is no dead zone:
+                            // 0-29px = tap, 30px+ = move. Previously 20px
+                            // left a 20-29px gap where neither tap nor move
+                            // fired -- common with WKWebView touch jitter.
     const DROP_PX    = 44;  // min vertical travel before hard drop fires on lift
     const LOCK_PX    = 10;  // min travel before axis is committed
     const AXIS_RATIO = 2;   // ady >= AXIS_RATIO * adx -> commit to vertical
@@ -1523,12 +1527,20 @@ function TetrisGame2P() {
     let axisLock = null;
     const onStart = (e) => {
       if (e.touches.length !== 1) return;
+      // preventDefault on touchstart tells WKWebView "JS owns this event" --
+      // bypasses UIKit gesture recognizer competition so events arrive with
+      // no hold delay. Safe here because touch-action:none already disables
+      // scroll/zoom on this element.
+      e.preventDefault();
       startX = e.touches[0].clientX;
       startY = e.touches[0].clientY;
       lastDx = 0; moved = false; axisLock = null;
     };
     const onMove = (e) => {
       if (e.touches.length !== 1) return;
+      // preventDefault on touchmove ensures no scroll-cancellation holdoff
+      // from WKWebView even if touch-action inheritance is ambiguous.
+      e.preventDefault();
       const dx  = e.touches[0].clientX - startX;
       const dy  = e.touches[0].clientY - startY;
       const adx = Math.abs(dx), ady = Math.abs(dy);
@@ -1568,8 +1580,12 @@ function TetrisGame2P() {
     // player can swipe/tap anywhere outside the right sidebar. Sidebar
     // chrome -- pause / info / gear / NEXT -- sits at x>=349, well past
     // SIDEBAR_X=320, so its taps never reach this surface.
-    el.addEventListener("touchstart", onStart, { passive: true });
-    el.addEventListener("touchmove",  onMove,  { passive: true });
+    // passive:false + preventDefault() in onStart/onMove tells WKWebView's
+    // UIKit gesture pipeline to yield immediately to JS, eliminating the
+    // ~100ms hold while native recognizers resolve. touchend stays passive
+    // (no scroll to prevent on lift).
+    el.addEventListener("touchstart", onStart, { passive: false });
+    el.addEventListener("touchmove",  onMove,  { passive: false });
     el.addEventListener("touchend",   onEnd,   { passive: true });
     return () => {
       el.removeEventListener("touchstart", onStart);
