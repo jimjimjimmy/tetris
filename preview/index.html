@@ -96,8 +96,8 @@ const AI_LEVEL_CONFIG  = {
 // THIS file state (one behind HEAD after the commit lands); update it
 // just before each commit.
 const APP_VERSION    = "v0.1";
-const APP_COMMIT     = "a24ca74";
-const APP_BUILD_DATE = "2026-05-30T16:29:17";
+const APP_COMMIT     = "cap-setup";
+const APP_BUILD_DATE = "2026-05-30T17:06:11";
 
 // Default fall interval (used as a fallback when state.aiLevel is invalid).
 // Real tick rate comes from AI_LEVEL_CONFIG[aiLevel].tickMs, looked up at
@@ -552,6 +552,29 @@ const haptic = {
 
   _vibrate(pattern) {
     if (!this._s.haptics) return;
+    // Under Capacitor: use @capacitor/haptics for native iOS feedback.
+    // window.Capacitor.Plugins.Haptics is injected by the runtime --
+    // no import needed in a no-bundler setup.
+    const d = this._s.hapticIntensity;
+    const H = window.Capacitor?.Plugins?.Haptics;
+    if (H) {
+      try {
+        if (Array.isArray(pattern)) {
+          // Pulse pattern (e.g. boundary gain) -> SUCCESS notification
+          H.notification({ type: "SUCCESS" });
+        } else {
+          // Map duration to ImpactStyle, then scale by intensity setting.
+          // <= 15ms -> LIGHT, <= 50ms -> MEDIUM, > 50ms -> HEAVY.
+          const styles = ["LIGHT", "MEDIUM", "HEAVY"];
+          let idx = pattern <= 15 ? 0 : pattern <= 50 ? 1 : 2;
+          if (d === "light"  && idx > 0) idx--;
+          if (d === "strong" && idx < 2) idx++;
+          H.impact({ style: styles[idx] });
+        }
+      } catch (_) {}
+      return;
+    }
+    // Web / Android fallback (silent on iOS Safari without Capacitor).
     if (typeof navigator === "undefined") return;
     if (typeof navigator.vibrate !== "function") return;
     try { navigator.vibrate(pattern); } catch (_) {}
@@ -629,7 +652,7 @@ const sfx = {
   },
 
   async preload() {
-    const B = "../assets/Sound%20fx/";
+    const B = "assets/Sound%20fx/";
     const P = B + "Picked/";
     const files = {
       pieceLock:       B + "102130__noirpantalon__hard_subby_kick.mp3",

@@ -1,0 +1,22 @@
+{
+  "name": "drift",
+  "version": "0.1.0",
+  "description": "DRIFT - 2-player mobile Tetris",
+  "private": true,
+  "scripts": {
+    "cap:sync": "cap sync",
+    "cap:open": "cap open ios",
+    "cap:run":  "cap run ios"
+  },
+  "dependencies": {
+    "@capacitor/core":         "latest",
+    "@capacitor/haptics":      "latest",
+    "@capacitor/ios":          "latest",
+    "@capacitor/splash-screen":"latest",
+    "@capacitor/status-bar":   "latest"
+  },
+  "devDependencies": {
+    "@capacitor/assets":       "latest",
+    "@capacitor/cli":          "latest"
+  }
+}
