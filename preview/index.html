@@ -2632,6 +2632,11 @@ function FullscreenGame() {
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(<FullscreenGame />);
+
+// Tell Capacitor to hide the splash screen as soon as the JS bundle
+// executes. Without this, Capacitor waits for launchShowDuration (1200ms)
+// before auto-hiding. On web this is a no-op.
+try { window.Capacitor?.Plugins?.SplashScreen?.hide(); } catch (_) {}
 </script>
 </body>
 </html>
