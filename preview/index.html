@@ -571,10 +571,12 @@ const haptic = {
   // Fire one Capacitor impact (native) or a navigator.vibrate fallback.
   // vibrateMs is the web/Android fallback duration only.
   _impact(baseStyle, vibrateMs) {
-    if (!this._s.haptics) return;
+    if (!this._s.haptics) { console.log("[haptic] skip -- haptics off"); return; }
     const H = window.Capacitor?.Plugins?.Haptics;
+    const scaled = this._scale(baseStyle);
+    console.log("[haptic] impact", scaled, "| H:", !!H, "| intensity:", this._s.hapticIntensity);
     if (H) {
-      try { H.impact({ style: this._scale(baseStyle) }); } catch (_) {}
+      try { H.impact({ style: scaled }); } catch (e) { console.error("[haptic] impact failed:", e); }
       return;
     }
     if (typeof navigator?.vibrate === "function") {
@@ -667,6 +669,17 @@ const sfx = {
     if (this._ctx && this._ctx.state === "suspended") this._ctx.resume();
   },
 
+  // Diagnostic: call once to log full sfx + haptic health into Xcode console.
+  diagnose() {
+    const H = window.Capacitor?.Plugins?.Haptics;
+    console.log("[diag] soundFX:", this._s.soundFX, "| volume:", this._s.volume,
+      "| ctx:", this._ctx ? this._ctx.state : "null",
+      "| buffers:", Object.keys(this._buffers).length, "loaded",
+      "| Capacitor:", !!window.Capacitor, "| Haptics plugin:", !!H);
+    Object.entries(this._buffers).forEach(([k, v]) =>
+      console.log("[diag]   buffer", k, ":", v ? v.duration.toFixed(2) + "s" : "MISSING"));
+  },
+
   _getCtx() {
     if (!this._ctx) {
       this._ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -676,6 +689,7 @@ const sfx = {
   },
 
   async preload() {
+    console.log("[sfx] preload start -- ctx state:", this._ctx ? this._ctx.state : "null");
     const B = "assets/Sound%20fx/";
     const P = B + "Picked/";
     const files = {
@@ -690,18 +704,21 @@ const sfx = {
     await Promise.all(Object.entries(files).map(async ([key, url]) => {
       try {
         const res = await fetch(url);
+        if (!res.ok) throw new Error("HTTP " + res.status + " for " + url);
         const arr = await res.arrayBuffer();
         this._buffers[key] = await ctx.decodeAudioData(arr);
+        console.log("[sfx] loaded:", key, this._buffers[key].duration.toFixed(2) + "s");
       } catch (e) {
-        console.warn("[sfx] preload failed:", key, e);
+        console.error("[sfx] preload FAILED:", key, e.message || e);
       }
     }));
+    console.log("[sfx] preload done --", Object.keys(this._buffers).length, "/ 6 loaded, ctx:", ctx.state);
   },
 
   _play(key) {
-    if (!this._s.soundFX) return;
+    if (!this._s.soundFX) { console.log("[sfx] skip", key, "-- soundFX off"); return; }
     const buf = this._buffers[key];
-    if (!buf) return;
+    if (!buf) { console.warn("[sfx] skip", key, "-- buffer not loaded"); return; }
     try {
       const ctx    = this._getCtx();
       const vol    = Math.max(0.05, this._s.volume / 10);
@@ -1751,7 +1768,13 @@ function TetrisGame2P() {
   const selectSide = (side) => (e) => {
     if (e && e.stopPropagation) e.stopPropagation();
     updateSetting("side", side);
-    sfx.preload();   // first user gesture -- satisfies browser autoplay policy
+    sfx.preload().then(() => sfx.diagnose());  // preload + log health after buffers ready
+    console.log("[diag] selectSide", side, "| haptics:", settings.haptics,
+      "| intensity:", settings.hapticIntensity, "| soundFX:", settings.soundFX,
+      "| volume:", settings.volume);
+    // Fire immediate test haptic so we know the bridge works at game start.
+    const H = window.Capacitor?.Plugins?.Haptics;
+    if (H) { try { H.impact({ style: "HEAVY" }); console.log("[diag] test impact OK"); } catch(e) { console.error("[diag] test impact FAILED:", e); } }
     setState(s => ({ ...s, phase: "playing", playerSide: side, aiLevel: settings.level }));
   };
 
