@@ -1474,7 +1474,7 @@ function TetrisGame2P() {
         // player rotate even when flush against a wall or against
         // another piece. No full SRS table -- just the single-cell
         // escape attempt. First-valid wins.
-        for (const dx of [0, 1, -1]) {
+        for (const dx of [0, 1, -1, 2, -2]) {
           if (isValid2P(getCells(p1.type, nr, p1.x + dx, p1.y), board, boundary, 1)) {
             haptic.light();
             return { ...s, p1: { ...p1, rot: nr, x: p1.x + dx, ...lockReset(p1) } };
@@ -1536,7 +1536,7 @@ function TetrisGame2P() {
       if (action === "tap") {
         const nr = (p2.rot + 1) % 4;
         // Basic wall kick (mirror of P1): try centered, then +1, then -1.
-        for (const dx of [0, 1, -1]) {
+        for (const dx of [0, 1, -1, 2, -2]) {
           if (isValid2P(getCells(p2.type, nr, p2.x + dx, p2.y), board, boundary, 2)) {
             haptic.light();
             return { ...s, p2: { ...p2, rot: nr, x: p2.x + dx, ...lockReset(p2) } };
