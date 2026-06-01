@@ -249,8 +249,27 @@ function useReveal(duration) {
 - Files live in Dropbox. The two machines mount it at DIFFERENT paths:
   - Code/Claude machine: `/Users/jimmyche/Library/CloudStorage/Dropbox/04 Projects/AI Shared/Tetris` (Claude runs here, does edits + git push)
   - Device-build machine (phone connected, Xcode Run to "Shadowfax"): `/Users/jimmy/Dropbox/04 Projects/AI Shared/Tetris`
-- Dropbox handles live file sync between machines
 - Git is the source of truth for committed state - push at end of every session
+
+### SINGLE-WRITER rule (avoid the two-agent / Dropbox-.git corruption)
+- Syncing the project (especially the `.git` folder) across both Macs via Dropbox
+  CORRUPTS git: Gandalf hit `error: ... unpack-objects failed` on `git pull`
+  because Dropbox half-synced git objects. Running a Claude session on BOTH Macs
+  against the same Dropbox copy compounds this (divergent commits).
+- Rule going forward:
+  - **Only ONE machine commits/pushes** (the code/Claude machine, `/Users/jimmyche/...`).
+  - **Gandalf is build-only.** It should NOT live in Dropbox for git purposes -
+    it should have its OWN fresh `git clone` OUTSIDE Dropbox (e.g.
+    `~/Developer/tetris`) and `git pull` to update. Build the device from there.
+  - Never run two Claude sessions editing the same repo at once.
+- To repair Gandalf's corrupted repo, re-clone fresh (do NOT `rm` the Dropbox
+  copy - Dropbox would propagate the delete to the other Mac):
+  ```bash
+  mkdir -p ~/Developer && cd ~/Developer
+  git clone https://github.com/jimjimjimmy/tetris.git
+  cd tetris && npm install && npx cap sync ios
+  # open ios/App/App.xcodeproj from ~/Developer/tetris -> Shadowfax -> Run
+  ```
 
 ### node_modules is PER-MACHINE - never sync it via Dropbox
 - `node_modules` is gitignored but lives inside the Dropbox folder, so Dropbox
