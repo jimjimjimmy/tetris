@@ -487,6 +487,21 @@ function useReveal(duration) {
   screen points using the same scale = min(w/402,h/880) as FullscreenGame.
   Last run: 17/17 pass; gesture delivery >= 9/10 every run.
 
+### Xcode Cloud CI (ci_scripts/ci_post_clone.sh)
+- Capacitor's iOS SPM manifest (ios/App/CapApp-SPM/Package.swift, CLI-managed,
+  DO NOT EDIT) references the plugin packages by LOCAL path into
+  node_modules/@capacitor/* (haptics, splash-screen, status-bar). node_modules
+  is gitignored, so a fresh Xcode Cloud clone can't resolve them and SPM fails.
+- These plugins are subdirectory packages inside their npm tarballs, so they
+  CANNOT be rewritten as remote `.package(url:)` git deps (SPM needs Package.swift
+  at a repo root, and `cap sync` would overwrite the manifest anyway). The fix is
+  to restore node_modules on the fresh clone.
+- ci_scripts/ci_post_clone.sh (repo root; Xcode Cloud auto-runs it after clone,
+  before SPM resolution + archive): installs Node via Homebrew if missing, runs
+  `npm ci`, then `npx cap sync ios`. Verified locally end-to-end (exit 0).
+- Xcode Cloud workflows themselves are configured in App Store Connect, not in
+  the repo; ci_post_clone.sh is the in-repo hook that injects the install step.
+
 ### Components
 - `NextPieceDisplay` - renders upcoming P1 piece using 18px cells. Shows "NEXT" label above.
 - `CompactNext` - compact piece preview for 37px NEXT strips. 7px cells, no text label.
