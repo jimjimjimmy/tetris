@@ -475,6 +475,36 @@ final class DriftUITests: XCTestCase {
         XCTAssertTrue(changed, "tapping the volume bar should change the volume value")
     }
 
+    // Reproduces the real-world "tap sometimes doesn't rotate" report: a finger
+    // tap is never perfectly still. This sweeps horizontal drift on an otherwise
+    // tap gesture and measures, per drift amount: how many registered as a tap
+    // (driftActs.tap delta), how many got stolen as a sideways move (left+right
+    // delta), and how many actually rotated the piece (p1rot changed). The real
+    // device touch path is exercised (coordinate press+drag through WKWebView).
+    func test_30_JitteryTapRotation() throws {
+        XCTAssertTrue(startGame(side: 1), "game should start as P1")
+        let drifts: [CGFloat] = [0, 15, 25, 35, 43, 55, 70]
+        for drift in drifts {
+            var tapReg = 0, moveReg = 0, rotChanged = 0
+            for _ in 0..<6 {
+                let tBefore = probeInt("tap")
+                let mBefore = probeInt("left") + probeInt("right")
+                let rBefore = probeInt("p1rot")
+                if drift == 0 {
+                    framePoint(161, 440).tap()
+                } else {
+                    // quick tap that drifts `drift` px horizontally before lift
+                    framePoint(161, 440).press(forDuration: 0.06, thenDragTo: framePoint(161 + drift, 440))
+                }
+                usleep(350_000)
+                if probeInt("tap") > tBefore { tapReg += 1 }
+                if (probeInt("left") + probeInt("right")) > mBefore { moveReg += 1 }
+                if probeInt("p1rot") != rBefore { rotChanged += 1 }
+            }
+            print("RESULT jittertap drift=\(Int(drift))px: tap=\(tapReg)/6 move=\(moveReg)/6 rotChanged=\(rotChanged)/6")
+        }
+    }
+
     func test_21_SoundAndHapticsTogglesReachable() throws {
         // Verifies the settings screen (which contains the Sound FX, Haptics,
         // and Volume controls) is reachable from in-game. Toggling individual
