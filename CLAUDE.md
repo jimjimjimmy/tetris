@@ -280,6 +280,45 @@ function useReveal(duration) {
   # open ios/App/App.xcodeproj from ~/Developer/tetris -> Shadowfax -> Run
   ```
 
+### Switching the active writer (FOOLPROOF) - which Mac is editing
+Only ONE Mac edits/commits at a time. Hand the baton through GitHub.
+**Mantra: PULL before you start. PUSH when you stop.**
+
+HAND OFF to Gandalf (you want to work on Gandalf):
+1. On the CODE Mac - save + send your latest to GitHub:
+   ```bash
+   git commit -am "wip" 2>/dev/null; \
+   GITHUB_TOKEN=$(gh auth token --hostname github.com -u jimjimjimmy 2>/dev/null) && \
+   git push "https://jimjimjimmy:${GITHUB_TOKEN}@github.com/jimjimjimmy/tetris.git" main
+   ```
+   ("nothing to commit" is fine - the push is what matters.)
+2. On GANDALF - get it:
+   ```bash
+   cd ~/Developer/tetris && git pull
+   ```
+   Work there. When done, push from Gandalf using the SAME two lines from step 1
+   (run them inside `~/Developer/tetris`).
+
+HAND BACK to the code Mac:
+1. On GANDALF: push (the commands from step 1, run in `~/Developer/tetris`).
+2. On the CODE Mac: `git pull` BEFORE you touch anything.
+
+GOLDEN RULES (these prevent every problem we hit):
+- PULL before you start, PUSH when you stop. Every time.
+- One writer at a time. Never edit on both Macs - or run two Claude sessions on
+  the repo - at once.
+- Gandalf only ever works from `~/Developer/tetris`. NEVER the Dropbox copy.
+- Easiest + safest: let Claude do the commit/push (it knows the stamp rules and
+  won't commit junk). `git commit -am` above only saves already-tracked files,
+  so it will not accidentally add the stray untracked files.
+
+If you are ever unsure "did my change make it across?":
+```bash
+git pull && git log --oneline -3
+```
+The top line is the truth (that is what is on GitHub). If git ever prints
+"CONFLICT", STOP and ask Claude on the code Mac - do not force anything.
+
 ### node_modules is PER-MACHINE - never sync it via Dropbox
 - `node_modules` is gitignored but lives inside the Dropbox folder, so Dropbox
   would otherwise try to sync it. Running `npm ci`/`npm install` on one machine
