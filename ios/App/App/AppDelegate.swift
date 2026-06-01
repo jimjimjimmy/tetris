@@ -1,5 +1,6 @@
 import UIKit
 import Capacitor
+import AVFoundation
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -7,7 +8,18 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Override point for customization after application launch.
+        // Route game audio through the .playback category so sound effects are
+        // audible even when the hardware ring/silent switch is set to silent.
+        // The default session category (soloAmbient) is silenced by the mute
+        // switch, which is why SFX play in the simulator (no switch) but are
+        // silent on a physical device. .mixWithOthers lets any music the user
+        // is already playing keep going underneath the game's effects.
+        do {
+            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.mixWithOthers])
+            try AVAudioSession.sharedInstance().setActive(true)
+        } catch {
+            print("[audio] AVAudioSession setup failed: \(error)")
+        }
         return true
     }
 
