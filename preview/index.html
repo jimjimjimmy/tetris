@@ -92,11 +92,18 @@ const AI_LEVEL_DEFAULT = 3;
 // Tetris reference). L1->L5: 900->700->500->320->140ms. L5 unchanged.
 // TEST_SPEED overrides this to 110ms for dev playback.
 const AI_LEVEL_CONFIG  = {
-  1: { randomRatio: 0.8, aiPeriod: 3, holePenalty: 5,  bumpPenalty: 0.5, tickMs: 900 },
-  2: { randomRatio: 0.5, aiPeriod: 2, holePenalty: 15, bumpPenalty: 1,   tickMs: 700 },
-  3: { randomRatio: 0.1, aiPeriod: 1, holePenalty: 30, bumpPenalty: 2,   tickMs: 500 },
-  4: { randomRatio: 0.0, aiPeriod: 1, holePenalty: 40, bumpPenalty: 3,   tickMs: 320 },
-  5: { randomRatio: 0.0, aiPeriod: 1, holePenalty: 60, bumpPenalty: 5,   tickMs: 140 },
+  // aiPeriod=1 on all levels so the AI steers every tick (no passive drift).
+  // Difficulty comes from randomRatio (random vs optimal target) and penalty weights.
+  // L1: frequent random placements, low penalties -> basic logic, visible mistakes
+  // L2: occasional random moves, moderate penalties -> decent play with errors
+  // L3: rare random, balanced weights -> average player, fills gaps, avoids tall stacks
+  // L4: near-optimal, heavy penalties -> clears rows actively, minimizes holes
+  // L5: always optimal, max penalties -> expert play, maximizes clears, plays flat
+  1: { randomRatio: 0.70, aiPeriod: 1, holePenalty: 5,   bumpPenalty: 0.5, heightPenalty: 1,   aggHPenalty: 0.3, linePts: 100,  tickMs: 900  },
+  2: { randomRatio: 0.40, aiPeriod: 1, holePenalty: 20,  bumpPenalty: 1.5, heightPenalty: 2,   aggHPenalty: 0.8, linePts: 300,  tickMs: 700  },
+  3: { randomRatio: 0.10, aiPeriod: 1, holePenalty: 40,  bumpPenalty: 2,   heightPenalty: 3,   aggHPenalty: 1.5, linePts: 500,  tickMs: 500  },
+  4: { randomRatio: 0.02, aiPeriod: 1, holePenalty: 70,  bumpPenalty: 3,   heightPenalty: 5,   aggHPenalty: 2.5, linePts: 800,  tickMs: 320  },
+  5: { randomRatio: 0.00, aiPeriod: 1, holePenalty: 100, bumpPenalty: 5,   heightPenalty: 8,   aggHPenalty: 4,   linePts: 1200, tickMs: 140  },
 };
 
 // Build identity shown at the bottom of the start screen so any device
@@ -684,6 +691,19 @@ const sfx = {
       "| Capacitor:", !!window.Capacitor, "| Haptics plugin:", !!H);
   },
 
+  // Call inside a user-gesture handler to satisfy iOS WebKit autoplay policy.
+  // Once a single play() fires in a gesture context, all subsequent play()
+  // calls for the session -- including those from useEffect -- are allowed.
+  _unlock() {
+    const src = this._audios["pieceLock"];
+    if (!src) return;
+    try {
+      const a = src.cloneNode();
+      a.volume = 0;
+      a.play().catch(() => {});
+    } catch (_) {}
+  },
+
   preload() {
     if (this._attempted) return;
     this._attempted = true;
@@ -1032,32 +1052,50 @@ function TetrisGame2P() {
             for (const [c, r] of getCells(type, rot, x, ly)) {
               if (r >= 0 && r < ROWS_2P && c >= 0 && c < COLS) sim[r][c] = CELL_P1;
             }
-            let score = 0;
             const [simAfter, cleared] = clearP1_2P(sim, boundary);
-            score += cleared * 500;
+            let score = cleared * aiCfg.linePts;
+
+            // Near-complete row bonus: 8 or 9 cells = close to clearing next piece
             for (let r = SCORE_MIN_1; r <= SCORE_MAX_1; r++) {
-              const filled = simAfter[r].filter(c => c !== CELL_EMPTY).length;
-              score += filled * filled;
+              const filled = simAfter[r].filter(v => v !== CELL_EMPTY).length;
+              if (filled >= 8 && filled < COLS) score += (filled - 7) * 20;
             }
-            score -= Math.max(0, ly - SCORE_MIN_1 - 2) * 4;
+
+            // Height reward: landing far from boundary = short stack = safe.
+            // P1 pieces float UP; large ly = close to floor = short stack.
+            // Previous formula was inverted (penalized safe landings).
+            score += (ly - boundary) * aiCfg.heightPenalty;
+
+            // Holes: empty cells with a filled P1 cell above them (between
+            // the empty cell and boundary). Pieces float up so holes under
+            // a filled ceiling are inaccessible until the ceiling is cleared.
             let holes = 0;
             for (let c = 0; c < COLS; c++) {
-              let hasFillBelow = false;
-              for (let r = SCORE_MAX_1; r >= SCORE_MIN_1; r--) {
-                if (simAfter[r][c] !== CELL_EMPTY) hasFillBelow = true;
-                else if (hasFillBelow) holes++;
+              let hasTop = false;
+              for (let r = boundary; r < ROWS_2P; r++) {
+                if (simAfter[r][c] !== CELL_EMPTY) hasTop = true;
+                else if (hasTop) holes++;
               }
             }
             score -= holes * aiCfg.holePenalty;
+
+            // Column heights (from floor upward) + bumpiness + aggregate height.
+            // colH[c] = number of filled rows from floor (ROWS_2P-1) upward.
+            let aggH = 0;
             const colH = Array(COLS).fill(0);
             for (let c = 0; c < COLS; c++) {
-              for (let r = SCORE_MIN_1; r <= SCORE_MAX_1; r++) {
-                if (simAfter[r][c] !== CELL_EMPTY) colH[c] = r - boundary;
+              for (let r = boundary; r < ROWS_2P; r++) {
+                if (simAfter[r][c] !== CELL_EMPTY) {
+                  colH[c] = ROWS_2P - r;  // height counted from floor
+                  aggH += colH[c];
+                  break;
+                }
               }
             }
             let bumpiness = 0;
             for (let c = 1; c < COLS; c++) bumpiness += Math.abs(colH[c] - colH[c - 1]);
             score -= bumpiness * aiCfg.bumpPenalty;
+            score -= aggH * aiCfg.aggHPenalty;
             return score;
           };
           let bestRot1 = p1.rot, bestX1 = p1.x;
@@ -1107,32 +1145,50 @@ function TetrisGame2P() {
             for (const [c, r] of getCells(type, rot, x, ly)) {
               if (r >= 0 && r < ROWS_2P && c >= 0 && c < COLS) sim[r][c] = CELL_P2;
             }
-            let score = 0;
             const [simAfter, cleared] = clearP2_2P(sim, boundary);
-            score += cleared * 500;
+            let score = cleared * aiCfg.linePts;
+
+            // Near-complete row bonus
             for (let r = SCORE_MIN_2; r <= SCORE_MAX_2; r++) {
-              const filled = simAfter[r].filter(c => c !== CELL_EMPTY).length;
-              score += filled * filled;
+              const filled = simAfter[r].filter(v => v !== CELL_EMPTY).length;
+              if (filled >= 8 && filled < COLS) score += (filled - 7) * 20;
             }
-            score -= Math.max(0, SCORE_MAX_2 - ly - 2) * 4;
+
+            // Height reward: landing far from boundary = short stack = safe.
+            // P2 pieces fall DOWN; small ly = close to ceiling = short stack.
+            // Previous formula was inverted (penalized safe landings).
+            score += (boundary - 1 - ly) * aiCfg.heightPenalty;
+
+            // Holes: empty cells with a filled P2 cell below them (between
+            // the empty cell and boundary). Pieces fall down so holes above
+            // a filled floor are inaccessible until the floor is cleared.
             let holes = 0;
             for (let c = 0; c < COLS; c++) {
-              let hasFillAbove = false;
-              for (let r = SCORE_MIN_2; r <= SCORE_MAX_2; r++) {
-                if (simAfter[r][c] !== CELL_EMPTY) hasFillAbove = true;
-                else if (hasFillAbove) holes++;
+              let hasFloor = false;
+              for (let r = SCORE_MAX_2; r >= SCORE_MIN_2; r--) {
+                if (simAfter[r][c] !== CELL_EMPTY) hasFloor = true;
+                else if (hasFloor) holes++;
               }
             }
             score -= holes * aiCfg.holePenalty;
+
+            // Column heights (from ceiling downward) + bumpiness + aggregate height.
+            // colH[c] = number of filled rows from ceiling (0) downward.
+            let aggH = 0;
             const colH = Array(COLS).fill(0);
             for (let c = 0; c < COLS; c++) {
               for (let r = SCORE_MAX_2; r >= SCORE_MIN_2; r--) {
-                if (simAfter[r][c] !== CELL_EMPTY) { colH[c] = SCORE_MAX_2 - r + 1; }
+                if (simAfter[r][c] !== CELL_EMPTY) {
+                  colH[c] = r + 1;  // height counted from ceiling (row 0)
+                  aggH += colH[c];
+                  break;
+                }
               }
             }
             let bumpiness = 0;
             for (let c = 1; c < COLS; c++) bumpiness += Math.abs(colH[c] - colH[c - 1]);
             score -= bumpiness * aiCfg.bumpPenalty;
+            score -= aggH * aiCfg.aggHPenalty;
             return score;
           };
           let bestRot2 = p2.rot, bestX2 = p2.x;
@@ -1512,11 +1568,10 @@ function TetrisGame2P() {
     // Direction: P1 swipe-up fires "up"; P2 swipe-down fires "down".
     // Against-gravity swipes are intentionally no-ops.
     const STEP_PX    = 30;  // ratchet: each 30px of horizontal drag = one cell
-    const TAP_PX     = 30;  // movement under this on both axes = tap (rotate).
-                            // Must match STEP_PX so there is no dead zone:
-                            // 0-29px = tap, 30px+ = move. Previously 20px
-                            // left a 20-29px gap where neither tap nor move
-                            // fired -- common with WKWebView touch jitter.
+    const TAP_PX     = 44;  // movement under this on both axes = tap (rotate).
+                            // Raised to 44 to match DROP_PX: closes the 30-43px
+                            // dead zone where WKWebView touch jitter caused neither
+                            // tap (adx/ady >= old 30px) nor step/drop to fire.
     const DROP_PX    = 44;  // min vertical travel before hard drop fires on lift
     const LOCK_PX    = 10;  // min travel before axis is committed
     const AXIS_RATIO = 2;   // ady >= AXIS_RATIO * adx -> commit to vertical
@@ -1563,7 +1618,12 @@ function TetrisGame2P() {
       const adx = Math.abs(dx), ady = Math.abs(dy);
       const side  = playerSideRef.current;
       const apply = side === 2 ? applyP2 : applyP1;
-      // Tap: finger barely moved on both axes and no cells were stepped.
+      // Fast-path tap: if touchmove never locked an axis (no movement > LOCK_PX
+      // on either axis) and no step fired, the user definitely intended a tap.
+      // This fires even when changedTouches reports jitter up to TAP_PX on lift.
+      if (axisLock === null && !moved) { apply("tap"); return; }
+      // Standard tap: axis was committed (slight diagonal) but total movement
+      // stayed under TAP_PX=44 on both axes -- still a tap, not a slide/drop.
       if (!moved && adx < TAP_PX && ady < TAP_PX) { apply("tap"); return; }
       // Hard drop: only when axis is vertical or still undecided.
       // Horizontal-locked gestures never trigger a drop.
@@ -1746,6 +1806,7 @@ function TetrisGame2P() {
     if (e && e.stopPropagation) e.stopPropagation();
     updateSetting("side", side);
     sfx.preload();  // no-op if already attempted; preload() calls diagnose() internally
+    sfx._unlock(); // play silence at vol=0 to unlock iOS WebKit audio for the session
     console.log("[diag] selectSide", side, "| haptics:", settings.haptics,
       "| intensity:", settings.hapticIntensity, "| soundFX:", settings.soundFX,
       "| volume:", settings.volume);
