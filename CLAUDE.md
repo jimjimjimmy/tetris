@@ -444,6 +444,48 @@ function useReveal(duration) {
   - CompactNext: 7px cells, no label, both 37px NEXT strips.
   - Debug key "0" resets.
   - TEST_SPEED: same global flag. ALWAYS false before push.
+  - AI scoring (Gandalf, 2026-05-31): per-placement score in scoreP1/scoreP2 =
+    cleared*linePts + near-complete-row bonus - holes*holePenalty
+    - bumpiness*bumpPenalty - maxH*maxHPenalty + coverage*coverageBonus.
+    `maxH` = tallest column height, `coverage` = count of distinct columns
+    used. These REPLACED the old aggHPenalty (sum-of-heights), which gave a
+    flat 10-wide layer the same penalty as a 2-wide tower -- zero spread
+    incentive. With coverage reward + max-height penalty the AI now spreads
+    ~6-7 columns wide at all levels. AI_LEVEL_CONFIG keys per level:
+    randomRatio, aiPeriod(=1 all levels), holePenalty, bumpPenalty,
+    maxHPenalty, coverageBonus, linePts, tickMs.
+  - AI HOLE BUG FIX (Gandalf, 2026-05-31): both hole loops were scanning the
+    WRONG direction. P1 floats UP from the floor, so a hole is an empty cell
+    with a filled cell BELOW it (scan floor->boundary). P2 falls DOWN from the
+    ceiling, so a hole is an empty cell with a filled cell ABOVE it (scan
+    ceiling->boundary). The inverted loops counted every open cell in front of
+    a freshly-landed piece as a hole (~9 fake holes/column), producing scores
+    near -4000 on a near-empty board and forcing the AI into narrow towers.
+    Fixing the scan direction was the real cure for "narrow and tall".
+  - TEST_PROBE (Gandalf, 2026-05-31): global flag (default true; set false for
+    App Store builds, like DEBUG_PIECES/TEST_SPEED). When true, an inert 1x1px
+    off-screen DOM element (rendered in BOTH the start-screen and playing JSX)
+    has its text content set every render to a "DRIFT;k=v;..." string mirroring
+    game state: phase, side, p1x/rot, p2x/rot, bdy, l1/l2, set, lvl, paused,
+    over, sfx, hap, vol, plus cumulative gesture-action counters
+    tap/left/right/up/down/soft (incremented at applyP1/applyP2 entry via the
+    module-level `driftActs`). WKWebView exposes this to the iOS accessibility
+    tree so the XCUITest suite can read state inside the opaque web view.
+
+### XCUITest suite (ios/App/AppUITests/DriftUITests.swift)
+- UI-test target `AppUITests` (bundle id com.typographic.drift.uitests, test
+  host = App) + a SHARED `App` scheme so `xcodebuild test -scheme App` runs it.
+  Target/scheme were added programmatically via the Ruby `xcodeproj` gem.
+- Run with `npm run uitest` (cap sync + xcodebuild test) or
+  `npm run uitest:nobuild`. Destination is `name=iPhone 17 Pro`.
+- 17 tests: 6 gesture (tap/left/right/up/down/diagonal, 3 runs x10, measured via
+  driftActs counter deltas through the probe), 6 flow (launch, P1/P2 start,
+  pause, settings-open, game-over+rematch), 3 settings (sfx/haptics/volume
+  toggles verified individually via field-specific probe reads), + level
+  selector + reachability. Gestures are real coordinate taps/swipes (genuine
+  WKWebView touch dispatch). framePoint() maps the 402x880 logical frame to
+  screen points using the same scale = min(w/402,h/880) as FullscreenGame.
+  Last run: 17/17 pass; gesture delivery >= 9/10 every run.
 
 ### Components
 - `NextPieceDisplay` - renders upcoming P1 piece using 18px cells. Shows "NEXT" label above.

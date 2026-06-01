@@ -87,6 +87,17 @@ const TEST_SPEED    = false; // set true for 5x speed during development -- ALWA
 // deterministically without playing through a full game. Permanent
 // smoke-test tool. Always false before push.
 const DEBUG_PIECES  = false;
+// TEST_PROBE: when true, renders a hidden DOM element whose text content
+// mirrors live game state (phase, piece x/rot, boundary, line counts,
+// settings) plus cumulative gesture-action counters. WKWebView exposes it
+// to the iOS accessibility tree so the XCUITest suite (AppUITests) can read
+// game state it otherwise cannot see through the opaque web view. The probe
+// is inert: 1x1px, off-screen, pointerEvents none -- zero gameplay impact.
+// Set false for App Store builds to drop the element entirely.
+const TEST_PROBE    = true;
+// Cumulative gesture-action counters, incremented at applyP1/applyP2 entry.
+// XCUITest reads deltas (before/after N gestures) to compute success rates.
+const driftActs = { tap: 0, left: 0, right: 0, up: 0, down: 0, soft: 0 };
 const AI_LEVEL_DEFAULT = 3;
 // tickMs = fall interval per level. L3 = moderate/average pace (standard
 // Tetris reference). L1->L5: 900->700->500->320->140ms. L5 unchanged.
@@ -99,11 +110,16 @@ const AI_LEVEL_CONFIG  = {
   // L3: rare random, balanced weights -> average player, fills gaps, avoids tall stacks
   // L4: near-optimal, heavy penalties -> clears rows actively, minimizes holes
   // L5: always optimal, max penalties -> expert play, maximizes clears, plays flat
-  1: { randomRatio: 0.70, aiPeriod: 1, holePenalty: 5,   bumpPenalty: 0.5, heightPenalty: 1,   aggHPenalty: 0.3, linePts: 100,  tickMs: 900  },
-  2: { randomRatio: 0.40, aiPeriod: 1, holePenalty: 20,  bumpPenalty: 1.5, heightPenalty: 2,   aggHPenalty: 0.8, linePts: 300,  tickMs: 700  },
-  3: { randomRatio: 0.10, aiPeriod: 1, holePenalty: 40,  bumpPenalty: 2,   heightPenalty: 3,   aggHPenalty: 1.5, linePts: 500,  tickMs: 500  },
-  4: { randomRatio: 0.02, aiPeriod: 1, holePenalty: 70,  bumpPenalty: 3,   heightPenalty: 5,   aggHPenalty: 2.5, linePts: 800,  tickMs: 320  },
-  5: { randomRatio: 0.00, aiPeriod: 1, holePenalty: 100, bumpPenalty: 5,   heightPenalty: 8,   aggHPenalty: 4,   linePts: 1200, tickMs: 140  },
+  // maxHPenalty penalizes the TALLEST column (discourages spikes); coverageBonus
+  // rewards each distinct column used (pushes pieces to spread wide across the
+  // 10-col board). These replace the old aggHPenalty, which penalized the SUM of
+  // column heights and therefore gave a flat 10-wide layer the same penalty as a
+  // 2-wide tower of equal cell count -- i.e. zero incentive to spread.
+  1: { randomRatio: 0.70, aiPeriod: 1, holePenalty: 8,   bumpPenalty: 0.5, maxHPenalty: 1.5, coverageBonus: 10, linePts: 100,  tickMs: 900  },
+  2: { randomRatio: 0.40, aiPeriod: 1, holePenalty: 20,  bumpPenalty: 1.5, maxHPenalty: 3,   coverageBonus: 16, linePts: 300,  tickMs: 700  },
+  3: { randomRatio: 0.10, aiPeriod: 1, holePenalty: 40,  bumpPenalty: 2.5, maxHPenalty: 5,   coverageBonus: 24, linePts: 500,  tickMs: 500  },
+  4: { randomRatio: 0.02, aiPeriod: 1, holePenalty: 70,  bumpPenalty: 4,   maxHPenalty: 7,   coverageBonus: 32, linePts: 800,  tickMs: 320  },
+  5: { randomRatio: 0.00, aiPeriod: 1, holePenalty: 100, bumpPenalty: 6,   maxHPenalty: 10,  coverageBonus: 42, linePts: 1200, tickMs: 140  },
 };
 
 // Build identity shown at the bottom of the start screen so any device
@@ -988,6 +1004,41 @@ function SettingsScreen({ settings, onUpdate, onClose, initialSection }) {
 
 // ============================================================
 
+// ============================================================
+// TEST PROBE  (a11y bridge for XCUITest -- see TEST_PROBE flag)
+// ============================================================
+// driftProbeEl is set once the probe <div> mounts. writeDriftProbe()
+// serializes a compact key=value;... string into its text content, which
+// WKWebView surfaces to the iOS accessibility tree as a static-text element
+// whose label BEGINS WITH "DRIFT;". XCUITest finds that element and parses
+// the fields. Counters come from the module-level driftActs object.
+let driftProbeEl = null;
+let driftLastSnap = null;  // most-recent state snapshot, for immediate counter flush
+function writeDriftProbe(snap) {
+  if (!TEST_PROBE || !driftProbeEl) return;
+  const a = driftActs;
+  const s = snap || {};
+  driftProbeEl.textContent =
+    "DRIFT;phase=" + (s.phase || "") +
+    ";side=" + (s.playerSide == null ? "0" : s.playerSide) +
+    ";p1x=" + (s.p1x != null ? s.p1x : "-") +
+    ";p1rot=" + (s.p1rot != null ? s.p1rot : "-") +
+    ";p2x=" + (s.p2x != null ? s.p2x : "-") +
+    ";p2rot=" + (s.p2rot != null ? s.p2rot : "-") +
+    ";bdy=" + (s.boundary != null ? s.boundary : "-") +
+    ";l1=" + (s.p1Lines != null ? s.p1Lines : "-") +
+    ";l2=" + (s.p2Lines != null ? s.p2Lines : "-") +
+    ";set=" + (s.showSettings ? "1" : "0") +
+    ";lvl=" + (s.level != null ? s.level : "-") +
+    ";sfx=" + (s.sfxOn ? "1" : "0") +
+    ";hap=" + (s.hapOn ? "1" : "0") +
+    ";vol=" + (s.vol != null ? s.vol : "-") +
+    ";paused=" + (s.paused ? "1" : "0") +
+    ";over=" + (s.phase === "over" ? "1" : "0") +
+    ";tap=" + a.tap + ";left=" + a.left + ";right=" + a.right +
+    ";up=" + a.up + ";down=" + a.down + ";soft=" + a.soft;
+}
+
 function TetrisGame2P() {
   const [settings, updateSetting] = useSettings();
   const [showSettings, setShowSettings] = React.useState(false);
@@ -1061,41 +1112,42 @@ function TetrisGame2P() {
               if (filled >= 8 && filled < COLS) score += (filled - 7) * 20;
             }
 
-            // Height reward: landing far from boundary = short stack = safe.
-            // P1 pieces float UP; large ly = close to floor = short stack.
-            // Previous formula was inverted (penalized safe landings).
-            score += (ly - boundary) * aiCfg.heightPenalty;
-
-            // Holes: empty cells with a filled P1 cell above them (between
-            // the empty cell and boundary). Pieces float up so holes under
-            // a filled ceiling are inaccessible until the ceiling is cleared.
+            // Holes: P1 floats UP from the floor (row ROWS_2P-1), so a hole is
+            // an empty cell with a filled cell BELOW it (toward the floor) --
+            // a rising piece cannot reach under a covered cell. Scan from the
+            // floor up: once a filled cell is seen, any empty above it is a hole.
             let holes = 0;
             for (let c = 0; c < COLS; c++) {
-              let hasTop = false;
-              for (let r = boundary; r < ROWS_2P; r++) {
-                if (simAfter[r][c] !== CELL_EMPTY) hasTop = true;
-                else if (hasTop) holes++;
+              let seen = false;
+              for (let r = ROWS_2P - 1; r >= boundary; r--) {
+                if (simAfter[r][c] !== CELL_EMPTY) seen = true;
+                else if (seen) holes++;
               }
             }
             score -= holes * aiCfg.holePenalty;
 
-            // Column heights (from floor upward) + bumpiness + aggregate height.
-            // colH[c] = number of filled rows from floor (ROWS_2P-1) upward.
-            let aggH = 0;
+            // Column heights (from floor upward). colH[c] = filled rows from
+            // the floor (ROWS_2P-1) upward within P1 territory.
             const colH = Array(COLS).fill(0);
             for (let c = 0; c < COLS; c++) {
               for (let r = boundary; r < ROWS_2P; r++) {
                 if (simAfter[r][c] !== CELL_EMPTY) {
                   colH[c] = ROWS_2P - r;  // height counted from floor
-                  aggH += colH[c];
                   break;
                 }
               }
             }
-            let bumpiness = 0;
-            for (let c = 1; c < COLS; c++) bumpiness += Math.abs(colH[c] - colH[c - 1]);
+            // Bumpiness (jaggedness), max-column-height (spike) penalty, and
+            // coverage (distinct columns used) reward -- the last two push the
+            // stack to spread wide and flat rather than piling into a tower.
+            let bumpiness = 0, maxH = 0, coverage = 0;
+            for (let c = 0; c < COLS; c++) {
+              if (colH[c] > 0) { coverage++; if (colH[c] > maxH) maxH = colH[c]; }
+              if (c > 0) bumpiness += Math.abs(colH[c] - colH[c - 1]);
+            }
             score -= bumpiness * aiCfg.bumpPenalty;
-            score -= aggH * aiCfg.aggHPenalty;
+            score -= maxH * aiCfg.maxHPenalty;
+            score += coverage * aiCfg.coverageBonus;
             return score;
           };
           let bestRot1 = p1.rot, bestX1 = p1.x;
@@ -1154,41 +1206,41 @@ function TetrisGame2P() {
               if (filled >= 8 && filled < COLS) score += (filled - 7) * 20;
             }
 
-            // Height reward: landing far from boundary = short stack = safe.
-            // P2 pieces fall DOWN; small ly = close to ceiling = short stack.
-            // Previous formula was inverted (penalized safe landings).
-            score += (boundary - 1 - ly) * aiCfg.heightPenalty;
-
-            // Holes: empty cells with a filled P2 cell below them (between
-            // the empty cell and boundary). Pieces fall down so holes above
-            // a filled floor are inaccessible until the floor is cleared.
+            // Holes: P2 falls DOWN from the ceiling (row 0), so a hole is an
+            // empty cell with a filled cell ABOVE it -- a falling piece cannot
+            // reach below a covered cell. Scan from the ceiling down: once a
+            // filled cell is seen, any empty below it is a hole.
             let holes = 0;
             for (let c = 0; c < COLS; c++) {
-              let hasFloor = false;
-              for (let r = SCORE_MAX_2; r >= SCORE_MIN_2; r--) {
-                if (simAfter[r][c] !== CELL_EMPTY) hasFloor = true;
-                else if (hasFloor) holes++;
+              let seen = false;
+              for (let r = SCORE_MIN_2; r <= SCORE_MAX_2; r++) {
+                if (simAfter[r][c] !== CELL_EMPTY) seen = true;
+                else if (seen) holes++;
               }
             }
             score -= holes * aiCfg.holePenalty;
 
-            // Column heights (from ceiling downward) + bumpiness + aggregate height.
-            // colH[c] = number of filled rows from ceiling (0) downward.
-            let aggH = 0;
+            // Column heights (from ceiling downward). colH[c] = filled rows from
+            // the ceiling (row 0) downward within P2 territory.
             const colH = Array(COLS).fill(0);
             for (let c = 0; c < COLS; c++) {
               for (let r = SCORE_MAX_2; r >= SCORE_MIN_2; r--) {
                 if (simAfter[r][c] !== CELL_EMPTY) {
                   colH[c] = r + 1;  // height counted from ceiling (row 0)
-                  aggH += colH[c];
                   break;
                 }
               }
             }
-            let bumpiness = 0;
-            for (let c = 1; c < COLS; c++) bumpiness += Math.abs(colH[c] - colH[c - 1]);
+            // Bumpiness, max-column-height (spike) penalty, and coverage
+            // (distinct columns used) reward -- spread wide and flat.
+            let bumpiness = 0, maxH = 0, coverage = 0;
+            for (let c = 0; c < COLS; c++) {
+              if (colH[c] > 0) { coverage++; if (colH[c] > maxH) maxH = colH[c]; }
+              if (c > 0) bumpiness += Math.abs(colH[c] - colH[c - 1]);
+            }
             score -= bumpiness * aiCfg.bumpPenalty;
-            score -= aggH * aiCfg.aggHPenalty;
+            score -= maxH * aiCfg.maxHPenalty;
+            score += coverage * aiCfg.coverageBonus;
             return score;
           };
           let bestRot2 = p2.rot, bestX2 = p2.x;
@@ -1401,6 +1453,7 @@ function TetrisGame2P() {
   // away from its goal and felt confusing. Pieces only go up, sideways,
   // or rotate -- never backward.
   const applyP1 = React.useCallback((action) => {
+    if (TEST_PROBE && driftActs[action] != null) { driftActs[action]++; writeDriftProbe(driftLastSnap); }
     setState(s => {
       if (s.phase !== "playing" || s.paused || s.summary) return s;
       const { p1, board, boundary } = s;
@@ -1468,6 +1521,7 @@ function TetrisGame2P() {
   // "boost-toward-boundary" gesture for P2 is DOWN; the unsupported
   // "backward" gesture is UP.
   const applyP2 = React.useCallback((action) => {
+    if (TEST_PROBE && driftActs[action] != null) { driftActs[action]++; writeDriftProbe(driftLastSnap); }
     setState(s => {
       if (s.phase !== "playing" || s.paused || s.summary) return s;
       const { p2, board, boundary } = s;
@@ -1786,6 +1840,23 @@ function TetrisGame2P() {
     prevPhaseRef.current = state.phase;
   });
 
+  // TEST PROBE flush: runs after every render so the a11y bridge always
+  // reflects current state. Snapshot is also stashed in driftLastSnap so
+  // applyP1/applyP2 can re-flush counters immediately on a blocked move.
+  React.useEffect(() => {
+    if (!TEST_PROBE) return;
+    const snap = {
+      phase: state.phase, playerSide: state.playerSide,
+      p1x: state.p1.x, p1rot: state.p1.rot,
+      p2x: state.p2.x, p2rot: state.p2.rot,
+      boundary: state.boundary, p1Lines: state.p1Lines, p2Lines: state.p2Lines,
+      showSettings: showSettings, level: settings.level, paused: state.paused,
+      sfxOn: settings.soundFX, hapOn: settings.haptics, vol: settings.volume,
+    };
+    driftLastSnap = snap;
+    writeDriftProbe(snap);
+  });
+
   const { board, p1, p2, p1Next, p1NextNext, p2Next, p2NextNext, p1Lines, p2Lines, phase, boundary, winner, paused, summary, lastGain, clearAnim, playerSide, aiLevel } = state;
 
   // NEXT queue routing: show whichever side the human is playing. P2's
@@ -1953,6 +2024,22 @@ function TetrisGame2P() {
             }}
             onClose={closeSettings}
           />
+        )}
+
+        {/* TEST PROBE (start screen copy) -- the main probe lives in the
+            playing-phase JSX; this duplicate keeps state readable while the
+            start screen is showing (phase=start, level, settings-open). */}
+        {TEST_PROBE && (
+          <div
+            ref={(el) => { driftProbeEl = el; }}
+            aria-live="polite"
+            style={{
+              position: "absolute", left: 0, top: 0,
+              width: 1, height: 1, overflow: "hidden",
+              opacity: 0.01, color: "transparent",
+              pointerEvents: "none", fontSize: 1,
+            }}
+          >DRIFT;</div>
         )}
       </div>
     );
@@ -2367,6 +2454,26 @@ function TetrisGame2P() {
           touchAction: "none",
         }}
       />
+
+      {/* TEST PROBE: a11y bridge for XCUITest. Inert 1x1px off-screen node;
+          its text content (set imperatively by writeDriftProbe) surfaces to
+          the iOS accessibility tree. Not rendered when TEST_PROBE is false. */}
+      {TEST_PROBE && (
+        <div
+          ref={(el) => { driftProbeEl = el; }}
+          aria-live="polite"
+          style={{
+            position: "absolute",
+            left: 0, top: 0,
+            width: 1, height: 1,
+            overflow: "hidden",
+            opacity: 0.01,
+            color: "transparent",
+            pointerEvents: "none",
+            fontSize: 1,
+          }}
+        >DRIFT;</div>
+      )}
 
       {/* Info icon -- white SVG at opacity 0.3 (Figma 124:2276). The
           `top` adds env(safe-area-inset-top) so the icon is pushed BELOW
