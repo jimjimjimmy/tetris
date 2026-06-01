@@ -660,9 +660,10 @@ const haptic = {
 // Line clear: n==1 uses the CLEAR file; n>1 uses the heavier DROP file.
 // ============================================================
 const sfx = {
-  _s:       { soundFX: true, volume: 7 },
-  _ctx:     null,
-  _buffers: {},
+  _s:        { soundFX: true, volume: 7 },
+  _ctx:      null,
+  _buffers:  {},
+  _attempted: false,
 
   configure(settings) {
     this._s = settings;
@@ -689,6 +690,8 @@ const sfx = {
   },
 
   async preload() {
+    if (this._attempted) return;
+    this._attempted = true;
     console.log("[sfx] preload start -- ctx state:", this._ctx ? this._ctx.state : "null");
     const B = "assets/Sound%20fx/";
     const P = B + "Picked/";
@@ -701,17 +704,40 @@ const sfx = {
       gameOver:        P + "GAME%20OVER%20567208__sergequadrado__announcement-sound.wav",
     };
     const ctx = this._getCtx();
-    await Promise.all(Object.entries(files).map(async ([key, url]) => {
-      try {
-        const res = await fetch(url);
-        if (!res.ok) throw new Error("HTTP " + res.status + " for " + url);
-        const arr = await res.arrayBuffer();
-        this._buffers[key] = await ctx.decodeAudioData(arr);
-        console.log("[sfx] loaded:", key, this._buffers[key].duration.toFixed(2) + "s");
-      } catch (e) {
-        console.error("[sfx] preload FAILED:", key, e.message || e);
-      }
-    }));
+    // Use XHR + callback decodeAudioData -- both are more reliable in WKWebView
+    // than fetch() + Promise-form decodeAudioData (which silently returns undefined
+    // on some iOS versions, leaving buffers empty with no error thrown).
+    await Promise.all(Object.entries(files).map(([key, url]) =>
+      new Promise((resolve) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("GET", url, true);
+        xhr.responseType = "arraybuffer";
+        xhr.onload = () => {
+          if (xhr.status !== 200) {
+            console.error("[sfx] preload FAILED:", key, "HTTP " + xhr.status, url);
+            resolve();
+            return;
+          }
+          ctx.decodeAudioData(
+            xhr.response,
+            (buf) => {
+              this._buffers[key] = buf;
+              console.log("[sfx] loaded:", key, buf.duration.toFixed(2) + "s");
+              resolve();
+            },
+            (err) => {
+              console.error("[sfx] preload FAILED decode:", key, err);
+              resolve();
+            }
+          );
+        };
+        xhr.onerror = () => {
+          console.error("[sfx] preload FAILED xhr:", key, url);
+          resolve();
+        };
+        xhr.send();
+      })
+    ));
     console.log("[sfx] preload done --", Object.keys(this._buffers).length, "/ 6 loaded, ctx:", ctx.state);
   },
 
@@ -1009,6 +1035,10 @@ function TetrisGame2P() {
   // read the current toggles without stale-closure issues.
   haptic.configure(settings);
   sfx.configure(settings);
+
+  // Kick off audio preload on first mount so buffers are ready before gameplay.
+  // _attempted flag on sfx ensures this only runs once even if the component re-mounts.
+  React.useEffect(() => { sfx.preload(); }, []);
 
   const openSettings = (section) => {
     setSettingsSection(section || null);
