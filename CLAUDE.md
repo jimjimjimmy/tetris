@@ -246,9 +246,28 @@ function useReveal(duration) {
 - **MacFQ** = Jimmy's FloQast MacBook. Has access to FQ GitHub (FloQastInc repos) and freeradicals-studio. All FQ-related pushes happen here only.
 - **Gandalf** = personal machine. Has access to jimjimjimmy personal GitHub only. No FQ GitHub access.
 - Tetris is a personal project - Gandalf CAN push to jimjimjimmy/tetris directly.
-- Files live in Dropbox: `~/Dropbox/04 Projects/AI Shared/Tetris/`
+- Files live in Dropbox. The two machines mount it at DIFFERENT paths:
+  - Code/Claude machine: `/Users/jimmyche/Library/CloudStorage/Dropbox/04 Projects/AI Shared/Tetris` (Claude runs here, does edits + git push)
+  - Device-build machine (phone connected, Xcode Run to "Shadowfax"): `/Users/jimmy/Dropbox/04 Projects/AI Shared/Tetris`
 - Dropbox handles live file sync between machines
 - Git is the source of truth for committed state - push at end of every session
+
+### node_modules is PER-MACHINE - never sync it via Dropbox
+- `node_modules` is gitignored but lives inside the Dropbox folder, so Dropbox
+  would otherwise try to sync it. Running `npm ci`/`npm install` on one machine
+  then churns thousands of files across Dropbox to the other Mac, landing a
+  PARTIAL copy - which breaks the iOS build there with "invalid custom path
+  'ios/Sources/HapticsPlugin'" / "Build input files cannot be found ...
+  node_modules/@capacitor/haptics/.../Haptics.swift". (Capacitor's CLI-managed
+  CapApp-SPM/Package.swift references the plugins by local node_modules path.)
+- Fix: each Mac keeps its OWN local node_modules and Dropbox ignores it. Set on
+  EACH machine (in the project root):
+  `xattr -w com.dropbox.ignored 1 node_modules`
+  (already set on the code machine). Note: setting it removes the shared copy
+  from Dropbox + the other Mac, which is fine - run `npm install` locally there.
+- After any pull/sync (or a fresh checkout) on a machine, run
+  `npm install && npx cap sync ios` locally before building. Do NOT rely on
+  Dropbox to deliver node_modules.
 
 ### Handoff rules
 1. **Update this CLAUDE.md** whenever you add a component, rename a file, or change the architecture.
