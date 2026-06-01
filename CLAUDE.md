@@ -1,5 +1,14 @@
 # Tetris - Project Context
 
+> **CROSS-MACHINE RULE (read first).** Only ONE Mac commits/pushes: the code
+> machine (`/Users/jimmyche/.../Dropbox/.../Tetris`). **Gandalf is BUILD-ONLY**
+> and works from `~/Developer/tetris` - a clone that lives OUTSIDE Dropbox.
+> On Gandalf: `git pull` to update, `npm install`/`npx cap sync ios` if deps
+> changed, then build to "Shadowfax" in Xcode. Do NOT commit/push from Gandalf,
+> do NOT build from the Dropbox copy, and never run two editing sessions on the
+> same repo. (A git repo inside Dropbox corrupts `.git` - that is why Gandalf
+> re-cloned outside it.) Details in "Cross-machine collaboration" below.
+
 <!--
   IMPORTANT: KEEP THIS FILE CURRENT
   Whichever machine (MacFQ or Gandalf) adds a component, updates a file,
