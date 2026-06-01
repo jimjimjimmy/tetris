@@ -625,7 +625,10 @@ const haptic = {
     if (!this._s.haptics) return;
     const H = window.Capacitor?.Plugins?.Haptics;
     if (H) {
-      try { H.selectionChanged(); } catch (_) {}
+      // impact() is reliable on iOS; selectionChanged() is effectively a no-op
+      // unless paired with selectionStart/End, so rotate/move felt dead. Fire a
+      // scaled LIGHT impact instead so every successful input gives a real tap.
+      try { H.impact({ style: this._scale("LIGHT") }); } catch (e) { console.error("[haptic] light failed:", e); }
       return;
     }
     const d = this._s.hapticIntensity;
@@ -1627,6 +1630,9 @@ function TetrisGame2P() {
                             // dead zone where WKWebView touch jitter caused neither
                             // tap (adx/ady >= old 30px) nor step/drop to fire.
     const DROP_PX    = 44;  // min vertical travel before hard drop fires on lift
+    const FIRST_STEP_PX = 44; // first horizontal cell-move needs >= this (= TAP_PX)
+                            // so a quick tap that drifts a few px is never stolen
+                            // as a slide; it stays a tap (rotate) on lift.
     const LOCK_PX    = 10;  // min travel before axis is committed
     const AXIS_RATIO = 2;   // ady >= AXIS_RATIO * adx -> commit to vertical
     // axisLock: null (undecided), "h" (horizontal only), "v" (vertical only).
@@ -1659,10 +1665,18 @@ function TetrisGame2P() {
       if (axisLock === null && (adx > LOCK_PX || ady > LOCK_PX)) {
         axisLock = ady >= AXIS_RATIO * adx ? "v" : "h";
       }
-      // Horizontal steps only when not locked to vertical.
+      // Horizontal steps only when not locked to vertical. The FIRST cell-move
+      // must cross FIRST_STEP_PX (= TAP_PX) so a quick tap that drifts a little
+      // is never stolen as a slide -- it stays a tap (rotate) on lift. Once the
+      // gesture clearly commits to moving, ratchet one cell every STEP_PX.
       if (axisLock !== "v") {
-        while (dx - lastDx >=  STEP_PX) { apply("right"); lastDx += STEP_PX; moved = true; }
-        while (dx - lastDx <= -STEP_PX) { apply("left");  lastDx -= STEP_PX; moved = true; }
+        if (!moved) {
+          if (dx >=  FIRST_STEP_PX) { apply("right"); lastDx =  FIRST_STEP_PX; moved = true; }
+          else if (dx <= -FIRST_STEP_PX) { apply("left"); lastDx = -FIRST_STEP_PX; moved = true; }
+        } else {
+          while (dx - lastDx >=  STEP_PX) { apply("right"); lastDx += STEP_PX; }
+          while (dx - lastDx <= -STEP_PX) { apply("left");  lastDx -= STEP_PX; }
+        }
       }
     };
     const onEnd = (e) => {
