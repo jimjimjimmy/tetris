@@ -515,9 +515,13 @@ function useReveal(duration) {
   CANNOT be rewritten as remote `.package(url:)` git deps (SPM needs Package.swift
   at a repo root, and `cap sync` would overwrite the manifest anyway). The fix is
   to restore node_modules on the fresh clone.
-- ci_scripts/ci_post_clone.sh (repo root; Xcode Cloud auto-runs it after clone,
-  before SPM resolution + archive): installs Node via Homebrew if missing, runs
-  `npm ci`, then `npx cap sync ios`. Verified locally end-to-end (exit 0).
+- ci_post_clone.sh lives in TWO places: ios/App/ci_scripts/ (next to the
+  .xcodeproj -- THIS is the one Xcode Cloud actually runs; repo-root alone did
+  NOT work) and ci_scripts/ at the repo root (kept as a harmless fallback).
+  It installs Node via Homebrew if missing, runs `npm ci`, then
+  `npx cap sync ios`. CONFIRMED working: Xcode Cloud Build 14 (commit a569677,
+  which added the ios/App/ci_scripts copy) passed. Builds on commits BEFORE
+  a569677 fail -- do not Rebuild old pre-fix builds; start fresh ones on latest.
 - Xcode Cloud workflows themselves are configured in App Store Connect, not in
   the repo; ci_post_clone.sh is the in-repo hook that injects the install step.
 
