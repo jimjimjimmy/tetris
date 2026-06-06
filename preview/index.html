@@ -1977,7 +1977,7 @@ function TetrisGame2P() {
     }
     console.log("[diag] selectSide", side, "| haptics:", settings.haptics,
       "| intensity:", settings.hapticIntensity, "| soundFX:", settings.soundFX,
-      "| volume:", settings.volume);
+      "| volume:", settings.volume, "| musicEl:", !!musicElRef.current, "| musicOn:", settings.music);
     // Fire immediate test haptic so we know the bridge works at game start.
     const H = window.Capacitor?.Plugins?.Haptics;
     if (H) { try { H.impact({ style: "HEAVY" }); console.log("[diag] test impact OK"); } catch(e) { console.error("[diag] test impact FAILED:", e); } }
