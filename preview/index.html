@@ -776,13 +776,18 @@ const music = {
   configure(settings) { this._s = settings; },
 
   preload() {
+    console.log("[music] preload called, _loaded:", this._loaded);
     if (this._loaded) return;
     this._loaded = true;
-    const a = new Audio("assets/Sound%20fx/Music/830480__ultra-edward__ominous-ticking-clock.wav");
-    a.loop    = true;
-    a.preload = "auto";
-    this._el  = a;
-    console.log("[music] preload -- loop track loaded");
+    try {
+      const a = new Audio("assets/Sound%20fx/Music/830480__ultra-edward__ominous-ticking-clock.wav");
+      a.loop    = true;
+      a.preload = "auto";
+      this._el  = a;
+      console.log("[music] preload -- loop track loaded, el:", !!a);
+    } catch(e) {
+      console.error("[music] preload ERROR:", e.message || e);
+    }
   },
 
   play() {
