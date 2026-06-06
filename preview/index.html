@@ -2839,6 +2839,26 @@ function TetrisGame2P() {
 
 function FullscreenGame() {
   const [scale, setScale] = useState(1);
+  const [isLandscape, setIsLandscape] = useState(false);
+
+  // Lock orientation to portrait. Screen.orientation.lock works on Android
+  // Chrome / PWA. iOS Safari ignores it but we show a blocker overlay instead.
+  useEffect(() => {
+    try {
+      screen.orientation.lock("portrait").catch(() => {});
+    } catch (_) {}
+    const checkOrientation = () => {
+      const landscape = window.innerWidth > window.innerHeight;
+      setIsLandscape(landscape);
+    };
+    checkOrientation();
+    window.addEventListener("resize", checkOrientation);
+    window.addEventListener("orientationchange", checkOrientation);
+    return () => {
+      window.removeEventListener("resize", checkOrientation);
+      window.removeEventListener("orientationchange", checkOrientation);
+    };
+  }, []);
 
   useEffect(() => {
     // Scale to fit HEIGHT -- the play area runs from the very top of
@@ -2875,6 +2895,23 @@ function FullscreenGame() {
       document.removeEventListener("gesturestart", prevent);
     };
   }, []);
+
+  if (isLandscape) {
+    return (
+      <div style={{
+        position: "fixed", inset: 0,
+        background: "#0a0a0a",
+        display: "flex", flexDirection: "column",
+        alignItems: "center", justifyContent: "center",
+        gap: 16,
+      }}>
+        <div style={{fontSize: 48}}>&#8635;</div>
+        <div style={{color: "#fff", fontSize: 14, fontFamily: "Inter, sans-serif", letterSpacing: "0.08em", textTransform: "uppercase"}}>
+          rotate to portrait
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{
