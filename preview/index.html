@@ -740,7 +740,19 @@ const sfx = {
     Object.entries(files).forEach(([key, url]) => {
       const a = new Audio(url);
       a.preload = "auto";
-      if (key === "bgm") a.loop = true;
+      if (key === "bgm") {
+        a.loop = true;
+        // Prevent iOS from registering BGM as a Now Playing session.
+        // Without this the lock screen and Control Center show a player
+        // card for DRIFT, which is wrong -- it is a game, not a media app.
+        a.disableRemotePlayback = true;
+        try {
+          if ("mediaSession" in navigator) {
+            navigator.mediaSession.metadata = null;
+            navigator.mediaSession.playbackState = "none";
+          }
+        } catch (_) {}
+      }
       this._audios[key] = a;
     });
     console.log("[sfx] preload -- 7 Audio elements created (capacitor:// media pipeline)");
@@ -1137,6 +1149,35 @@ function TetrisGame2P() {
       sfx.bgmStop();
     }
   }, [state.phase, state.paused, state.summary, settings.music, settings.volume]);
+
+  // Pause BGM when the app is backgrounded / screen locked; resume when
+  // it returns to foreground -- but only if music was on before hiding.
+  // Also clears the mediaSession so iOS does not keep a stale Now Playing
+  // card after the element is paused.
+  React.useEffect(() => {
+    const onVisibility = () => {
+      const el = sfx._audios && sfx._audios["bgm"];
+      if (!el) return;
+      if (document.hidden) {
+        el.pause();
+      } else {
+        // Only resume if the game logic wants music playing right now.
+        const ph = state.phase, pa = state.paused, su = state.summary;
+        if (settings.music && ph === "playing" && !pa && !su) {
+          el.play().catch(() => {});
+        }
+        // Re-clear mediaSession on foreground in case iOS reset it.
+        try {
+          if ("mediaSession" in navigator) {
+            navigator.mediaSession.metadata = null;
+            navigator.mediaSession.playbackState = "none";
+          }
+        } catch (_) {}
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [state.phase, state.paused, state.summary, settings.music]);
 
   const openSettings = (section) => {
     setSettingsSection(section || null);
