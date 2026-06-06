@@ -684,6 +684,22 @@ const haptic = {
 };
 
 // ============================================================
+// Overwrite the Now Playing / Media Session entry with blank data so iOS
+// lock screen and Control Center do not show a player card for DRIFT.
+// Must be called on page load, on every bgmPlay(), and on foreground resume.
+function suppressMediaSession() {
+  try {
+    if (!("mediaSession" in navigator)) return;
+    navigator.mediaSession.playbackState = "none";
+    navigator.mediaSession.metadata = new MediaMetadata({ title: "", artist: "", album: "" });
+    ["play","pause","stop","seekto","seekforward","seekbackward",
+     "previoustrack","nexttrack"].forEach(function(action) {
+      try { navigator.mediaSession.setActionHandler(action, null); } catch(e) {}
+    });
+  } catch(_) {}
+}
+suppressMediaSession(); // run immediately on page load
+
 // SOUND FX  (Web Audio API -- preloaded on game start)
 // ============================================================
 //
@@ -756,16 +772,6 @@ const sfx = {
       a.preload = "auto";
       if (key === "bgm") {
         a.loop = true;
-        // Prevent iOS from registering BGM as a Now Playing session.
-        // Without this the lock screen and Control Center show a player
-        // card for DRIFT, which is wrong -- it is a game, not a media app.
-        a.disableRemotePlayback = true;
-        try {
-          if ("mediaSession" in navigator) {
-            navigator.mediaSession.metadata = null;
-            navigator.mediaSession.playbackState = "none";
-          }
-        } catch (_) {}
       }
       this._audios[key] = a;
     });
@@ -796,7 +802,10 @@ const sfx = {
     const el = this._audios["bgm"];
     if (!el) { console.warn("[sfx] bgm not loaded"); return; }
     el.volume = 0.25;
-    el.play().then(() => console.log("[sfx] bgm playing")).catch(e => console.warn("[sfx] bgm failed:", e.message || e));
+    el.play().then(() => {
+      console.log("[sfx] bgm playing");
+      suppressMediaSession();
+    }).catch(e => console.warn("[sfx] bgm failed:", e.message || e));
   },
   bgmPause() { const el = this._audios["bgm"]; if (el) el.pause(); },
   bgmStop()  { const el = this._audios["bgm"]; if (el) { el.pause(); el.currentTime = 0; } },
@@ -1186,13 +1195,8 @@ function TetrisGame2P() {
         if (settings.music && ph === "playing" && !pa && !su) {
           el.play().catch(() => {});
         }
-        // Re-clear mediaSession on foreground in case iOS reset it.
-        try {
-          if ("mediaSession" in navigator) {
-            navigator.mediaSession.metadata = null;
-            navigator.mediaSession.playbackState = "none";
-          }
-        } catch (_) {}
+        // Re-suppress mediaSession on foreground in case iOS reset it.
+        suppressMediaSession();
       }
     };
     document.addEventListener("visibilitychange", onVisibility);
