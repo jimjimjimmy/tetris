@@ -1108,40 +1108,27 @@ function TetrisGame2P() {
   haptic.configure(settings);
   sfx.configure(settings);
 
-  // Music: Audio element held in a ref so it's stable across renders.
+  // Music: lazily created on first gesture, held in a ref across renders.
   const musicElRef = React.useRef(null);
 
-  // Kick off audio preload on first mount so buffers are ready before gameplay.
-  // _attempted flag on sfx ensures this only runs once even if the component re-mounts.
-  React.useEffect(() => {
-    sfx.preload();
-    try {
-      const a = new Audio("assets/Sound%20fx/Music/830480__ultra-edward__ominous-ticking-clock.wav");
-      a.loop = true;
-      a.preload = "auto";
-      musicElRef.current = a;
-      console.log("[music] audio element created, loop:", a.loop);
-    } catch(e) {
-      console.error("[music] init error:", e.message || e);
-    }
-  }, []);
+  // Kick off sfx preload on first mount.
+  React.useEffect(() => { sfx.preload(); }, []);
 
-  // Music playback control: start on playing, pause/resume with game pause,
-  // stop on game over or menu. Also responds to settings.music toggle.
+  // Music pause/resume/stop driven by phase + settings changes.
+  // El may be null until first gesture -- that's fine, gestures call _musicPlay().
   React.useEffect(() => {
     const el = musicElRef.current;
+    if (!el) return;
     const ph = state.phase, pa = state.paused, su = state.summary;
-    if (!el) { console.log("[music] no el yet, phase:", ph); return; }
-    if (!settings.music) { el.pause(); el.currentTime = 0; return; }
     const vol = Math.max(0.05, (settings.volume / 10) * 0.6);
+    if (!settings.music) { el.pause(); el.currentTime = 0; return; }
     if (ph === "playing" && !pa && !su) {
       el.volume = vol;
-      el.play().catch(e => console.warn("[music] play failed:", e.message || e));
+      el.play().catch(e => console.warn("[music] resume failed:", e.message || e));
     } else if (ph === "playing" && (pa || su)) {
       el.pause();
     } else {
-      el.pause();
-      el.currentTime = 0;
+      el.pause(); el.currentTime = 0;
     }
   }, [state.phase, state.paused, state.summary, settings.music, settings.volume]);
 
@@ -1976,8 +1963,18 @@ function TetrisGame2P() {
     updateSetting("side", side);
     sfx.preload();  // no-op if already attempted; preload() calls diagnose() internally
     sfx._unlock(); // play silence at vol=0 to unlock iOS WebKit audio for the session
-    // Start music in gesture context for iOS autoplay policy
-    { const el = musicElRef.current; if (el && settings.music) { el.volume = Math.max(0.05, (settings.volume/10)*0.6); el.currentTime = 0; el.play().catch(e => console.warn("[music] play failed:", e.message||e)); } }
+    { 
+      if (!musicElRef.current) {
+        try {
+          const a = new Audio("assets/Sound%20fx/Music/830480__ultra-edward__ominous-ticking-clock.wav");
+          a.loop = true; a.preload = "auto";
+          musicElRef.current = a;
+          console.log("[music] created on gesture");
+        } catch(e) { console.error("[music] create failed:", e.message||e); }
+      }
+      const el = musicElRef.current;
+      if (el && settings.music) { el.volume = Math.max(0.05,(settings.volume/10)*0.6); el.currentTime=0; el.play().catch(e=>console.warn("[music] play failed:",e.message||e)); }
+    }
     console.log("[diag] selectSide", side, "| haptics:", settings.haptics,
       "| intensity:", settings.hapticIntensity, "| soundFX:", settings.soundFX,
       "| volume:", settings.volume);
@@ -2206,7 +2203,18 @@ function TetrisGame2P() {
   const handleRematch = (winnerSide) => {
     setP1Wins(w => w + (winnerSide === 1 ? 1 : 0));
     setP2Wins(w => w + (winnerSide === 2 ? 1 : 0));
-    { const el = musicElRef.current; if (el && settings.music) { el.volume = Math.max(0.05, (settings.volume/10)*0.6); el.currentTime = 0; el.play().catch(() => {}); } }
+    { 
+      if (!musicElRef.current) {
+        try {
+          const a = new Audio("assets/Sound%20fx/Music/830480__ultra-edward__ominous-ticking-clock.wav");
+          a.loop = true; a.preload = "auto";
+          musicElRef.current = a;
+          console.log("[music] created on gesture");
+        } catch(e) { console.error("[music] create failed:", e.message||e); }
+      }
+      const el = musicElRef.current;
+      if (el && settings.music) { el.volume = Math.max(0.05,(settings.volume/10)*0.6); el.currentTime=0; el.play().catch(e=>console.warn("[music] play failed:",e.message||e)); }
+    }
     setState(s => ({...makeInitState2P(), phase: "playing", playerSide: s.playerSide, aiLevel: s.aiLevel}));
   };
 
@@ -2223,7 +2231,18 @@ function TetrisGame2P() {
   const handlePlayAgain = (winnerSide) => {
     setP1Wins(0);
     setP2Wins(0);
-    { const el = musicElRef.current; if (el && settings.music) { el.volume = Math.max(0.05, (settings.volume/10)*0.6); el.currentTime = 0; el.play().catch(() => {}); } }
+    { 
+      if (!musicElRef.current) {
+        try {
+          const a = new Audio("assets/Sound%20fx/Music/830480__ultra-edward__ominous-ticking-clock.wav");
+          a.loop = true; a.preload = "auto";
+          musicElRef.current = a;
+          console.log("[music] created on gesture");
+        } catch(e) { console.error("[music] create failed:", e.message||e); }
+      }
+      const el = musicElRef.current;
+      if (el && settings.music) { el.volume = Math.max(0.05,(settings.volume/10)*0.6); el.currentTime=0; el.play().catch(e=>console.warn("[music] play failed:",e.message||e)); }
+    }
     setState(s => ({...makeInitState2P(), phase: "playing", playerSide: s.playerSide, aiLevel: s.aiLevel}));
   };
 
