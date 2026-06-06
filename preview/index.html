@@ -808,6 +808,20 @@ const music = {
     this._el.pause();
     this._el.currentTime = 0;
   },
+
+  // Silent play inside a gesture to unlock iOS WebKit audio for this element.
+  _unlock() {
+    if (!this._el) return;
+    try {
+      const prev = this._el.volume;
+      this._el.volume = 0;
+      this._el.play().then(() => {
+        this._el.pause();
+        this._el.currentTime = 0;
+        this._el.volume = prev;
+      }).catch(() => {});
+    } catch (_) {}
+  },
 };
 
 // ============================================================
@@ -1951,8 +1965,9 @@ function TetrisGame2P() {
     if (e && e.stopPropagation) e.stopPropagation();
     updateSetting("side", side);
     sfx.preload();  // no-op if already attempted; preload() calls diagnose() internally
-    sfx._unlock(); // play silence at vol=0 to unlock iOS WebKit audio for the session
-    music.play();  // start background music inside gesture context (iOS autoplay policy)
+    sfx._unlock();    // play silence at vol=0 to unlock iOS WebKit audio for the session
+    music._unlock();  // unlock music element in same gesture context
+    music.play();     // start background music
     console.log("[diag] selectSide", side, "| haptics:", settings.haptics,
       "| intensity:", settings.hapticIntensity, "| soundFX:", settings.soundFX,
       "| volume:", settings.volume);
