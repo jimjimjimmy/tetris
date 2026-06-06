@@ -1,0 +1,5 @@
+{
+  "name": "drift-game",
+  "main": "party/server.ts",
+  "compatibilityDate": "2026-06-06"
+}

@@ -6,19 +6,20 @@
   "scripts": {
     "cap:sync": "cap sync",
     "cap:open": "cap open ios",
-    "cap:run":  "cap run ios",
+    "cap:run": "cap run ios",
     "uitest": "npx cap sync ios && xcodebuild test -project ios/App/App.xcodeproj -scheme App -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -configuration Debug",
     "uitest:nobuild": "xcodebuild test-without-building -project ios/App/App.xcodeproj -scheme App -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -configuration Debug"
   },
   "dependencies": {
-    "@capacitor/core":         "latest",
-    "@capacitor/haptics":      "latest",
-    "@capacitor/ios":          "latest",
-    "@capacitor/splash-screen":"latest",
-    "@capacitor/status-bar":   "latest"
+    "@capacitor/core": "latest",
+    "@capacitor/haptics": "latest",
+    "@capacitor/ios": "latest",
+    "@capacitor/splash-screen": "latest",
+    "@capacitor/status-bar": "latest"
   },
   "devDependencies": {
-    "@capacitor/assets":       "latest",
-    "@capacitor/cli":          "latest"
+    "@capacitor/assets": "latest",
+    "@capacitor/cli": "latest",
+    "partykit": "^0.0.115"
   }
 }

@@ -128,8 +128,8 @@ const AI_LEVEL_CONFIG  = {
 // THIS file state (one behind HEAD after the commit lands); update it
 // just before each commit.
 const APP_VERSION    = "v0.1";
-const APP_COMMIT     = "5408ed2";
-const APP_BUILD_DATE = "2026-06-06T14:16:48";
+const APP_COMMIT     = "24dbc49";
+const APP_BUILD_DATE = "2026-06-06T15:33:53";
 
 // Default fall interval (used as a fallback when state.aiLevel is invalid).
 // Real tick rate comes from AI_LEVEL_CONFIG[aiLevel].tickMs, looked up at
@@ -434,8 +434,22 @@ function makeInitState2P() {
     // { rows: number[], ts: ms } or null. Rows are in OLD board
     // coordinates (pre-shift). Cleared after CLEAR_FLASH_MS.
     clearAnim:   null,
+    // Online multiplayer state.
+    onlineStatus: "idle",   // "idle" | "waiting" | "ready" | "disconnected"
+    onlineRole:   null,     // "p1" | "p2" | null (assigned by server)
+    opponentLeft: false,    // true mid-game when opponent disconnects
   };
 }
+
+// Generate a random 4-letter room code (no I/O to avoid ambiguity).
+function makeRoomCode() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+  let code = "";
+  for (let i = 0; i < 4; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  return code;
+}
+
+const PARTYKIT_HOST = "drift-game.jimjimjimmy.partykit.dev";
 
 // ============================================================
 // BOARD VIEWPORT  (subset: ROWS_2P bound check, not legacy ROWS=33)
@@ -1125,6 +1139,12 @@ function TetrisGame2P() {
   // Session win counts -- persist across rematches, reset on MENU or PLAY AGAIN.
   const [p1Wins, setP1Wins] = React.useState(0);
   const [p2Wins, setP2Wins] = React.useState(0);
+  // Online: stable generated room code for this session (doesn't change on re-render).
+  const generatedCodeRef = React.useRef(makeRoomCode());
+  // Online: text the user typed into the "join with code" input.
+  const [joinCode, setJoinCode] = React.useState("");
+  // Online: live WebSocket connection (not state -- no re-renders on ws events).
+  const wsRef = React.useRef(null);
 
   // Keep the module-level haptic and sfx objects in sync with React
   // settings state. Called synchronously every render so callbacks always
@@ -2020,6 +2040,174 @@ function TetrisGame2P() {
     setState(s => ({ ...s, phase: "playing", playerSide: side, aiLevel: settings.level }));
   };
 
+  // Close and discard the WebSocket, reset online state back to idle.
+  const disconnectRoom = () => {
+    if (wsRef.current) { wsRef.current.onclose = null; wsRef.current.close(); wsRef.current = null; }
+    setState(s => ({ ...s, onlineStatus: "idle", onlineRole: null, opponentLeft: false }));
+  };
+
+  // Connect to a PartyKit room. First to join = p1, second = p2.
+  // Server sends: {type:"role",role:"p1"|"p2"} then {type:"ready"} when full.
+  const connectToRoom = (code) => {
+    if (wsRef.current) { wsRef.current.onclose = null; wsRef.current.close(); }
+    const url = "wss://" + PARTYKIT_HOST + "/parties/main/" + code.toUpperCase();
+    const ws = new WebSocket(url);
+    wsRef.current = ws;
+    setState(s => ({ ...s, onlineStatus: "waiting", phase: "online" }));
+
+    ws.onmessage = (e) => {
+      const msg = JSON.parse(e.data);
+      if (msg.type === "role") {
+        setState(s => ({ ...s, onlineRole: msg.role }));
+      } else if (msg.type === "ready") {
+        sfx.preload();
+        sfx._unlock();
+        if (settings.music) sfx.bgmPlay(settings.volume / 10);
+        setState(s => ({
+          ...s,
+          phase: "playing",
+          playerSide: s.onlineRole === "p1" ? 1 : 2,
+          onlineStatus: "ready",
+          aiLevel: settings.level,
+        }));
+      } else if (msg.type === "opponent_left") {
+        setState(s => s.phase === "playing" ? { ...s, opponentLeft: true } : s);
+      } else if (msg.type === "error") {
+        disconnectRoom();
+      }
+    };
+
+    ws.onclose = () => {
+      // If we're still waiting or playing when the socket closes unexpectedly,
+      // treat it as the opponent leaving.
+      setState(s => {
+        if (s.phase === "online") return { ...s, phase: "start", onlineStatus: "idle" };
+        if (s.phase === "playing") return { ...s, opponentLeft: true };
+        return s;
+      });
+      wsRef.current = null;
+    };
+  };
+
+  // Online connection screen -- shown while waiting for an opponent.
+  if (phase === "online") {
+    const myCode = generatedCodeRef.current;
+    const isWaiting = state.onlineStatus === "waiting";
+    const statusText = isWaiting ? "Waiting for opponent..." : "Opponent connected!";
+    return (
+      <div style={{
+        width: FRAME_W, height: GAME_2P_H,
+        background: "#0a0a0a",
+        position: "relative",
+        overflow: "hidden",
+        fontFamily: "'Inter', sans-serif",
+        userSelect: "none",
+        WebkitUserSelect: "none",
+        color: "#fff",
+        display: "flex", flexDirection: "column",
+        alignItems: "center", justifyContent: "center",
+        gap: 0,
+        paddingTop: "env(safe-area-inset-top)",
+        paddingBottom: "max(20px, env(safe-area-inset-bottom))",
+      }}>
+        {/* Grid background */}
+        <div style={{
+          position: "absolute", inset: 0, pointerEvents: "none",
+          backgroundImage:
+            "linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), " +
+            "linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)",
+          backgroundSize: "20px 20px",
+        }} />
+
+        {/* Back button */}
+        <div
+          onPointerDown={() => { disconnectRoom(); setState(s => ({...s, phase: "start"})); }}
+          onTouchStart={e => e.stopPropagation()}
+          style={{
+            position: "absolute", top: "calc(24px + env(safe-area-inset-top))", left: 24,
+            fontFamily: "monospace", fontSize: 11, fontWeight: 600,
+            letterSpacing: 3, color: "rgba(255,255,255,0.4)",
+            cursor: "pointer", textTransform: "uppercase",
+          }}
+        >[ back ]</div>
+
+        {/* Title */}
+        <div style={{fontFamily:"monospace", fontSize:13, fontWeight:600, letterSpacing:6, color:"rgba(255,255,255,0.5)", textTransform:"uppercase", marginBottom:48}}>
+          O N L I N E
+        </div>
+
+        {/* Your code block */}
+        <div style={{textAlign:"center", marginBottom:40}}>
+          <div style={{fontFamily:"monospace", fontSize:10, fontWeight:600, letterSpacing:4, color:"rgba(255,255,255,0.35)", textTransform:"uppercase", marginBottom:16}}>
+            your code
+          </div>
+          <div style={{
+            fontFamily:"monospace", fontSize:52, fontWeight:700, letterSpacing:12,
+            color:"#fff",
+            padding:"16px 28px",
+            border:"1px solid rgba(255,255,255,0.12)",
+          }}>
+            {myCode}
+          </div>
+          <div style={{fontFamily:"monospace", fontSize:10, fontWeight:500, letterSpacing:3, color:"rgba(255,255,255,0.25)", textTransform:"uppercase", marginTop:12}}>
+            share with opponent
+          </div>
+        </div>
+
+        {/* Divider */}
+        <div style={{width:200, height:1, background:"rgba(255,255,255,0.08)", marginBottom:32}} />
+
+        {/* Join with a different code */}
+        <div style={{textAlign:"center", marginBottom:32}}>
+          <div style={{fontFamily:"monospace", fontSize:10, fontWeight:600, letterSpacing:4, color:"rgba(255,255,255,0.35)", textTransform:"uppercase", marginBottom:12}}>
+            or join with code
+          </div>
+          <input
+            type="text"
+            maxLength={4}
+            placeholder="XXXX"
+            value={joinCode}
+            onChange={ev => setJoinCode(ev.target.value.toUpperCase().replace(/[^A-Z]/g,""))}
+            onTouchStart={e => e.stopPropagation()}
+            style={{
+              fontFamily:"monospace", fontSize:28, fontWeight:700, letterSpacing:10,
+              background:"transparent", border:"none",
+              borderBottom:"1px solid rgba(255,255,255,0.2)",
+              color:"#fff", textAlign:"center",
+              width:160, outline:"none", padding:"8px 0",
+            }}
+          />
+        </div>
+
+        {/* Connect button */}
+        <div
+          onPointerDown={() => {
+            const code = joinCode.trim() || myCode;
+            connectToRoom(code);
+          }}
+          onTouchStart={e => e.stopPropagation()}
+          style={{
+            fontFamily:"monospace", fontSize:14, fontWeight:600, letterSpacing:4,
+            color:"rgba(255,255,255,0.85)",
+            padding:"14px 32px",
+            border:"1px solid rgba(255,255,255,0.2)",
+            cursor:"pointer", textTransform:"uppercase", marginBottom:36,
+          }}
+        >connect</div>
+
+        {/* Status */}
+        <div style={{
+          fontFamily:"monospace", fontSize:11, fontWeight:500, letterSpacing:3,
+          color: isWaiting ? "rgba(255,255,255,0.4)" : "#2fff00",
+          textTransform:"uppercase",
+          minHeight:20,
+        }}>
+          {state.onlineStatus !== "idle" ? statusText : ""}
+        </div>
+      </div>
+    );
+  }
+
   // Start screen render -- short-circuits the rest of the layout.
   // Level selector moved to Settings (gear icon). P1/P2 buttons still
   // start the game immediately. Settings overlay shared via showSettings state.
@@ -2126,6 +2314,24 @@ function TetrisGame2P() {
                 userSelect: "none",
               }}
             >[ P2↓ ]</div>
+
+            <div
+              onPointerDown={() => setState(s => ({...s, phase: "online"}))}
+              onTouchStart={(e) => e.stopPropagation()}
+              style={{
+                fontFamily: "monospace",
+                fontSize: 16, fontWeight: 600,
+                letterSpacing: 2,
+                color: "rgba(255,255,255,0.5)",
+                padding: "16px 20px",
+                textAlign: "center",
+                cursor: "pointer",
+                userSelect: "none",
+                borderTop: "1px solid rgba(255,255,255,0.08)",
+                marginTop: 8,
+                paddingTop: 24,
+              }}
+            >[ O N L I N E ]</div>
           </div>
         </div>
 
@@ -2714,6 +2920,36 @@ function TetrisGame2P() {
           <CompactNext type={nextBottom} />
         </div>
       </div>
+
+      {/* OPPONENT DISCONNECTED overlay */}
+      {state.opponentLeft && phase === "playing" && (
+        <div style={{
+          position: "absolute", inset: 0,
+          background: "rgba(0,0,0,0.82)",
+          display: "flex", flexDirection: "column",
+          alignItems: "center", justifyContent: "center",
+          gap: 20,
+          zIndex: 50,
+        }}>
+          <div style={{fontFamily:"monospace", fontSize:14, fontWeight:600, letterSpacing:4, color:"#fff", textTransform:"uppercase"}}>
+            Opponent disconnected.
+          </div>
+          <div style={{fontFamily:"monospace", fontSize:11, fontWeight:500, letterSpacing:3, color:"rgba(255,255,255,0.45)", textTransform:"uppercase"}}>
+            Waiting...
+          </div>
+          <div
+            onPointerDown={() => { disconnectRoom(); setState(s => ({...makeInitState2P()})); }}
+            onTouchStart={e => e.stopPropagation()}
+            style={{
+              fontFamily:"monospace", fontSize:12, fontWeight:600, letterSpacing:4,
+              color:"rgba(255,255,255,0.7)",
+              border:"1px solid rgba(255,255,255,0.2)",
+              padding:"12px 28px",
+              cursor:"pointer", textTransform:"uppercase", marginTop:8,
+            }}
+          >menu</div>
+        </div>
+      )}
 
       {/* PAUSED overlay -- placeholder, simple text */}
       {paused && !summary && phase === "playing" && (
