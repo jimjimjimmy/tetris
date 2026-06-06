@@ -735,7 +735,7 @@ const sfx = {
       boundaryGain:    P + "MORE%20SPACE%20531730__magnuswaker__elasto-bass.wav",
       boundaryLoss:    P + "LESS%20850133__cat-fox_alex__sub-pitch-down-sub-3.wav",
       gameOver:        P + "GAME%20OVER%20567208__sergequadrado__announcement-sound.wav",
-      bgm:             "assets/Sound%20fx/Music/bgm.wav",
+      bgm:             "assets/Sound%20fx/Music/bgm.m4a",
     };
     Object.entries(files).forEach(([key, url]) => {
       const a = new Audio(url);
@@ -792,7 +792,7 @@ const music = {
     if (this._loaded) return;
     this._loaded = true;
     try {
-      const a = new Audio("assets/Sound%20fx/Music/bgm.wav");
+      const a = new Audio("assets/Sound%20fx/Music/bgm.m4a");
       a.loop    = true;
       a.preload = "auto";
       this._el  = a;
