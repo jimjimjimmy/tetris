@@ -735,13 +735,15 @@ const sfx = {
       boundaryGain:    P + "MORE%20SPACE%20531730__magnuswaker__elasto-bass.wav",
       boundaryLoss:    P + "LESS%20850133__cat-fox_alex__sub-pitch-down-sub-3.wav",
       gameOver:        P + "GAME%20OVER%20567208__sergequadrado__announcement-sound.wav",
+      bgm:             "assets/Sound%20fx/Music/bgm.wav",
     };
     Object.entries(files).forEach(([key, url]) => {
       const a = new Audio(url);
       a.preload = "auto";
+      if (key === "bgm") a.loop = true;
       this._audios[key] = a;
     });
-    console.log("[sfx] preload -- 6 Audio elements created (capacitor:// media pipeline)");
+    console.log("[sfx] preload -- 7 Audio elements created (capacitor:// media pipeline)");
     this.diagnose();
   },
 
@@ -763,6 +765,16 @@ const sfx = {
   boundaryGain()  { this._play("boundaryGain"); },
   boundaryLoss()  { this._play("boundaryLoss"); },
   gameOver()      { this._play("gameOver"); },
+
+  bgmPlay(volume) {
+    const el = this._audios["bgm"];
+    if (!el) { console.warn("[sfx] bgm not loaded"); return; }
+    el.volume = Math.max(0.05, volume * 0.6);
+    el.play().then(() => console.log("[sfx] bgm playing")).catch(e => console.warn("[sfx] bgm failed:", e.message || e));
+  },
+  bgmPause() { const el = this._audios["bgm"]; if (el) el.pause(); },
+  bgmStop()  { const el = this._audios["bgm"]; if (el) { el.pause(); el.currentTime = 0; } },
+  bgmVolume(v) { const el = this._audios["bgm"]; if (el) el.volume = Math.max(0.05, v * 0.6); },
 };
 
 // ============================================================
@@ -1108,27 +1120,21 @@ function TetrisGame2P() {
   haptic.configure(settings);
   sfx.configure(settings);
 
-  // Music: lazily created on first gesture, held in a ref across renders.
-  const musicElRef = React.useRef(null);
-
-  // Kick off sfx preload on first mount.
+  // Kick off sfx preload (includes bgm) on first mount.
   React.useEffect(() => { sfx.preload(); }, []);
 
-  // Music pause/resume/stop driven by phase + settings changes.
-  // El may be null until first gesture -- that's fine, gestures call _musicPlay().
+  // BGM playback control via sfx object.
   React.useEffect(() => {
-    const el = musicElRef.current;
-    if (!el) return;
     const ph = state.phase, pa = state.paused, su = state.summary;
-    const vol = Math.max(0.05, (settings.volume / 10) * 0.6);
-    if (!settings.music) { el.pause(); el.currentTime = 0; return; }
+    if (!settings.music) { sfx.bgmStop(); return; }
+    const vol = settings.volume / 10;
     if (ph === "playing" && !pa && !su) {
-      el.volume = vol;
-      el.play().catch(e => console.warn("[music] resume failed:", e.message || e));
+      sfx.bgmVolume(vol);
+      sfx.bgmPlay(vol);
     } else if (ph === "playing" && (pa || su)) {
-      el.pause();
+      sfx.bgmPause();
     } else {
-      el.pause(); el.currentTime = 0;
+      sfx.bgmStop();
     }
   }, [state.phase, state.paused, state.summary, settings.music, settings.volume]);
 
@@ -1963,21 +1969,10 @@ function TetrisGame2P() {
     updateSetting("side", side);
     sfx.preload();  // no-op if already attempted; preload() calls diagnose() internally
     sfx._unlock(); // play silence at vol=0 to unlock iOS WebKit audio for the session
-    { 
-      if (!musicElRef.current) {
-        try {
-          const a = new Audio("assets/Sound%20fx/Music/bgm.wav");
-          a.loop = true; a.preload = "auto";
-          musicElRef.current = a;
-          console.log("[music] created on gesture");
-        } catch(e) { console.error("[music] create failed:", e.message||e); }
-      }
-      const el = musicElRef.current;
-      if (el && settings.music) { el.volume = Math.max(0.05,(settings.volume/10)*0.6); el.currentTime=0; el.play().then(()=>console.log("[music] playing OK")).catch(e=>console.warn("[music] play failed:",e.message||e)); }
-    }
+    if (settings.music) { sfx.bgmPlay(settings.volume / 10); }
     console.log("[diag] selectSide", side, "| haptics:", settings.haptics,
       "| intensity:", settings.hapticIntensity, "| soundFX:", settings.soundFX,
-      "| volume:", settings.volume, "| musicEl:", !!musicElRef.current, "| musicOn:", settings.music);
+      "| volume:", settings.volume, "| musicOn:", settings.music);
     // Fire immediate test haptic so we know the bridge works at game start.
     const H = window.Capacitor?.Plugins?.Haptics;
     if (H) { try { H.impact({ style: "HEAVY" }); console.log("[diag] test impact OK"); } catch(e) { console.error("[diag] test impact FAILED:", e); } }
@@ -2203,18 +2198,7 @@ function TetrisGame2P() {
   const handleRematch = (winnerSide) => {
     setP1Wins(w => w + (winnerSide === 1 ? 1 : 0));
     setP2Wins(w => w + (winnerSide === 2 ? 1 : 0));
-    { 
-      if (!musicElRef.current) {
-        try {
-          const a = new Audio("assets/Sound%20fx/Music/bgm.wav");
-          a.loop = true; a.preload = "auto";
-          musicElRef.current = a;
-          console.log("[music] created on gesture");
-        } catch(e) { console.error("[music] create failed:", e.message||e); }
-      }
-      const el = musicElRef.current;
-      if (el && settings.music) { el.volume = Math.max(0.05,(settings.volume/10)*0.6); el.currentTime=0; el.play().catch(e=>console.warn("[music] play failed:",e.message||e)); }
-    }
+    if (settings.music) { sfx.bgmPlay(settings.volume / 10); }
     setState(s => ({...makeInitState2P(), phase: "playing", playerSide: s.playerSide, aiLevel: s.aiLevel}));
   };
 
@@ -2222,7 +2206,7 @@ function TetrisGame2P() {
   const handleMenu = () => {
     setP1Wins(0);
     setP2Wins(0);
-    { const el = musicElRef.current; if (el) { el.pause(); el.currentTime = 0; } }
+    sfx.bgmStop();
     setState(s => ({...makeInitState2P(), playerSide: s.playerSide, aiLevel: s.aiLevel}));
   };
 
@@ -2231,18 +2215,7 @@ function TetrisGame2P() {
   const handlePlayAgain = (winnerSide) => {
     setP1Wins(0);
     setP2Wins(0);
-    { 
-      if (!musicElRef.current) {
-        try {
-          const a = new Audio("assets/Sound%20fx/Music/bgm.wav");
-          a.loop = true; a.preload = "auto";
-          musicElRef.current = a;
-          console.log("[music] created on gesture");
-        } catch(e) { console.error("[music] create failed:", e.message||e); }
-      }
-      const el = musicElRef.current;
-      if (el && settings.music) { el.volume = Math.max(0.05,(settings.volume/10)*0.6); el.currentTime=0; el.play().catch(e=>console.warn("[music] play failed:",e.message||e)); }
-    }
+    if (settings.music) { sfx.bgmPlay(settings.volume / 10); }
     setState(s => ({...makeInitState2P(), phase: "playing", playerSide: s.playerSide, aiLevel: s.aiLevel}));
   };
 
