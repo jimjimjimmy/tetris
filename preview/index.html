@@ -1111,7 +1111,15 @@ function TetrisGame2P() {
 
   // Kick off audio preload on first mount so buffers are ready before gameplay.
   // _attempted flag on sfx ensures this only runs once even if the component re-mounts.
-  React.useEffect(() => { sfx.preload(); music.preload(); }, []);
+  React.useEffect(() => {
+    sfx.preload();
+    console.log("[debug] typeof music:", typeof music, "| preload:", typeof music?.preload);
+    if (typeof music !== "undefined" && music.preload) {
+      music.preload();
+    } else {
+      console.error("[debug] music not accessible in useEffect scope");
+    }
+  }, []);
 
   // Music playback control: start on playing, pause/resume with game pause,
   // stop on game over or menu. Also responds to settings.music toggle.
