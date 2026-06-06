@@ -129,7 +129,7 @@ const AI_LEVEL_CONFIG  = {
 // just before each commit.
 const APP_VERSION    = "v0.1";
 const APP_COMMIT     = "efda971";
-const APP_BUILD_DATE = "2026-06-05T22:34:12";
+const APP_BUILD_DATE = "2026-06-06T05:42:21";
 
 // Default fall interval (used as a fallback when state.aiLevel is invalid).
 // Real tick rate comes from AI_LEVEL_CONFIG[aiLevel].tickMs, looked up at
@@ -769,12 +769,12 @@ const sfx = {
   bgmPlay(volume) {
     const el = this._audios["bgm"];
     if (!el) { console.warn("[sfx] bgm not loaded"); return; }
-    el.volume = Math.max(0.05, volume * 0.6);
+    el.volume = 0.25;
     el.play().then(() => console.log("[sfx] bgm playing")).catch(e => console.warn("[sfx] bgm failed:", e.message || e));
   },
   bgmPause() { const el = this._audios["bgm"]; if (el) el.pause(); },
   bgmStop()  { const el = this._audios["bgm"]; if (el) { el.pause(); el.currentTime = 0; } },
-  bgmVolume(v) { const el = this._audios["bgm"]; if (el) el.volume = Math.max(0.05, v * 0.6); },
+  bgmVolume(v) { const el = this._audios["bgm"]; if (el) el.volume = 0.25; },
 };
 
 // ============================================================
