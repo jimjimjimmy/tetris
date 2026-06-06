@@ -421,7 +421,8 @@ function makeInitState2P() {
     // playerSide is set when the user taps a side button on the start
     // screen. Stored for future use (when AI swaps to the other side).
     // 1 = user plays P1 (floats up). 2 = user plays P2 (falls down).
-    playerSide:  null,
+    playerSide:       null,
+    twoPlayerLocal:   false,   // true = both sides are human, no AI
     aiLevel:     loadSettings().level,
     paused:      false,           // game starts playing immediately
     demoLeft:    DEMO_DURATION_S,
@@ -1165,7 +1166,7 @@ function TetrisGame2P() {
         // P1 AI block: only active when the user picked P2 on the start
         // screen. When the user is P1, this block is skipped and P1 is
         // driven by applyP1 from touch + keyboard.
-        if (s.playerSide === 2 && aiTick % aiCfg.aiPeriod === 0) {
+        if (!s.twoPlayerLocal && s.playerSide === 2 && aiTick % aiCfg.aiPeriod === 0) {
           const getLandingY1 = (type, rot, x) => {
             const startY = Math.max(0, boundary - 4);
             for (let y = startY; y < ROWS_2P; y++) {
@@ -1261,7 +1262,7 @@ function TetrisGame2P() {
         // P2 AI block: only active when the user picked P1 on the start
         // screen. When the user is P2, this block is skipped and P2 is
         // driven by applyP2 from touch + keyboard.
-        if (s.playerSide === 1 && aiTick % aiCfg.aiPeriod === 0) {
+        if (!s.twoPlayerLocal && s.playerSide === 1 && aiTick % aiCfg.aiPeriod === 0) {
           const getLandingY2 = (type, rot, x) => {
             for (let y = 0; y <= boundary + 4; y++) {
               if (!isValid2P(getCells(type, rot, x, y), board, boundary, 2)) continue;
@@ -1660,6 +1661,8 @@ function TetrisGame2P() {
   // render cycle and would otherwise read a stale closure).
   const playerSideRef = React.useRef(state.playerSide);
   playerSideRef.current = state.playerSide;
+  const twoPlayerLocalRef = React.useRef(state.twoPlayerLocal);
+  twoPlayerLocalRef.current = state.twoPlayerLocal;
 
   // Keyboard: "0" reset, "p"/"P" pause, arrows + space drive whichever
   // side the user picked on the start screen. Vertical arrows fire the
@@ -1720,6 +1723,7 @@ function TetrisGame2P() {
     let lastDx   = 0;
     let moved    = false;
     let axisLock = null;
+    let zoneP1   = true;  // which player owns this gesture; set in onStart
     const onStart = (e) => {
       // preventDefault BEFORE any early return: non-passive listeners must
       // always call (or explicitly skip) preventDefault or WKWebView may
@@ -1729,6 +1733,13 @@ function TetrisGame2P() {
       startX = e.touches[0].clientX;
       startY = e.touches[0].clientY;
       lastDx = 0; moved = false; axisLock = null;
+      // 2P local: route by screen half (top = P1, bottom = P2).
+      // Solo: route by playerSide (unchanged).
+      if (twoPlayerLocalRef.current) {
+        zoneP1 = startY < window.innerHeight / 2;
+      } else {
+        zoneP1 = playerSideRef.current !== 2;
+      }
     };
     const onMove = (e) => {
       e.preventDefault();
@@ -1736,8 +1747,7 @@ function TetrisGame2P() {
       const dx  = e.touches[0].clientX - startX;
       const dy  = e.touches[0].clientY - startY;
       const adx = Math.abs(dx), ady = Math.abs(dy);
-      const side  = playerSideRef.current;
-      const apply = side === 2 ? applyP2 : applyP1;
+      const apply = zoneP1 ? applyP1 : applyP2;
       // Commit to an axis once travel is enough to read intent.
       if (axisLock === null && (adx > LOCK_PX || ady > LOCK_PX)) {
         axisLock = ady >= AXIS_RATIO * adx ? "v" : "h";
@@ -1761,8 +1771,7 @@ function TetrisGame2P() {
       const dx = e.changedTouches[0].clientX - startX;
       const dy = e.changedTouches[0].clientY - startY;
       const adx = Math.abs(dx), ady = Math.abs(dy);
-      const side  = playerSideRef.current;
-      const apply = side === 2 ? applyP2 : applyP1;
+      const apply = zoneP1 ? applyP1 : applyP2;
       // Fast-path tap: if touchmove never locked an axis (no movement > LOCK_PX
       // on either axis) and no step fired, the user definitely intended a tap.
       // This fires even when changedTouches reports jitter up to TAP_PX on lift.
@@ -1773,7 +1782,7 @@ function TetrisGame2P() {
       // Hard drop: only when axis is vertical or still undecided.
       // Horizontal-locked gestures never trigger a drop.
       if (axisLock !== "h") {
-        if (side === 2) {
+        if (!zoneP1) {
           if (dy >= DROP_PX) apply("down");
         } else {
           if (dy <= -DROP_PX) apply("up");
@@ -1976,7 +1985,15 @@ function TetrisGame2P() {
     // Fire immediate test haptic so we know the bridge works at game start.
     const H = window.Capacitor?.Plugins?.Haptics;
     if (H) { try { H.impact({ style: "HEAVY" }); console.log("[diag] test impact OK"); } catch(e) { console.error("[diag] test impact FAILED:", e); } }
-    setState(s => ({ ...s, phase: "playing", playerSide: side, aiLevel: settings.level }));
+    setState(s => ({ ...s, phase: "playing", playerSide: side, twoPlayerLocal: false, aiLevel: settings.level }));
+  };
+
+  const selectLocal = (e) => {
+    if (e && e.stopPropagation) e.stopPropagation();
+    sfx.preload();
+    sfx._unlock();
+    if (settings.music) { sfx.bgmPlay(settings.volume / 10); }
+    setState(s => ({ ...s, phase: "playing", playerSide: null, twoPlayerLocal: true, aiLevel: settings.level }));
   };
 
   // Start screen render -- short-circuits the rest of the layout.
@@ -2085,6 +2102,24 @@ function TetrisGame2P() {
                 userSelect: "none",
               }}
             >[ P2↓ ]</div>
+
+            <div
+              onPointerDown={selectLocal}
+              onTouchStart={(e) => e.stopPropagation()}
+              style={{
+                fontFamily: "monospace",
+                fontSize: 16, fontWeight: 600,
+                letterSpacing: 2,
+                color: "rgba(255,255,255,0.5)",
+                padding: "16px 20px",
+                textAlign: "center",
+                cursor: "pointer",
+                userSelect: "none",
+                borderTop: "1px solid rgba(255,255,255,0.08)",
+                marginTop: 8,
+                paddingTop: 24,
+              }}
+            >[ 2P - PASS &amp; PLAY ]</div>
           </div>
         </div>
 
