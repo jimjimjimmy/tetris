@@ -1973,7 +1973,7 @@ function TetrisGame2P() {
         } catch(e) { console.error("[music] create failed:", e.message||e); }
       }
       const el = musicElRef.current;
-      if (el && settings.music) { el.volume = Math.max(0.05,(settings.volume/10)*0.6); el.currentTime=0; el.play().catch(e=>console.warn("[music] play failed:",e.message||e)); }
+      if (el && settings.music) { el.volume = Math.max(0.05,(settings.volume/10)*0.6); el.currentTime=0; el.play().then(()=>console.log("[music] playing OK")).catch(e=>console.warn("[music] play failed:",e.message||e)); }
     }
     console.log("[diag] selectSide", side, "| haptics:", settings.haptics,
       "| intensity:", settings.hapticIntensity, "| soundFX:", settings.soundFX,
