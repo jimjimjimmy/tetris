@@ -1,6 +1,7 @@
 import UIKit
 import Capacitor
 import AVFoundation
+import MediaPlayer
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -20,6 +21,15 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         } catch {
             print("[audio] AVAudioSession setup failed: \(error)")
         }
+
+        // Suppress the Now Playing lock-screen widget. WKWebView audio using
+        // the .playback category automatically registers with MPNowPlayingInfoCenter,
+        // which shows the game BGM as a Now Playing track. Clear the info dict
+        // and disable the info center so iOS has nothing to display.
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = [:]
+        MPNowPlayingInfoCenter.default().playbackState = .stopped
+        UIApplication.shared.beginReceivingRemoteControlEvents()
+
         return true
     }
 
