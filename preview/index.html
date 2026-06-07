@@ -777,7 +777,7 @@ const sfx = {
       boundaryGain:    P + "MORE%20SPACE%20531730__magnuswaker__elasto-bass.wav",
       boundaryLoss:    P + "LESS%20850133__cat-fox_alex__sub-pitch-down-sub-3.wav",
       gameOver:        P + "GAME%20OVER%20567208__sergequadrado__announcement-sound.wav",
-      // bgm loaded natively via BGMPlugin (AVAudioPlayer) -- not fetched here
+      bgm:             "assets/Sound%20fx/Music/bgm.m4a",
     };
     Object.entries(files).forEach(function(entry) {
       var key = entry[0], url = entry[1];
@@ -817,18 +817,9 @@ const sfx = {
   boundaryLoss()  { this._play("boundaryLoss"); },
   gameOver()      { this._play("gameOver"); },
 
-  // Native BGM via Capacitor BGMPlugin (AVAudioPlayer, .ambient session).
-  // Falls back to Web Audio when running in a plain browser (no Capacitor).
-  _nativeBGM() { return window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.BGM; },
-
+  // BGM via Web Audio API. The native AppDelegate stops the audio session on
+  // lock (applicationWillResignActive) so the Now Playing widget never shows.
   bgmPlay(volume) {
-    var native = this._nativeBGM();
-    if (native) {
-      native.play({ volume: 0.25 }).catch(function(e) { console.warn("[sfx] bgm native play failed:", e); });
-      console.log("[sfx] bgm playing (native AVAudioPlayer, no Now Playing)");
-      return;
-    }
-    // Browser fallback: Web Audio API
     if (!this._ctx || !this._bufs["bgm"]) { console.warn("[sfx] bgm not ready"); return; }
     if (this._ctx.state === "suspended") { this._ctx.resume().catch(function() {}); }
     if (this._bgmSrc) {
@@ -845,13 +836,9 @@ const sfx = {
     this._bgmSrc = src;
   },
   bgmPause() {
-    var native = this._nativeBGM();
-    if (native) { native.pause().catch(function() {}); return; }
     if (this._ctx && this._ctx.state === "running") { this._ctx.suspend().catch(function() {}); }
   },
   bgmStop() {
-    var native = this._nativeBGM();
-    if (native) { native.stop().catch(function() {}); return; }
     if (this._bgmSrc) {
       try { this._bgmSrc.stop(); } catch(_) {}
       this._bgmSrc.disconnect();
@@ -860,8 +847,6 @@ const sfx = {
     if (this._ctx && this._ctx.state === "running") { this._ctx.suspend().catch(function() {}); }
   },
   bgmVolume(v) {
-    var native = this._nativeBGM();
-    if (native) { native.setVolume({ volume: Math.max(0.05, v * 0.25) }).catch(function() {}); return; }
     if (this._bgmGain) this._bgmGain.gain.value = Math.max(0.05, v * 0.25);
   },
 };

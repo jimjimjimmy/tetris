@@ -26,16 +26,22 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     func applicationWillResignActive(_ application: UIApplication) {
-        // Clear Now Playing before the lock screen appears. WKWebView registers
-        // audio with MPNowPlayingInfoCenter even under .ambient session. Wiping
-        // the info here (before the lock screen renders) ensures the widget never
-        // shows. This fires on lock, incoming call, and app-switch - all the right
-        // moments.
+        // Stop all audio the instant the phone locks (or app loses focus).
+        // Deactivating the AVAudioSession tears down the audio session entirely,
+        // which (a) silences WKWebView audio and (b) removes the Now Playing
+        // registration BEFORE the lock screen renders -- so no widget appears.
+        // The web layer also pauses BGM on visibilitychange; this is the native
+        // guarantee that fires earlier and covers the lock screen race.
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+        do {
+            try AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
+        } catch {
+            print("[audio] session deactivate failed: \(error)")
+        }
     }
 
     func applicationDidEnterBackground(_ application: UIApplication) {
-        // Belt-and-suspenders: clear again once fully backgrounded.
+        // Belt-and-suspenders: clear Now Playing again once fully backgrounded.
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
     }
 
@@ -44,7 +50,14 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     func applicationDidBecomeActive(_ application: UIApplication) {
-        // Restart any tasks that were paused (or not yet started) while the application was inactive. If the application was previously in the background, optionally refresh the user interface.
+        // Re-activate the audio session on return so BGM/SFX work again. The web
+        // layer resumes BGM on visibilitychange once this session is live.
+        do {
+            try AVAudioSession.sharedInstance().setCategory(.ambient, mode: .default, options: [.mixWithOthers])
+            try AVAudioSession.sharedInstance().setActive(true)
+        } catch {
+            print("[audio] session reactivate failed: \(error)")
+        }
     }
 
     func applicationWillTerminate(_ application: UIApplication) {
