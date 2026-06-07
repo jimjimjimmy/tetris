@@ -1,7 +1,6 @@
 import UIKit
 import Capacitor
 import AVFoundation
-import MediaPlayer
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -9,26 +8,18 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Route game audio through the .playback category so sound effects are
-        // audible even when the hardware ring/silent switch is set to silent.
-        // The default session category (soloAmbient) is silenced by the mute
-        // switch, which is why SFX play in the simulator (no switch) but are
-        // silent on a physical device. .mixWithOthers lets any music the user
-        // is already playing keep going underneath the game's effects.
+        // Use .ambient so the game does not register with Now Playing / lock screen
+        // controls. .playback would suppress the mute switch but unavoidably shows
+        // the Now Playing widget - there is no way to prevent WKWebView from
+        // populating MPNowPlayingInfoCenter under .playback. .ambient respects the
+        // mute switch (standard behavior for games) and never triggers Now Playing.
+        // .mixWithOthers lets background music keep playing underneath game audio.
         do {
-            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.mixWithOthers])
+            try AVAudioSession.sharedInstance().setCategory(.ambient, mode: .default, options: [.mixWithOthers])
             try AVAudioSession.sharedInstance().setActive(true)
         } catch {
             print("[audio] AVAudioSession setup failed: \(error)")
         }
-
-        // Suppress the Now Playing lock-screen widget. WKWebView audio using
-        // the .playback category automatically registers with MPNowPlayingInfoCenter,
-        // which shows the game BGM as a Now Playing track. Clear the info dict
-        // and disable the info center so iOS has nothing to display.
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = [:]
-        MPNowPlayingInfoCenter.default().playbackState = .stopped
-        UIApplication.shared.beginReceivingRemoteControlEvents()
 
         return true
     }
