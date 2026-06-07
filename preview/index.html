@@ -722,17 +722,16 @@ const sfx = {
   // WKWebView because the capacitor:// custom URL scheme is served by
   // WKURLSchemeHandler, which only handles page navigation -- it returns
   // HTTP 0 for all programmatic XHR/fetch requests.
-  //
-  // <audio> elements go through WKWebView's native media pipeline which
-  // handles the capacitor:// scheme correctly. cloneNode() on a pre-created
-  // Audio element plays overlapping copies without reloading the file.
+  // All audio goes through Web Audio API (AudioContext + AudioBufferSourceNode).
+  // Zero <audio> / HTMLMediaElement on the page. This is the ONLY way to
+  // prevent WKWebView from switching AVAudioSession to .playback, which is
+  // what causes the Now Playing widget to appear on the iOS lock screen.
   _s:        { soundFX: true, volume: 7 },
-  _audios:   {},
   _attempted: false,
-  _bgmCtx:   null,
-  _bgmBuf:   null,
-  _bgmGain:  null,
-  _bgmSrc:   null,
+  _ctx:      null,   // shared AudioContext (SFX + BGM)
+  _bufs:     {},     // key -> AudioBuffer
+  _bgmGain:  null,   // GainNode for BGM (volume control + looping)
+  _bgmSrc:   null,   // AudioBufferSourceNode currently playing BGM
 
   configure(settings) { this._s = settings; },
 
@@ -740,74 +739,76 @@ const sfx = {
   diagnose() {
     const H = window.Capacitor?.Plugins?.Haptics;
     console.log("[diag] soundFX:", this._s.soundFX, "| volume:", this._s.volume,
-      "| audios:", Object.keys(this._audios).length, "queued",
+      "| Web Audio ctx:", this._ctx ? this._ctx.state : "none",
+      "| bufs loaded:", Object.keys(this._bufs).length,
       "| Capacitor:", !!window.Capacitor, "| Haptics plugin:", !!H);
   },
 
-  // Call inside a user-gesture handler to satisfy iOS WebKit autoplay policy.
-  // Once a single play() fires in a gesture context, all subsequent play()
-  // calls for the session -- including those from useEffect -- are allowed.
+  // Resume the AudioContext on first user gesture (iOS autoplay policy).
+  // Web Audio context starts in "suspended" state; resume() unblocks it.
   _unlock() {
-    const src = this._audios["pieceLock"];
-    if (!src) return;
-    try {
-      const a = src.cloneNode();
-      a.volume = 0;
-      a.play().catch(() => {});
-    } catch (_) {}
+    if (this._ctx && this._ctx.state === "suspended") {
+      this._ctx.resume().catch(function() {});
+    }
   },
 
   preload() {
     if (this._attempted) return;
     this._attempted = true;
-    const B = "assets/Sound%20fx/";
-    const P = B + "Picked/";
-    const files = {
+    // Create a single shared AudioContext for all audio.
+    // Web Audio API does NOT trigger WKWebView's media pipeline, so the
+    // AVAudioSession category stays .ambient and Now Playing never appears.
+    try {
+      this._ctx = new (window.AudioContext || window.webkitAudioContext)();
+      this._bgmGain = this._ctx.createGain();
+      this._bgmGain.gain.value = 0.25;
+      this._bgmGain.connect(this._ctx.destination);
+    } catch(e) {
+      console.error("[sfx] AudioContext creation failed:", e);
+      return;
+    }
+    var ctx = this._ctx;
+    var B = "assets/Sound%20fx/";
+    var P = B + "Picked/";
+    var files = {
       pieceLock:       B + "102130__noirpantalon__hard_subby_kick.mp3",
       lineClearSingle: B + "Clear/59539__uzerx__sub-bass-3-secondsssss.wav",
       lineClearMulti:  P + "DROP%2022500__johnnypanic__ultimatequickkick.wav",
       boundaryGain:    P + "MORE%20SPACE%20531730__magnuswaker__elasto-bass.wav",
       boundaryLoss:    P + "LESS%20850133__cat-fox_alex__sub-pitch-down-sub-3.wav",
       gameOver:        P + "GAME%20OVER%20567208__sergequadrado__announcement-sound.wav",
+      bgm:             "assets/Sound%20fx/Music/bgm.m4a",
     };
-    // SFX: Audio elements (cloneNode for overlap, no Now Playing risk)
-    Object.entries(files).forEach(([key, url]) => {
-      const a = new Audio(url);
-      a.preload = "auto";
-      this._audios[key] = a;
+    Object.entries(files).forEach(function(entry) {
+      var key = entry[0], url = entry[1];
+      fetch(url)
+        .then(function(r) { return r.arrayBuffer(); })
+        .then(function(buf) { return ctx.decodeAudioData(buf); })
+        .then(function(decoded) {
+          sfx._bufs[key] = decoded;
+          console.log("[sfx] loaded:", key);
+        })
+        .catch(function(e) { console.warn("[sfx] load failed:", key, e.message || e); });
     });
-    // BGM: Web Audio API (AudioBufferSourceNode) -- HTMLMediaElement triggers
-    // Now Playing on iOS WKWebView; Web Audio does not.
-    fetch("assets/Sound%20fx/Music/bgm.m4a")
-      .then(function(r) { return r.arrayBuffer(); })
-      .then(function(buf) {
-        var ctx = new (window.AudioContext || window.webkitAudioContext)();
-        sfx._bgmCtx  = ctx;
-        sfx._bgmGain = ctx.createGain();
-        sfx._bgmGain.gain.value = 0.25;
-        sfx._bgmGain.connect(ctx.destination);
-        return ctx.decodeAudioData(buf);
-      })
-      .then(function(decoded) {
-        sfx._bgmBuf = decoded;
-        console.log("[sfx] bgm decoded via Web Audio (no Now Playing)");
-      })
-      .catch(function(e) { console.warn("[sfx] bgm decode failed:", e); });
-    console.log("[sfx] preload -- 6 SFX Audio elements + BGM via Web Audio");
+    console.log("[sfx] preload -- 7 files queued via Web Audio (no <audio> elements)");
     this.diagnose();
   },
 
   _play(key) {
     if (!this._s.soundFX) return;
-    const src = this._audios[key];
-    if (!src) { console.warn("[sfx] unknown key:", key); return; }
-    const vol = Math.max(0.05, this._s.volume / 10);
+    if (!this._ctx || !this._bufs[key]) return;
+    var vol = Math.max(0.05, this._s.volume / 10);
     try {
-      // cloneNode() reuses the pre-loaded resource -- supports rapid overlap
-      const a = src.cloneNode();
-      a.volume = vol;
-      a.play().catch(e => console.warn("[sfx] play failed:", key, e.message || e));
-    } catch (e) { console.warn("[sfx] error:", key, e); }
+      var gain = this._ctx.createGain();
+      gain.gain.value = vol;
+      gain.connect(this._ctx.destination);
+      var src = this._ctx.createBufferSource();
+      src.buffer = this._bufs[key];
+      src.connect(gain);
+      src.start(0);
+      // Disconnect gain after playback to free resources
+      src.onended = function() { gain.disconnect(); };
+    } catch(e) { console.warn("[sfx] play error:", key, e); }
   },
 
   pieceLock()     { this._play("pieceLock"); },
@@ -817,19 +818,18 @@ const sfx = {
   gameOver()      { this._play("gameOver"); },
 
   bgmPlay(volume) {
-    if (!this._bgmBuf) { console.warn("[sfx] bgm not decoded yet"); return; }
-    // Resume suspended context (iOS requires user gesture to start AudioContext)
-    if (this._bgmCtx && this._bgmCtx.state === "suspended") {
-      this._bgmCtx.resume().catch(function() {});
+    if (!this._ctx || !this._bufs["bgm"]) { console.warn("[sfx] bgm not ready"); return; }
+    if (this._ctx.state === "suspended") {
+      this._ctx.resume().catch(function() {});
     }
-    // Stop any currently playing source
+    // Stop existing BGM source before starting a new one
     if (this._bgmSrc) {
       try { this._bgmSrc.stop(); } catch(_) {}
       this._bgmSrc.disconnect();
       this._bgmSrc = null;
     }
-    var src = this._bgmCtx.createBufferSource();
-    src.buffer = this._bgmBuf;
+    var src = this._ctx.createBufferSource();
+    src.buffer = this._bufs["bgm"];
     src.loop   = true;
     src.connect(this._bgmGain);
     this._bgmGain.gain.value = 0.25;
@@ -838,8 +838,8 @@ const sfx = {
     console.log("[sfx] bgm playing (Web Audio, no Now Playing)");
   },
   bgmPause() {
-    if (this._bgmCtx && this._bgmCtx.state === "running") {
-      this._bgmCtx.suspend().catch(function() {});
+    if (this._ctx && this._ctx.state === "running") {
+      this._ctx.suspend().catch(function() {});
     }
   },
   bgmStop() {
@@ -848,8 +848,8 @@ const sfx = {
       this._bgmSrc.disconnect();
       this._bgmSrc = null;
     }
-    if (this._bgmCtx && this._bgmCtx.state === "running") {
-      this._bgmCtx.suspend().catch(function() {});
+    if (this._ctx && this._ctx.state === "running") {
+      this._ctx.suspend().catch(function() {});
     }
   },
   bgmVolume(v) {
@@ -857,56 +857,8 @@ const sfx = {
   },
 };
 
-// ============================================================
-// MUSIC  (looping background track, Audio element approach)
-// ============================================================
-const music = {
-  _s:       { music: false, volume: 7 },
-  _el:      null,
-  _loaded:  false,
-
-  configure(settings) { this._s = settings; },
-
-  preload() {
-    console.log("[music] preload called, _loaded:", this._loaded);
-    if (this._loaded) return;
-    this._loaded = true;
-    try {
-      const a = new Audio("assets/Sound%20fx/Music/bgm.m4a");
-      a.loop    = true;
-      a.preload = "auto";
-      this._el  = a;
-      console.log("[music] preload -- loop track loaded, el:", !!a);
-    } catch(e) {
-      console.error("[music] preload ERROR:", e.message || e);
-    }
-  },
-
-  play() {
-    if (!this._s.music || !this._el) return;
-    this._el.volume = Math.max(0.05, (this._s.volume / 10) * 0.6);
-    this._el.currentTime = 0;
-    this._el.play().catch(e => console.warn("[music] play failed:", e.message || e));
-  },
-
-  pause() {
-    if (!this._el) return;
-    this._el.pause();
-  },
-
-  resume() {
-    if (!this._s.music || !this._el) return;
-    this._el.volume = Math.max(0.05, (this._s.volume / 10) * 0.6);
-    this._el.play().catch(e => console.warn("[music] resume failed:", e.message || e));
-  },
-
-  stop() {
-    if (!this._el) return;
-    this._el.pause();
-    this._el.currentTime = 0;
-  },
-
-};
+// music object removed -- BGM is handled entirely by sfx.bgmPlay/bgmPause/bgmStop
+// (Web Audio API via sfx._ctx, no HTMLMediaElement, no Now Playing widget)
 
 // ============================================================
 // SETTINGS  (localStorage-backed, no asset calls yet)
