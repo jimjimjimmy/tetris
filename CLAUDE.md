@@ -14,7 +14,7 @@
   Whichever machine (MacFQ or Gandalf) adds a component, updates a file,
   or makes a structural change: update this file before ending the session.
   Both machines depend on this as the single source of truth.
-  Last updated: 2026-05-27 - MacFQ (preview/game.html renamed to preview/index.html; old storybook deleted; settings screen + haptics wired. APP_COMMIT 11db71b.)
+  Last updated: 2026-06-06 - MacFQ (portrait lock native via Info.plist; UIRequiresFullScreen=YES; suppressMediaSession BGM fix; PartyKit Phase 1 multiplayer on feature/multiplayer branch. APP_COMMIT dd82230.)
 -->
 
 ## Required reading before building
@@ -607,6 +607,45 @@ The top line is the truth (that is what is on GitHub). If git ever prints
   - Viewport: fixed [P2_VP_START, P2_VP_START+P2_VIEWPORT_H) = rows 1..20, 800px. Same GAME_H=874.
   - AI only (no keyboard/touch controls). Debug key "0" resets.
   - Verified: 10+ lines in 60s at 5x speed, all 10 cols active, collapse direction correct, zero errors.
+
+---
+
+## Native iOS config (ios/App/App/Info.plist)
+
+- Portrait-only lock: `UISupportedInterfaceOrientations` = `[UIInterfaceOrientationPortrait]` for both iPhone and iPad (`~ipad` variant). JS overlay approach was removed entirely.
+- `UIRequiresFullScreen = YES`: suppresses Xcode warning "All interface orientations must be supported unless the app requires full screen".
+- After any Info.plist change: on Gandalf run `git pull && npx cap sync ios` then rebuild in Xcode.
+
+## BGM Now Playing suppression
+
+iOS WKWebView shows a Now Playing widget on the lock screen when any audio plays. `disableRemotePlayback = true` alone does NOT suppress it. Use `suppressMediaSession()`:
+
+```js
+function suppressMediaSession() {
+  try {
+    if (!("mediaSession" in navigator)) return;
+    navigator.mediaSession.playbackState = "none";
+    navigator.mediaSession.metadata = new MediaMetadata({ title: "", artist: "", album: "" });
+    ["play","pause","stop","seekto","seekforward","seekbackward",
+     "previoustrack","nexttrack"].forEach(function(action) {
+      try { navigator.mediaSession.setActionHandler(action, null); } catch(e) {}
+    });
+  } catch(_) {}
+}
+```
+
+Call sites: (1) page load immediately, (2) inside `bgmPlay()` after `.play()` resolves, (3) in `visibilitychange` handler when returning to foreground.
+
+## Online multiplayer (feature/multiplayer branch - Phase 1 done)
+
+- PartyKit server deployed at `drift-game.jimjimjimmy.partykit.dev`
+- Config: `partykit.json` at repo root, server at `party/server.ts`
+- Room logic: max 2 players, role assignment (p1/p2), broadcasts messages between players, notifies on disconnect
+- Client uses native WebSocket (no npm package - no bundler)
+- State added to `makeInitState2P`: `onlineStatus` (idle/connecting/waiting/ready/error), `onlineRole` (null/p1/p2), `opponentLeft` (bool)
+- Start screen has `[ O N L I N E ]` button; connecting screen shows room code + join input
+- `connectToRoom(code)` / `disconnectRoom()` helpers in TetrisGame2P
+- Phase 2 (not yet done): actual game state sync over WebSocket
 
 ---
 
