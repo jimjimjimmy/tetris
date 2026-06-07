@@ -777,7 +777,7 @@ const sfx = {
       boundaryGain:    P + "MORE%20SPACE%20531730__magnuswaker__elasto-bass.wav",
       boundaryLoss:    P + "LESS%20850133__cat-fox_alex__sub-pitch-down-sub-3.wav",
       gameOver:        P + "GAME%20OVER%20567208__sergequadrado__announcement-sound.wav",
-      bgm:             "assets/Sound%20fx/Music/bgm.m4a",
+      // bgm loaded natively via BGMPlugin (AVAudioPlayer) -- not fetched here
     };
     Object.entries(files).forEach(function(entry) {
       var key = entry[0], url = entry[1];
@@ -817,12 +817,20 @@ const sfx = {
   boundaryLoss()  { this._play("boundaryLoss"); },
   gameOver()      { this._play("gameOver"); },
 
+  // Native BGM via Capacitor BGMPlugin (AVAudioPlayer, .ambient session).
+  // Falls back to Web Audio when running in a plain browser (no Capacitor).
+  _nativeBGM() { return window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.BGM; },
+
   bgmPlay(volume) {
-    if (!this._ctx || !this._bufs["bgm"]) { console.warn("[sfx] bgm not ready"); return; }
-    if (this._ctx.state === "suspended") {
-      this._ctx.resume().catch(function() {});
+    var native = this._nativeBGM();
+    if (native) {
+      native.play({ volume: 0.25 }).catch(function(e) { console.warn("[sfx] bgm native play failed:", e); });
+      console.log("[sfx] bgm playing (native AVAudioPlayer, no Now Playing)");
+      return;
     }
-    // Stop existing BGM source before starting a new one
+    // Browser fallback: Web Audio API
+    if (!this._ctx || !this._bufs["bgm"]) { console.warn("[sfx] bgm not ready"); return; }
+    if (this._ctx.state === "suspended") { this._ctx.resume().catch(function() {}); }
     if (this._bgmSrc) {
       try { this._bgmSrc.stop(); } catch(_) {}
       this._bgmSrc.disconnect();
@@ -835,24 +843,25 @@ const sfx = {
     this._bgmGain.gain.value = 0.25;
     src.start(0);
     this._bgmSrc = src;
-    console.log("[sfx] bgm playing (Web Audio, no Now Playing)");
   },
   bgmPause() {
-    if (this._ctx && this._ctx.state === "running") {
-      this._ctx.suspend().catch(function() {});
-    }
+    var native = this._nativeBGM();
+    if (native) { native.pause().catch(function() {}); return; }
+    if (this._ctx && this._ctx.state === "running") { this._ctx.suspend().catch(function() {}); }
   },
   bgmStop() {
+    var native = this._nativeBGM();
+    if (native) { native.stop().catch(function() {}); return; }
     if (this._bgmSrc) {
       try { this._bgmSrc.stop(); } catch(_) {}
       this._bgmSrc.disconnect();
       this._bgmSrc = null;
     }
-    if (this._ctx && this._ctx.state === "running") {
-      this._ctx.suspend().catch(function() {});
-    }
+    if (this._ctx && this._ctx.state === "running") { this._ctx.suspend().catch(function() {}); }
   },
   bgmVolume(v) {
+    var native = this._nativeBGM();
+    if (native) { native.setVolume({ volume: Math.max(0.05, v * 0.25) }).catch(function() {}); return; }
     if (this._bgmGain) this._bgmGain.gain.value = Math.max(0.05, v * 0.25);
   },
 };
