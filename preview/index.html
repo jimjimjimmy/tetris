@@ -729,6 +729,10 @@ const sfx = {
   _s:        { soundFX: true, volume: 7 },
   _audios:   {},
   _attempted: false,
+  _bgmCtx:   null,
+  _bgmBuf:   null,
+  _bgmGain:  null,
+  _bgmSrc:   null,
 
   configure(settings) { this._s = settings; },
 
@@ -765,17 +769,31 @@ const sfx = {
       boundaryGain:    P + "MORE%20SPACE%20531730__magnuswaker__elasto-bass.wav",
       boundaryLoss:    P + "LESS%20850133__cat-fox_alex__sub-pitch-down-sub-3.wav",
       gameOver:        P + "GAME%20OVER%20567208__sergequadrado__announcement-sound.wav",
-      bgm:             "assets/Sound%20fx/Music/bgm.m4a",
     };
+    // SFX: Audio elements (cloneNode for overlap, no Now Playing risk)
     Object.entries(files).forEach(([key, url]) => {
       const a = new Audio(url);
       a.preload = "auto";
-      if (key === "bgm") {
-        a.loop = true;
-      }
       this._audios[key] = a;
     });
-    console.log("[sfx] preload -- 7 Audio elements created (capacitor:// media pipeline)");
+    // BGM: Web Audio API (AudioBufferSourceNode) -- HTMLMediaElement triggers
+    // Now Playing on iOS WKWebView; Web Audio does not.
+    fetch("assets/Sound%20fx/Music/bgm.m4a")
+      .then(function(r) { return r.arrayBuffer(); })
+      .then(function(buf) {
+        var ctx = new (window.AudioContext || window.webkitAudioContext)();
+        sfx._bgmCtx  = ctx;
+        sfx._bgmGain = ctx.createGain();
+        sfx._bgmGain.gain.value = 0.25;
+        sfx._bgmGain.connect(ctx.destination);
+        return ctx.decodeAudioData(buf);
+      })
+      .then(function(decoded) {
+        sfx._bgmBuf = decoded;
+        console.log("[sfx] bgm decoded via Web Audio (no Now Playing)");
+      })
+      .catch(function(e) { console.warn("[sfx] bgm decode failed:", e); });
+    console.log("[sfx] preload -- 6 SFX Audio elements + BGM via Web Audio");
     this.diagnose();
   },
 
@@ -799,17 +817,44 @@ const sfx = {
   gameOver()      { this._play("gameOver"); },
 
   bgmPlay(volume) {
-    const el = this._audios["bgm"];
-    if (!el) { console.warn("[sfx] bgm not loaded"); return; }
-    el.volume = 0.25;
-    el.play().then(() => {
-      console.log("[sfx] bgm playing");
-      suppressMediaSession();
-    }).catch(e => console.warn("[sfx] bgm failed:", e.message || e));
+    if (!this._bgmBuf) { console.warn("[sfx] bgm not decoded yet"); return; }
+    // Resume suspended context (iOS requires user gesture to start AudioContext)
+    if (this._bgmCtx && this._bgmCtx.state === "suspended") {
+      this._bgmCtx.resume().catch(function() {});
+    }
+    // Stop any currently playing source
+    if (this._bgmSrc) {
+      try { this._bgmSrc.stop(); } catch(_) {}
+      this._bgmSrc.disconnect();
+      this._bgmSrc = null;
+    }
+    var src = this._bgmCtx.createBufferSource();
+    src.buffer = this._bgmBuf;
+    src.loop   = true;
+    src.connect(this._bgmGain);
+    this._bgmGain.gain.value = 0.25;
+    src.start(0);
+    this._bgmSrc = src;
+    console.log("[sfx] bgm playing (Web Audio, no Now Playing)");
   },
-  bgmPause() { const el = this._audios["bgm"]; if (el) el.pause(); },
-  bgmStop()  { const el = this._audios["bgm"]; if (el) { el.pause(); el.currentTime = 0; } },
-  bgmVolume(v) { const el = this._audios["bgm"]; if (el) el.volume = 0.25; },
+  bgmPause() {
+    if (this._bgmCtx && this._bgmCtx.state === "running") {
+      this._bgmCtx.suspend().catch(function() {});
+    }
+  },
+  bgmStop() {
+    if (this._bgmSrc) {
+      try { this._bgmSrc.stop(); } catch(_) {}
+      this._bgmSrc.disconnect();
+      this._bgmSrc = null;
+    }
+    if (this._bgmCtx && this._bgmCtx.state === "running") {
+      this._bgmCtx.suspend().catch(function() {});
+    }
+  },
+  bgmVolume(v) {
+    if (this._bgmGain) this._bgmGain.gain.value = Math.max(0.05, v * 0.25);
+  },
 };
 
 // ============================================================
@@ -1185,18 +1230,14 @@ function TetrisGame2P() {
   // card after the element is paused.
   React.useEffect(() => {
     const onVisibility = () => {
-      const el = sfx._audios && sfx._audios["bgm"];
-      if (!el) return;
       if (document.hidden) {
-        el.pause();
+        sfx.bgmPause();
       } else {
         // Only resume if the game logic wants music playing right now.
         const ph = state.phase, pa = state.paused, su = state.summary;
         if (settings.music && ph === "playing" && !pa && !su) {
-          el.play().catch(() => {});
+          sfx.bgmPlay(settings.volume / 10);
         }
-        // Re-suppress mediaSession on foreground in case iOS reset it.
-        suppressMediaSession();
       }
     };
     document.addEventListener("visibilitychange", onVisibility);
