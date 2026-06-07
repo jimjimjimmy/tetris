@@ -1,6 +1,7 @@
 import UIKit
 import Capacitor
 import AVFoundation
+import MediaPlayer
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -25,13 +26,17 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     func applicationWillResignActive(_ application: UIApplication) {
-        // Sent when the application is about to move from active to inactive state. This can occur for certain types of temporary interruptions (such as an incoming phone call or SMS message) or when the user quits the application and it begins the transition to the background state.
-        // Use this method to pause ongoing tasks, disable timers, and invalidate graphics rendering callbacks. Games should use this method to pause the game.
+        // Clear Now Playing before the lock screen appears. WKWebView registers
+        // audio with MPNowPlayingInfoCenter even under .ambient session. Wiping
+        // the info here (before the lock screen renders) ensures the widget never
+        // shows. This fires on lock, incoming call, and app-switch - all the right
+        // moments.
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
     }
 
     func applicationDidEnterBackground(_ application: UIApplication) {
-        // Use this method to release shared resources, save user data, invalidate timers, and store enough application state information to restore your application to its current state in case it is terminated later.
-        // If your application supports background execution, this method is called instead of applicationWillTerminate: when the user quits.
+        // Belt-and-suspenders: clear again once fully backgrounded.
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
     }
 
     func applicationWillEnterForeground(_ application: UIApplication) {
