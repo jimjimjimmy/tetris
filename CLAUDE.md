@@ -693,12 +693,18 @@ Call sites: (1) page load immediately, (2) inside `bgmPlay()` after `.play()` re
   A player that tops out sets `iDied`, sends `go`, freezes its physics, and enters a
   grace window (`GAMEOVER_GRACE_MS`=700). Receiving the opponent's `go` sets `oppDied`.
   A resolution effect finalizes: both dead -> `netResult:"draw"`; only I died -> lose;
-  only opponent died (survived grace) -> win. Without this the first `go` packet beats
-  the second player's top-out and a tie is unreachable. The online over-overlay shows
+  only opponent died (survived grace) -> win. The online over-overlay shows
   "D R A W" / YOU WIN / YOU LOSE accordingly. (Boundary-clamp game-overs stay instant
   and deterministic -- both phones compute the same winner, no grace needed.)
-- Verified via two iframes: mirrored hard-drops -> D R A W on both; one-sided top-out
-  -> correct LOSE/WIN; boundary never drifted from 22.
+- **Provisional-loss upgrade (bccf0d1 fix).** The grace timer alone missed ties when
+  the first-to-die finalized LOSE before the second player's `go` packet arrived
+  (when death-gap + network latency > grace). Fix: the `go` handler now also upgrades
+  an ALREADY-finalized `netResult:"lose"` to `"draw"` on receiving the opponent's `go`.
+  This is safe because a true winner never tops out, so it never sends a late `go` --
+  the upgrade can only ever fire for a genuine double-top-out, never a real loss.
+- Verified via two iframes: mirrored hard-drops -> D R A W on both (3/3 games);
+  one-sided top-out -> correct LOSE/WIN; clear lead (>grace) -> WIN/LOSE; boundary
+  never drifted from 22.
 - **Known limitation**: under heavy simultaneous boundary eviction the two phones'
   piece-PRNG stream consumption can drift momentarily; the `lk` snapshot re-syncs
   territory each lock and the opponent's piece is always adopted authoritatively, so

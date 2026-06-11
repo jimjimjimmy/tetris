@@ -2254,12 +2254,24 @@ function TetrisGame2P() {
           };
         });
       } else if (msg.k === "go") {
-        // Opponent topped out. Record it and let the grace-window resolver
-        // decide WIN vs DRAW (see the resolution effect). We keep playing
-        // during the window so a near-simultaneous local top-out -> DRAW.
+        // Opponent topped out.
         setState(s => {
-          if (!s.online || s.phase !== "playing") return s;
-          return { ...s, oppDied: true, resolveAt: s.resolveAt || Date.now() };
+          if (!s.online) return s;
+          // Provisional-loss upgrade: if we already finalized as LOSE (our
+          // grace timer fired before the opponent's "go" packet arrived) but
+          // the opponent ALSO topped out, it was a simultaneous death -> DRAW.
+          // A true winner never tops out, so it never sends a late "go" -- this
+          // can only ever upgrade a genuine double-top-out, never a real loss.
+          if (s.phase === "over" && s.netResult === "lose") {
+            return { ...s, oppDied: true, netResult: "draw" };
+          }
+          // Still playing: record the opponent's death and let the grace-window
+          // resolver decide WIN vs DRAW. We keep playing during the window so a
+          // near-simultaneous local top-out resolves to DRAW.
+          if (s.phase === "playing") {
+            return { ...s, oppDied: true, resolveAt: s.resolveAt || Date.now() };
+          }
+          return s;
         });
       } else if (msg.type === "opponent_left") {
         setState(s => s.phase === "playing" ? { ...s, opponentLeft: true } : s);
