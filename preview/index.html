@@ -136,6 +136,19 @@ const APP_BUILD_DATE = "2026-06-11T09:15:52";
 // effect-create time. TEST_SPEED globally overrides for fast dev playback.
 const TICK_MS_DEFAULT = 320;
 
+// ONLINE matches use a FIXED tick rate on BOTH phones (not each player's local
+// level), so gravity speed is identical and the match is symmetric: if both
+// players make the same moves with the same (seeded) pieces, the boundary never
+// moves and the game can end in a true tie. Level only affects the SOLO AI.
+const ONLINE_TICK_MS = 500;
+
+// Online game-over grace window (ms). When a player tops out we do NOT instantly
+// award the win to the opponent; we wait this long for the opponent's own
+// top-out to arrive. If it does -> DRAW. This makes a tie genuinely reachable
+// on symmetric play (both top out on the same tick), where otherwise the first
+// "go" packet would beat the second player's top-out and force a win/lose.
+const GAMEOVER_GRACE_MS = 700;
+
 // Figma 124-1377 layout, adjusted so the FRAME height matches the play
 // area height exactly. No rows clipped at the frame edge -- every cell
 // in the 200x880 play area is visible.
@@ -367,10 +380,13 @@ function mulberry32(a) {
   };
 }
 function seedNetPieces(seed) {
-  // Derive two distinct, well-separated stream states from one master seed.
+  // Seed BOTH streams from the SAME master seed so P1 and P2 draw the IDENTICAL
+  // piece sequence (each side keeps its own independent cursor). This is what
+  // makes the match symmetric: same pieces + same moves -> same board -> the
+  // boundary never moves and the game can end in a true tie.
   netPieces.online = true;
-  netPieces._r1 = mulberry32((seed ^ 0x9e3779b9) >>> 0);
-  netPieces._r2 = mulberry32((seed ^ 0x85ebca77) >>> 0);
+  netPieces._r1 = mulberry32(seed >>> 0);
+  netPieces._r2 = mulberry32(seed >>> 0);
 }
 function clearNetPieces() {
   netPieces.online = false;
@@ -539,6 +555,10 @@ function makeInitState2P() {
     lockLines:    0,        // line count from the most recent local lock
     lockBoard:    null,     // pre-shift (post-clear) board snapshot at local lock
     goStamp:      0,        // ++ when LOCAL player tops out (triggers "go" send)
+    // Online game-over resolution (grace window for ties):
+    iDied:        false,    // local player topped out
+    oppDied:      false,    // opponent reported top-out (their "go")
+    resolveAt:    null,     // ms when the first death occurred (grace anchor)
   };
 }
 
@@ -1315,9 +1335,11 @@ function TetrisGame2P() {
         let lockedThisTick = false;
         // ONLINE: which sides run local physics. The local player's side runs
         // gravity/lock as normal; the REMOTE side is driven by network events
-        // (handled in the ws onmessage), so its physics is skipped here.
-        const runP1 = !s.online || s.playerSide === 1;
-        const runP2 = !s.online || s.playerSide === 2;
+        // (handled in the ws onmessage), so its physics is skipped here. Once
+        // the local player has topped out (iDied) its physics freezes while the
+        // game-over grace window resolves.
+        const runP1 = !s.online ? true : (s.playerSide === 1 && !s.iDied);
+        const runP2 = !s.online ? true : (s.playerSide === 2 && !s.iDied);
         // Track which rows were full at lock time so we can flash them
         // briefly after they're cleared. Filled per-side just before
         // clearP*_2P runs (board still has the full rows at that moment).
@@ -1546,8 +1568,9 @@ function TetrisGame2P() {
             p1Next     = p1NextNext;
             p1NextNext = nextPiece(1);
             if (!isValid2P(getCells(p1.type, p1.rot, p1.x, p1.y), board, boundary, 1)) {
-              // P1 top-out. In online, the local player is P1 here -> local loses.
-              if (s.online) return { ...s, board, p1, p1Next, p1NextNext, p2, p2Next, p2NextNext, phase: "over", winner: 2, netResult: "lose", goStamp: (s.goStamp || 0) + 1 };
+              // P1 top-out. In online, local player is P1 -> enter grace resolve
+              // (send go, freeze local physics; DRAW if opponent also tops out).
+              if (s.online) return { ...s, board, p1, p1Next, p1NextNext, p2, p2Next, p2NextNext, iDied: true, resolveAt: s.resolveAt || Date.now(), goStamp: (s.goStamp || 0) + 1 };
               return { ...s, board, p1, p1Next, p1NextNext, p2, p2Next, p2NextNext, phase: "over", winner: 2 };
             }
           }
@@ -1576,8 +1599,9 @@ function TetrisGame2P() {
             p2Next     = p2NextNext;
             p2NextNext = nextPiece(2);
             if (!isValid2P(getCells(p2.type, p2.rot, p2.x, p2.y), board, boundary, 2)) {
-              // P2 top-out. In online, the local player is P2 here -> local loses.
-              if (s.online) return { ...s, board, p1, p1Next, p1NextNext, p2, p2Next, p2NextNext, phase: "over", winner: 1, netResult: "lose", goStamp: (s.goStamp || 0) + 1 };
+              // P2 top-out. In online, local player is P2 -> enter grace resolve
+              // (send go, freeze local physics; DRAW if opponent also tops out).
+              if (s.online) return { ...s, board, p1, p1Next, p1NextNext, p2, p2Next, p2NextNext, iDied: true, resolveAt: s.resolveAt || Date.now(), goStamp: (s.goStamp || 0) + 1 };
               return { ...s, board, p1, p1Next, p1NextNext, p2, p2Next, p2NextNext, phase: "over", winner: 1 };
             }
           }
@@ -1615,9 +1639,9 @@ function TetrisGame2P() {
           lockBoard:    localLocked ? board : s.lockBoard,
         };
       });
-    }, TEST_SPEED ? 110 : (AI_LEVEL_CONFIG[state.aiLevel]?.tickMs || TICK_MS_DEFAULT));
+    }, TEST_SPEED ? 110 : (state.online ? ONLINE_TICK_MS : (AI_LEVEL_CONFIG[state.aiLevel]?.tickMs || TICK_MS_DEFAULT)));
     return () => clearInterval(id);
-  }, [state.aiLevel]);
+  }, [state.aiLevel, state.online]);
 
   // ── Online networking: broadcast local events ─────────────────────────
   // netSend: JSON-encode + push over the live socket (no-op if not open).
@@ -1653,11 +1677,30 @@ function TetrisGame2P() {
     });
   }, [state.lockStamp]);
 
-  // Broadcast game-over (local top-out). Opponent receives "go" -> they win.
+  // Broadcast game-over (local top-out). Opponent receives "go".
   React.useEffect(() => {
     if (!state.online || !state.goStamp) return;
     netSend({ k: "go" });
   }, [state.goStamp]);
+
+  // Online game-over resolver. Once either player has topped out (iDied or
+  // oppDied), wait GAMEOVER_GRACE_MS for the other side. Both dead -> DRAW;
+  // only I died -> LOSE; only opponent died -> WIN. Both top out on the same
+  // tick under symmetric play, so the grace window lets a true tie register.
+  React.useEffect(() => {
+    if (!state.online || state.phase !== "playing" || state.resolveAt == null) return;
+    const finalize = () => setState(s => {
+      if (!s.online || s.phase !== "playing") return s;
+      if (s.iDied && s.oppDied) return { ...s, phase: "over", netResult: "draw" };
+      if (s.iDied)  return { ...s, phase: "over", netResult: "lose", winner: s.playerSide === 1 ? 2 : 1 };
+      return { ...s, phase: "over", netResult: "win", winner: s.playerSide };
+    });
+    // Both already dead -> resolve immediately (draw). Otherwise wait out grace.
+    if (state.iDied && state.oppDied) { finalize(); return; }
+    const ms = Math.max(0, GAMEOVER_GRACE_MS - (Date.now() - state.resolveAt));
+    const t = setTimeout(finalize, ms);
+    return () => clearTimeout(t);
+  }, [state.online, state.phase, state.iDied, state.oppDied, state.resolveAt]);
 
   // applyP1: human-input dispatcher for the P1 piece. Used by both the
   // touch-gesture handler (iOS) and the keyboard handler (laptop testing).
@@ -2211,10 +2254,13 @@ function TetrisGame2P() {
           };
         });
       } else if (msg.k === "go") {
-        // Opponent topped out -- we win.
-        setState(s => (s.online && s.phase === "playing")
-          ? { ...s, phase: "over", winner: s.playerSide, netResult: "win" }
-          : s);
+        // Opponent topped out. Record it and let the grace-window resolver
+        // decide WIN vs DRAW (see the resolution effect). We keep playing
+        // during the window so a near-simultaneous local top-out -> DRAW.
+        setState(s => {
+          if (!s.online || s.phase !== "playing") return s;
+          return { ...s, oppDied: true, resolveAt: s.resolveAt || Date.now() };
+        });
       } else if (msg.type === "opponent_left") {
         setState(s => s.phase === "playing" ? { ...s, opponentLeft: true } : s);
       } else if (msg.type === "error") {
@@ -2504,7 +2550,9 @@ function TetrisGame2P() {
             initialSection={settingsSection}
             onUpdate={(key, val) => {
               updateSetting(key, val);
-              if (key === "level") setState(s => ({ ...s, aiLevel: val }));
+              // Level only affects SOLO. In online the tick rate is fixed
+              // (ONLINE_TICK_MS) so both phones stay symmetric.
+              if (key === "level") setState(s => s.online ? s : { ...s, aiLevel: val });
             }}
             onClose={closeSettings}
           />
@@ -3143,10 +3191,12 @@ function TetrisGame2P() {
           so the score on-screen matches the pips). setOver = one player has
           reached WINS_TO_WIN. Winner text fades in via CSS keyframe fadeIn. */}
       {phase === "over" && state.online && (() => {
-        // ONLINE game over: this phone shows YOU WIN or YOU LOSE based on
-        // netResult (fallback to winner-vs-playerSide). REMATCH asks the
+        // ONLINE game over: this phone shows YOU WIN / YOU LOSE / D R A W based
+        // on netResult (fallback to winner-vs-playerSide). REMATCH asks the
         // server for a fresh shared seed; MENU disconnects to the start screen.
+        const isDraw = state.netResult === "draw";
         const won = state.netResult ? state.netResult === "win" : winner === playerSide;
+        const resultText = isDraw ? "D R A W" : (won ? "YOU WIN" : "YOU LOSE");
         const overlayBase = {
           position: "absolute", inset: 0,
           background: "rgba(0,0,0,0.88)",
@@ -3163,10 +3213,10 @@ function TetrisGame2P() {
           <div style={overlayBase}>
             <div style={{
               fontSize: 30, fontWeight: 700, letterSpacing: 7,
-              color: won ? "#fff" : "rgba(255,255,255,0.55)", marginBottom: 28,
+              color: (won || isDraw) ? "#fff" : "rgba(255,255,255,0.55)", marginBottom: 28,
               animation: "fadeIn 0.5s ease-out both",
             }}>
-              {won ? "YOU WIN" : "YOU LOSE"}
+              {resultText}
             </div>
             <div style={{display: "flex", gap: 12}}>
               <div

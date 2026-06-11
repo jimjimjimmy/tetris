@@ -681,6 +681,24 @@ Call sites: (1) page load immediately, (2) inside `bgmPlay()` after `.play()` re
 - Verified end-to-end via two same-origin iframes against the live PartyKit server:
   role split, identical seeded opening board, sync held through gravity+locks to a
   simultaneous game-over, correct WIN/LOSE split, and networked REMATCH reset both.
+### Symmetry + tie condition
+- **Identical gravity/tick rate.** Online uses a FIXED `ONLINE_TICK_MS` (500) on
+  BOTH phones instead of each player's local level (`tickMs` from AI_LEVEL_CONFIG).
+  Settings level changes are ignored mid-online-match. Level only affects SOLO AI.
+- **Same pieces for both players.** `seedNetPieces` seeds the P1 and P2 streams from
+  the SAME master seed (was two XOR'd seeds), so P1 piece N == P2 piece N. Identical
+  pieces + identical moves -> identical boards -> boundary never moves (verified: stays
+  at BDY_2P=22 with l1=l2=0 under mirrored play) -> the game can end in a true tie.
+- **DRAW on simultaneous game-over.** Top-out no longer instantly awards the win.
+  A player that tops out sets `iDied`, sends `go`, freezes its physics, and enters a
+  grace window (`GAMEOVER_GRACE_MS`=700). Receiving the opponent's `go` sets `oppDied`.
+  A resolution effect finalizes: both dead -> `netResult:"draw"`; only I died -> lose;
+  only opponent died (survived grace) -> win. Without this the first `go` packet beats
+  the second player's top-out and a tie is unreachable. The online over-overlay shows
+  "D R A W" / YOU WIN / YOU LOSE accordingly. (Boundary-clamp game-overs stay instant
+  and deterministic -- both phones compute the same winner, no grace needed.)
+- Verified via two iframes: mirrored hard-drops -> D R A W on both; one-sided top-out
+  -> correct LOSE/WIN; boundary never drifted from 22.
 - **Known limitation**: under heavy simultaneous boundary eviction the two phones'
   piece-PRNG stream consumption can drift momentarily; the `lk` snapshot re-syncs
   territory each lock and the opponent's piece is always adopted authoritatively, so
