@@ -347,6 +347,45 @@ function p1SpawnY2P(type) {
   return ROWS_2P - 1 - pieceMaxDr(type, 0);
 }
 
+// ── Online deterministic piece generator ──────────────────────────────
+// In ONLINE multiplayer both phones must produce the SAME piece sequence.
+// A seeded PRNG (mulberry32) with two independent streams -- one for the
+// P1 piece order, one for the P2 piece order -- guarantees this: seeded
+// from the single master seed the server broadcasts, both phones generate
+// identical P1 and P2 sequences in the same order.
+//
+// netPieces.online gates everything: when false (SOLO play) nextPiece()
+// falls straight back to randPiece() (Math.random) so single-player is
+// byte-for-byte unchanged.
+const netPieces = { online: false, _r1: null, _r2: null };
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function seedNetPieces(seed) {
+  // Derive two distinct, well-separated stream states from one master seed.
+  netPieces.online = true;
+  netPieces._r1 = mulberry32((seed ^ 0x9e3779b9) >>> 0);
+  netPieces._r2 = mulberry32((seed ^ 0x85ebca77) >>> 0);
+}
+function clearNetPieces() {
+  netPieces.online = false;
+  netPieces._r1 = null;
+  netPieces._r2 = null;
+}
+// side: 1 -> P1 stream, 2 -> P2 stream. Falls back to randPiece() in solo.
+function nextPiece(side) {
+  if (!netPieces.online) return randPiece();
+  if (DEBUG_PIECES) return "BAR";
+  const r = side === 2 ? netPieces._r2 : netPieces._r1;
+  if (!r) return randPiece();
+  return PIECE_TYPES[Math.floor(r() * PIECE_TYPES.length)];
+}
+
 // ============================================================
 // TETRISGAME2P HELPERS
 // ============================================================
@@ -393,9 +432,64 @@ function clearP2_2P(board, bdy) {
   return [[...fill, ...kept, ...board.slice(bdy)], n];
 }
 
+// Apply a territory-boundary shift produced by n1 P1-clears and n2 P2-clears.
+// PURE: takes a game slice + clear counts, returns the updated slice (board,
+// boundary, both active pieces + NEXT queues, winner, phase, lastGain).
+// Extracted verbatim from the tick so the online network handler can reuse
+// the exact same boundary math for REMOTE line-clears. Eviction respawns draw
+// from nextPiece() (seeded in online, Math.random in solo).
+function shiftBoundary2P(g, n1, n2) {
+  let { board, boundary, p1, p1Next, p1NextNext, p2, p2Next, p2NextNext, lastGain } = g;
+
+  let newBdy = boundary - n1 + n2;
+  let winner = null, phase = "playing";
+  if (newBdy <= 0) { newBdy = 0; winner = 1; phase = "over"; }
+  else if (newBdy >= ROWS_2P) { newBdy = ROWS_2P; winner = 2; phase = "over"; }
+
+  // Stack follows boundary: the gainer's locked stack translates with the
+  // boundary; loser cells in the swept range are dropped; active pieces that
+  // end up in the wrong territory are evicted (respawned from NEXT).
+  if (newBdy !== boundary) {
+    const delta = boundary - newBdy;   // + = P1 gained, - = P2 gained
+    const next = Array.from({length: ROWS_2P}, () => Array(COLS).fill(CELL_EMPTY));
+    if (delta > 0) {
+      for (let r = 0; r < newBdy; r++) for (let c = 0; c < COLS; c++) {
+        if (board[r][c] === CELL_P2) next[r][c] = CELL_P2;
+      }
+      for (let r = boundary; r < ROWS_2P; r++) for (let c = 0; c < COLS; c++) {
+        if (board[r][c] === CELL_P1) { const nr = r - delta; if (nr >= 0 && nr < ROWS_2P) next[nr][c] = CELL_P1; }
+      }
+    } else {
+      const shift = -delta;
+      for (let r = newBdy; r < ROWS_2P; r++) for (let c = 0; c < COLS; c++) {
+        if (board[r][c] === CELL_P1) next[r][c] = CELL_P1;
+      }
+      for (let r = 0; r < boundary; r++) for (let c = 0; c < COLS; c++) {
+        if (board[r][c] === CELL_P2) { const nr = r + shift; if (nr >= 0 && nr < ROWS_2P) next[nr][c] = CELL_P2; }
+      }
+    }
+    board = next;
+
+    if (!isValid2P(getCells(p1.type, p1.rot, p1.x, p1.y), board, newBdy, 1)) {
+      p1 = { type: p1Next, rot: 0, x: spawnX(p1Next), y: p1SpawnY2P(p1Next), lockPendingTs: null, lockResets: 0 };
+      p1Next = p1NextNext; p1NextNext = nextPiece(1);
+    }
+    if (!isValid2P(getCells(p2.type, p2.rot, p2.x, p2.y), board, newBdy, 2)) {
+      p2 = { type: p2Next, rot: 0, x: spawnX(p2Next), y: 0, lockPendingTs: null, lockResets: 0 };
+      p2Next = p2NextNext; p2NextNext = nextPiece(2);
+    }
+  }
+
+  const realShift = boundary - newBdy;  // +N => P1 gained, -N => P2 gained
+  if (realShift > 0) lastGain = { player: 1, rows: realShift, ts: Date.now() };
+  else if (realShift < 0) lastGain = { player: 2, rows: -realShift, ts: Date.now() };
+
+  return { board, boundary: newBdy, p1, p1Next, p1NextNext, p2, p2Next, p2NextNext, winner, phase, lastGain };
+}
+
 function makeInitState2P() {
-  const p1Type = randPiece();
-  const p2Type = randPiece();
+  const p1Type = nextPiece(1);
+  const p2Type = nextPiece(2);
   return {
     board:    initBoard2P(),
     aiTick:   0,
@@ -403,14 +497,14 @@ function makeInitState2P() {
     // Two-deep NEXT queue for P1: p1Next is the next-to-spawn piece
     // (rendered in the BOTTOM slot of the NEXT block), p1NextNext is
     // the one after that (TOP slot -- newest entry).
-    p1Next:     randPiece(),
-    p1NextNext: randPiece(),
+    p1Next:     nextPiece(1),
+    p1NextNext: nextPiece(1),
     p2:       { type: p2Type, rot: 0, x: spawnX(p2Type), y: 0, lockPendingTs: null, lockResets: 0 },
     // Two-deep NEXT queue for P2, mirror of P1's queue. p2Next is the
     // next-to-spawn piece (BOTTOM slot when player picked P2); p2NextNext
     // is the piece after that (TOP slot).
-    p2Next:     randPiece(),
-    p2NextNext: randPiece(),
+    p2Next:     nextPiece(2),
+    p2NextNext: nextPiece(2),
     p1Lines:  0,
     p2Lines:  0,
     boundary:    BDY_2P,
@@ -435,9 +529,16 @@ function makeInitState2P() {
     // coordinates (pre-shift). Cleared after CLEAR_FLASH_MS.
     clearAnim:   null,
     // Online multiplayer state.
+    online:       false,    // true when this is a networked match (no AI)
     onlineStatus: "idle",   // "idle" | "waiting" | "ready" | "disconnected"
     onlineRole:   null,     // "p1" | "p2" | null (assigned by server)
     opponentLeft: false,    // true mid-game when opponent disconnects
+    netResult:    null,     // "win" | "lose" | null -- online game-over outcome
+    // Sync stamps: counters the tick bumps so broadcast effects fire.
+    lockStamp:    0,        // ++ when LOCAL player locks (triggers "lk" send)
+    lockLines:    0,        // line count from the most recent local lock
+    lockBoard:    null,     // pre-shift (post-clear) board snapshot at local lock
+    goStamp:      0,        // ++ when LOCAL player tops out (triggers "go" send)
   };
 }
 
@@ -1145,6 +1246,8 @@ function TetrisGame2P() {
   const [joinCode, setJoinCode] = React.useState("");
   // Online: live WebSocket connection (not state -- no re-renders on ws events).
   const wsRef = React.useRef(null);
+  // Online: synchronous mirror of the assigned role for use inside ws handlers.
+  const onlineRoleRef = React.useRef(null);
 
   // Keep the module-level haptic and sfx objects in sync with React
   // settings state. Called synchronously every render so callbacks always
@@ -1207,6 +1310,14 @@ function TetrisGame2P() {
         let { board, aiTick, p1, p1Next, p1NextNext, p2, p2Next, p2NextNext, p1Lines, p2Lines, boundary } = s;
         const aiCfg = AI_LEVEL_CONFIG[s.aiLevel] || AI_LEVEL_CONFIG[3];
         let n1 = 0, n2 = 0;
+        // True when the LOCAL player's piece committed a lock this tick
+        // (online only) -- used to broadcast the lk snapshot to the opponent.
+        let lockedThisTick = false;
+        // ONLINE: which sides run local physics. The local player's side runs
+        // gravity/lock as normal; the REMOTE side is driven by network events
+        // (handled in the ws onmessage), so its physics is skipped here.
+        const runP1 = !s.online || s.playerSide === 1;
+        const runP2 = !s.online || s.playerSide === 2;
         // Track which rows were full at lock time so we can flash them
         // briefly after they're cleared. Filled per-side just before
         // clearP*_2P runs (board still has the full rows at that moment).
@@ -1215,9 +1326,9 @@ function TetrisGame2P() {
         aiTick += 1;
 
         // P1 AI block: only active when the user picked P2 on the start
-        // screen. When the user is P1, this block is skipped and P1 is
-        // driven by applyP1 from touch + keyboard.
-        if (s.playerSide === 2 && aiTick % aiCfg.aiPeriod === 0) {
+        // screen (SOLO only). When the user is P1, or in ONLINE mode, this
+        // block is skipped and P1 is driven by applyP1 / network events.
+        if (!s.online && s.playerSide === 2 && aiTick % aiCfg.aiPeriod === 0) {
           const getLandingY1 = (type, rot, x) => {
             const startY = Math.max(0, boundary - 4);
             for (let y = startY; y < ROWS_2P; y++) {
@@ -1311,9 +1422,9 @@ function TetrisGame2P() {
         }
 
         // P2 AI block: only active when the user picked P1 on the start
-        // screen. When the user is P2, this block is skipped and P2 is
-        // driven by applyP2 from touch + keyboard.
-        if (s.playerSide === 1 && aiTick % aiCfg.aiPeriod === 0) {
+        // screen (SOLO only). Skipped when the user is P2 or in ONLINE mode;
+        // P2 is then driven by applyP2 / network events.
+        if (!s.online && s.playerSide === 1 && aiTick % aiCfg.aiPeriod === 0) {
           const getLandingY2 = (type, rot, x) => {
             for (let y = 0; y <= boundary + 4; y++) {
               if (!isValid2P(getCells(type, rot, x, y), board, boundary, 2)) continue;
@@ -1403,12 +1514,14 @@ function TetrisGame2P() {
           }
         }
 
-        // P1 physics with lock delay.
+        // P1 physics with lock delay. Skipped when P1 is the REMOTE player
+        // (online): the remote piece is positioned by network events instead.
         // If the piece can move up, it does, and the lock-pending timer
         // clears (the piece is no longer stuck). If it can't move, the
         // timer starts; the piece doesn't lock until LOCK_DELAY_MS has
         // elapsed. Successful human input during this window resets the
         // timer (handled inside applyP1), up to MAX_LOCK_RESETS.
+        if (runP1) {
         if (isValid2P(getCells(p1.type, p1.rot, p1.x, p1.y - 1), board, boundary, 1)) {
           p1 = { ...p1, y: p1.y - 1, lockPendingTs: null, lockResets: 0 };
         } else {
@@ -1426,19 +1539,24 @@ function TetrisGame2P() {
             }
             const [b1, c1] = clearP1_2P(board, boundary);
             n1 = c1; board = b1;
+            lockedThisTick = true;
             p1 = { type: p1Next, rot: 0, x: spawnX(p1Next), y: p1SpawnY2P(p1Next), lockPendingTs: null, lockResets: 0 };
             // Shift the 2-deep NEXT queue: p1NextNext becomes the new
-            // next-to-spawn, and a fresh random piece enters the queue.
+            // next-to-spawn, and a fresh piece enters the queue.
             p1Next     = p1NextNext;
-            p1NextNext = randPiece();
+            p1NextNext = nextPiece(1);
             if (!isValid2P(getCells(p1.type, p1.rot, p1.x, p1.y), board, boundary, 1)) {
+              // P1 top-out. In online, the local player is P1 here -> local loses.
+              if (s.online) return { ...s, board, p1, p1Next, p1NextNext, p2, p2Next, p2NextNext, phase: "over", winner: 2, netResult: "lose", goStamp: (s.goStamp || 0) + 1 };
               return { ...s, board, p1, p1Next, p1NextNext, p2, p2Next, p2NextNext, phase: "over", winner: 2 };
             }
           }
           // else: still within grace -- piece stays put for this tick.
         }
+        }
 
         // P2 physics (mirror of P1, falling DOWN toward boundary).
+        if (runP2) {
         if (isValid2P(getCells(p2.type, p2.rot, p2.x, p2.y + 1), board, boundary, 2)) {
           p2 = { ...p2, y: p2.y + 1, lockPendingTs: null, lockResets: 0 };
         } else {
@@ -1452,125 +1570,94 @@ function TetrisGame2P() {
             }
             const [b2, c2] = clearP2_2P(board, boundary);
             n2 = c2; board = b2;
+            lockedThisTick = true;
             p2 = { type: p2Next, rot: 0, x: spawnX(p2Next), y: 0, lockPendingTs: null, lockResets: 0 };
             // Shift the 2-deep P2 NEXT queue.
             p2Next     = p2NextNext;
-            p2NextNext = randPiece();
+            p2NextNext = nextPiece(2);
             if (!isValid2P(getCells(p2.type, p2.rot, p2.x, p2.y), board, boundary, 2)) {
+              // P2 top-out. In online, the local player is P2 here -> local loses.
+              if (s.online) return { ...s, board, p1, p1Next, p1NextNext, p2, p2Next, p2NextNext, phase: "over", winner: 1, netResult: "lose", goStamp: (s.goStamp || 0) + 1 };
               return { ...s, board, p1, p1Next, p1NextNext, p2, p2Next, p2NextNext, phase: "over", winner: 1 };
             }
           }
         }
-
-        // Territory shift: 1:1 mapping. Each row cleared on a side
-        // moves the boundary 1 row toward the opponent. No decay,
-        // no fractional carry-over (the previous accumulator design
-        // caused the +1 -> +2 fencepost where the second clear's
-        // 0.952 contribution got stuck below floor=1).
-        let newBdy = boundary - n1 + n2;
-
-        // Game-over clamps only -- no preventive piece-blocking clamp.
-        // The boundary is allowed to push past locked pieces; the swept
-        // range is then cleared (eviction) so the board stays consistent.
-        let winner = null, phase = "playing";
-        if (newBdy <= 0) {
-          newBdy = 0; winner = 1; phase = "over";
-        } else if (newBdy >= ROWS_2P) {
-          newBdy = ROWS_2P; winner = 2; phase = "over";
         }
 
-        // Stack follows boundary: when the boundary moves by delta rows,
-        // the GAINER's entire locked stack translates with it so the
-        // stack stays glued to the boundary edge (no visual gap).
-        //   delta > 0  (P1 gained)  -> every CELL_P1 shifts UP by delta
-        //   delta < 0  (P2 gained)  -> every CELL_P2 shifts DOWN by |delta|
-        // Loser cells in the rows that just changed hands are dropped
-        // (those rows are now in the gainer's territory; loser cells
-        // cannot remain there). Cells that would shift off the board
-        // are also dropped. Active pieces are NOT translated -- they
-        // stay at their current position. If the boundary moves past
-        // an active piece (e.g. P2 gain crossing a P1 piece's row),
-        // the active piece is respawned from its NEXT queue so it
-        // does not lock in the wrong territory.
-        if (newBdy !== boundary) {
-          const delta = boundary - newBdy;   // + = P1 gained, - = P2 gained
-          const next = Array.from({length: ROWS_2P}, () => Array(COLS).fill(CELL_EMPTY));
-          if (delta > 0) {
-            // P1 gained: shift P1 cells UP by delta, drop P2 cells in swept range.
-            for (let r = 0; r < newBdy; r++) {
-              for (let c = 0; c < COLS; c++) {
-                if (board[r][c] === CELL_P2) next[r][c] = CELL_P2;
-              }
-            }
-            for (let r = boundary; r < ROWS_2P; r++) {
-              for (let c = 0; c < COLS; c++) {
-                if (board[r][c] === CELL_P1) {
-                  const nr = r - delta;
-                  if (nr >= 0 && nr < ROWS_2P) next[nr][c] = CELL_P1;
-                }
-              }
-            }
-          } else {
-            // P2 gained: shift P2 cells DOWN by |delta|, drop P1 cells in swept range.
-            const shift = -delta;
-            for (let r = newBdy; r < ROWS_2P; r++) {
-              for (let c = 0; c < COLS; c++) {
-                if (board[r][c] === CELL_P1) next[r][c] = CELL_P1;
-              }
-            }
-            for (let r = 0; r < boundary; r++) {
-              for (let c = 0; c < COLS; c++) {
-                if (board[r][c] === CELL_P2) {
-                  const nr = r + shift;
-                  if (nr >= 0 && nr < ROWS_2P) next[nr][c] = CELL_P2;
-                }
-              }
-            }
-          }
-          board = next;
+        // Territory shift: 1:1 mapping. Each row cleared on a side moves the
+        // boundary 1 row toward the opponent. Stack-follow + eviction + the
+        // +N/-N indicator all live in shiftBoundary2P (shared with the online
+        // network handler so REMOTE line-clears use the identical math).
+        const sh = shiftBoundary2P(
+          { board, boundary, p1, p1Next, p1NextNext, p2, p2Next, p2NextNext, lastGain: s.lastGain },
+          n1, n2
+        );
 
-          // Active-piece eviction (safety net). isValid2P checks both
-          // territory side and cell overlap. If the piece's current
-          // cells are no longer valid under newBdy, respawn it from
-          // the NEXT queue.
-          if (!isValid2P(getCells(p1.type, p1.rot, p1.x, p1.y), board, newBdy, 1)) {
-            p1 = { type: p1Next, rot: 0, x: spawnX(p1Next), y: p1SpawnY2P(p1Next), lockPendingTs: null, lockResets: 0 };
-            p1Next     = p1NextNext;
-            p1NextNext = randPiece();
-          }
-          if (!isValid2P(getCells(p2.type, p2.rot, p2.x, p2.y), board, newBdy, 2)) {
-            p2 = { type: p2Next, rot: 0, x: spawnX(p2Next), y: 0, lockPendingTs: null, lockResets: 0 };
-            p2Next     = p2NextNext;
-            p2NextNext = randPiece();
-          }
-        }
-
-        // "+N"/"-N" indicator reflects the ACTUAL boundary delta after
-        // game-over clamps -- not the raw shift accumulator. This keeps
-        // the indicator and the visual line in lockstep: the indicator
-        // only fires when the line actually moves, and the row count
-        // matches the cells visibly traversed.
-        let lastGain = s.lastGain;
-        const realShift = boundary - newBdy;  // +N => P1 gained, -N => P2 gained
-        if (realShift > 0) {
-          lastGain = { player: 1, rows: realShift, ts: Date.now() };
-        } else if (realShift < 0) {
-          lastGain = { player: 2, rows: -realShift, ts: Date.now() };
-        }
+        // In ONLINE mode, when the LOCAL player locks a piece, bump lockStamp
+        // and record the line count + post-shift board side. A dedicated
+        // effect (see below) watches lockStamp and broadcasts the "lk" message
+        // (territory snapshot + line-clear count + freshly-spawned piece).
+        const localLocked = s.online && lockedThisTick;
 
         return {
           ...s,
-          board, aiTick, p1, p1Next, p1NextNext, p2, p2Next, p2NextNext, phase,
+          board: sh.board, aiTick,
+          p1: sh.p1, p1Next: sh.p1Next, p1NextNext: sh.p1NextNext,
+          p2: sh.p2, p2Next: sh.p2Next, p2NextNext: sh.p2NextNext,
+          phase: sh.phase,
           p1Lines: p1Lines + n1, p2Lines: p2Lines + n2,
-          boundary: newBdy, winner, lastGain,
+          boundary: sh.boundary, winner: sh.winner, lastGain: sh.lastGain,
           clearAnim: clearedRowsThisTick.length > 0
             ? { rows: clearedRowsThisTick, ts: Date.now() }
             : s.clearAnim,
+          lockStamp:    localLocked ? (s.lockStamp || 0) + 1 : s.lockStamp,
+          lockLines:    localLocked ? (s.playerSide === 1 ? n1 : n2) : s.lockLines,
+          lockBoard:    localLocked ? board : s.lockBoard,
         };
       });
     }, TEST_SPEED ? 110 : (AI_LEVEL_CONFIG[state.aiLevel]?.tickMs || TICK_MS_DEFAULT));
     return () => clearInterval(id);
   }, [state.aiLevel]);
+
+  // ── Online networking: broadcast local events ─────────────────────────
+  // netSend: JSON-encode + push over the live socket (no-op if not open).
+  const netSend = React.useCallback((obj) => {
+    const ws = wsRef.current;
+    if (ws && ws.readyState === 1) {
+      try { ws.send(JSON.stringify(obj)); } catch (_) {}
+    }
+  }, []);
+
+  // Broadcast the LOCAL player's active piece whenever it moves (gravity OR
+  // input). The opponent's phone renders this directly as the remote piece.
+  // Keyed on the local piece so every x/rot/y/type change emits one "mv".
+  const localPiece = state.playerSide === 2 ? state.p2 : state.p1;
+  React.useEffect(() => {
+    if (!state.online || state.phase !== "playing") return;
+    netSend({ k: "mv", side: state.playerSide,
+      type: localPiece.type, x: localPiece.x, rot: localPiece.rot, y: localPiece.y });
+  }, [state.online, state.phase, localPiece.type, localPiece.x, localPiece.rot, localPiece.y]);
+
+  // Broadcast a lock snapshot: pre-shift (post-clear) board + line count +
+  // the freshly-spawned local piece and its NEXT queue. The opponent merges
+  // this into their board, applies the boundary shift, and adopts the piece.
+  React.useEffect(() => {
+    if (!state.online || !state.lockStamp || !state.lockBoard) return;
+    const isP1 = state.playerSide === 1;
+    netSend({
+      k: "lk", side: state.playerSide,
+      board: state.lockBoard, lines: state.lockLines,
+      piece: isP1 ? state.p1 : state.p2,
+      next:     isP1 ? state.p1Next : state.p2Next,
+      nextNext: isP1 ? state.p1NextNext : state.p2NextNext,
+    });
+  }, [state.lockStamp]);
+
+  // Broadcast game-over (local top-out). Opponent receives "go" -> they win.
+  React.useEffect(() => {
+    if (!state.online || !state.goStamp) return;
+    netSend({ k: "go" });
+  }, [state.goStamp]);
 
   // applyP1: human-input dispatcher for the P1 piece. Used by both the
   // touch-gesture handler (iOS) and the keyboard handler (laptop testing).
@@ -1861,7 +1948,8 @@ function TetrisGame2P() {
   React.useEffect(() => {
     const id = setInterval(() => {
       setState(s => {
-        if (s.paused || s.summary || s.phase !== "playing") return s;
+        // No demo countdown in online matches -- they end on a real game over.
+        if (s.online || s.paused || s.summary || s.phase !== "playing") return s;
         const next = s.demoLeft - 1;
         if (next <= 0) {
           const winning = s.p1Lines > s.p2Lines ? 1 : s.p2Lines > s.p1Lines ? 2 : 0;
@@ -2034,11 +2122,32 @@ function TetrisGame2P() {
   // Close and discard the WebSocket, reset online state back to idle.
   const disconnectRoom = () => {
     if (wsRef.current) { wsRef.current.onclose = null; wsRef.current.close(); wsRef.current = null; }
-    setState(s => ({ ...s, onlineStatus: "idle", onlineRole: null, opponentLeft: false }));
+    onlineRoleRef.current = null;
+    clearNetPieces();
+    setState(s => ({ ...s, online: false, onlineStatus: "idle", onlineRole: null, opponentLeft: false, netResult: null }));
+  };
+
+  // Build a fresh ONLINE game state from a shared seed + assigned role.
+  // Seeds the deterministic piece PRNG FIRST so both phones generate the
+  // identical opening board, then layers the online fields on top.
+  const buildFreshOnline = (seed, role) => {
+    seedNetPieces(seed);
+    const fresh = makeInitState2P();
+    return {
+      ...fresh,
+      phase: "playing",
+      online: true,
+      onlineRole: role,
+      playerSide: role === "p1" ? 1 : 2,
+      onlineStatus: "ready",
+      aiLevel: settings.level,
+    };
   };
 
   // Connect to a PartyKit room. First to join = p1, second = p2.
-  // Server sends: {type:"role",role:"p1"|"p2"} then {type:"ready"} when full.
+  // Server sends: {type:"role",...} then {type:"ready",seed} when full.
+  // In-match gameplay messages: mv (piece moved), lk (lock + snapshot),
+  // go (game over), rematch (server-minted new seed).
   const connectToRoom = (code) => {
     if (wsRef.current) { wsRef.current.onclose = null; wsRef.current.close(); }
     const url = "wss://" + PARTYKIT_HOST + "/parties/main/" + code.toUpperCase();
@@ -2049,18 +2158,63 @@ function TetrisGame2P() {
     ws.onmessage = (e) => {
       const msg = JSON.parse(e.data);
       if (msg.type === "role") {
+        onlineRoleRef.current = msg.role;
         setState(s => ({ ...s, onlineRole: msg.role }));
       } else if (msg.type === "ready") {
         sfx.preload();
         sfx._unlock();
         if (settings.music) sfx.bgmPlay(settings.volume / 10);
-        setState(s => ({
-          ...s,
-          phase: "playing",
-          playerSide: s.onlineRole === "p1" ? 1 : 2,
-          onlineStatus: "ready",
-          aiLevel: settings.level,
-        }));
+        setState(() => buildFreshOnline(msg.seed, onlineRoleRef.current));
+      } else if (msg.type === "rematch") {
+        // Server minted a new shared seed: both phones reset identically.
+        if (settings.music) sfx.bgmPlay(settings.volume / 10);
+        setState(() => buildFreshOnline(msg.seed, onlineRoleRef.current));
+      } else if (msg.k === "mv") {
+        // Opponent's piece moved -- render it directly on our board.
+        setState(s => {
+          if (!s.online || s.phase !== "playing") return s;
+          const piece = { type: msg.type, x: msg.x, rot: msg.rot, y: msg.y, lockPendingTs: null, lockResets: 0 };
+          return msg.side === 1 ? { ...s, p1: piece } : { ...s, p2: piece };
+        });
+      } else if (msg.k === "lk") {
+        // Opponent locked: merge their territory snapshot, apply the boundary
+        // shift from their line-clears, and adopt their new piece + queue.
+        setState(s => {
+          if (!s.online) return s;
+          const remote = msg.side;
+          const remoteColor = remote === 1 ? CELL_P1 : CELL_P2;
+          const myColor     = remote === 1 ? CELL_P2 : CELL_P1;
+          const merged = s.board.map((row, r) => row.map((v, c) => {
+            if (v === myColor) return v;                                   // keep my own cells
+            return msg.board[r][c] === remoteColor ? remoteColor : CELL_EMPTY; // remote from snapshot
+          }));
+          const n1 = remote === 1 ? msg.lines : 0;
+          const n2 = remote === 2 ? msg.lines : 0;
+          const sh = shiftBoundary2P(
+            { board: merged, boundary: s.boundary,
+              p1: s.p1, p1Next: s.p1Next, p1NextNext: s.p1NextNext,
+              p2: s.p2, p2Next: s.p2Next, p2NextNext: s.p2NextNext,
+              lastGain: s.lastGain }, n1, n2);
+          const adopted = { type: msg.piece.type, x: msg.piece.x, rot: msg.piece.rot, y: msg.piece.y, lockPendingTs: null, lockResets: 0 };
+          const ovr = remote === 1
+            ? { p1: adopted, p1Next: msg.next, p1NextNext: msg.nextNext }
+            : { p2: adopted, p2Next: msg.next, p2NextNext: msg.nextNext };
+          return {
+            ...s,
+            board: sh.board, boundary: sh.boundary,
+            p1: sh.p1, p1Next: sh.p1Next, p1NextNext: sh.p1NextNext,
+            p2: sh.p2, p2Next: sh.p2Next, p2NextNext: sh.p2NextNext,
+            ...ovr,
+            winner: sh.winner, phase: sh.phase, lastGain: sh.lastGain,
+            p1Lines: s.p1Lines + n1, p2Lines: s.p2Lines + n2,
+            netResult: sh.phase === "over" ? (sh.winner === s.playerSide ? "win" : "lose") : s.netResult,
+          };
+        });
+      } else if (msg.k === "go") {
+        // Opponent topped out -- we win.
+        setState(s => (s.online && s.phase === "playing")
+          ? { ...s, phase: "over", winner: s.playerSide, netResult: "win" }
+          : s);
       } else if (msg.type === "opponent_left") {
         setState(s => s.phase === "playing" ? { ...s, opponentLeft: true } : s);
       } else if (msg.type === "error") {
@@ -2988,7 +3142,49 @@ function TetrisGame2P() {
           displayP1/displayP2 show the UPDATED tally (win credited instantly
           so the score on-screen matches the pips). setOver = one player has
           reached WINS_TO_WIN. Winner text fades in via CSS keyframe fadeIn. */}
-      {phase === "over" && (() => {
+      {phase === "over" && state.online && (() => {
+        // ONLINE game over: this phone shows YOU WIN or YOU LOSE based on
+        // netResult (fallback to winner-vs-playerSide). REMATCH asks the
+        // server for a fresh shared seed; MENU disconnects to the start screen.
+        const won = state.netResult ? state.netResult === "win" : winner === playerSide;
+        const overlayBase = {
+          position: "absolute", inset: 0,
+          background: "rgba(0,0,0,0.88)",
+          display: "flex", flexDirection: "column",
+          alignItems: "center", justifyContent: "center",
+          animation: "fadeIn 0.35s ease-out both",
+        };
+        const btnBase = {
+          padding: "11px 28px", color: "#fff", borderRadius: 2,
+          fontSize: 11, fontWeight: 700, letterSpacing: 3,
+          cursor: "pointer", fontFamily: "monospace",
+        };
+        return (
+          <div style={overlayBase}>
+            <div style={{
+              fontSize: 30, fontWeight: 700, letterSpacing: 7,
+              color: won ? "#fff" : "rgba(255,255,255,0.55)", marginBottom: 28,
+              animation: "fadeIn 0.5s ease-out both",
+            }}>
+              {won ? "YOU WIN" : "YOU LOSE"}
+            </div>
+            <div style={{display: "flex", gap: 12}}>
+              <div
+                onPointerDown={() => netSend({ type: "rematch_request" })}
+                onTouchStart={e => e.stopPropagation()}
+                style={{...btnBase, background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.18)"}}
+              >REMATCH</div>
+              <div
+                onPointerDown={() => { disconnectRoom(); setState(s => ({...makeInitState2P()})); }}
+                onTouchStart={e => e.stopPropagation()}
+                style={{...btnBase, background: "transparent", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.4)"}}
+              >MENU</div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {phase === "over" && !state.online && (() => {
         const displayP1 = p1Wins + (winner === 1 ? 1 : 0);
         const displayP2 = p2Wins + (winner === 2 ? 1 : 0);
         const setOver   = displayP1 >= WINS_TO_WIN || displayP2 >= WINS_TO_WIN;

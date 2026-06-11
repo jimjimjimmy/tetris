@@ -636,16 +636,55 @@ function suppressMediaSession() {
 
 Call sites: (1) page load immediately, (2) inside `bgmPlay()` after `.play()` resolves, (3) in `visibilitychange` handler when returning to foreground.
 
-## Online multiplayer (feature/multiplayer branch - Phase 1 done)
+## Online multiplayer (feature/multiplayer branch - Phase 1 + 2 done)
 
 - PartyKit server deployed at `drift-game.jimjimjimmy.partykit.dev`
 - Config: `partykit.json` at repo root, server at `party/server.ts`
-- Room logic: max 2 players, role assignment (p1/p2), broadcasts messages between players, notifies on disconnect
 - Client uses native WebSocket (no npm package - no bundler)
-- State added to `makeInitState2P`: `onlineStatus` (idle/connecting/waiting/ready/error), `onlineRole` (null/p1/p2), `opponentLeft` (bool)
-- Start screen has `[ O N L I N E ]` button; connecting screen shows room code + join input
-- `connectToRoom(code)` / `disconnectRoom()` helpers in TetrisGame2P
-- Phase 2 (not yet done): actual game state sync over WebSocket
+- Start screen `[ O N L I N E ]` button; connection screen shows room code + join input.
+  Host taps CONNECT with empty join field (uses own code); joiner types code + CONNECT.
+- `connectToRoom(code)` / `disconnectRoom()` / `buildFreshOnline(seed, role)` in TetrisGame2P.
+
+### Phase 1 - connection layer
+- Room logic: max 2 players, role assignment (first=p1, second=p2), notifies on disconnect.
+- State: `online` (bool), `onlineStatus` (idle/waiting/ready), `onlineRole` (p1/p2), `opponentLeft`.
+
+### Phase 2 - game state sync
+- **Shared seed -> deterministic pieces.** Server mints ONE 32-bit seed on `ready`
+  (and a fresh one on every `rematch`) and broadcasts to both. Client seeds a
+  mulberry32 PRNG with TWO independent streams (P1 order, P2 order) via
+  `seedNetPieces(seed)`. `nextPiece(side)` pulls from the seeded stream in online
+  mode, falls back to `randPiece()` (Math.random) in SOLO -- single-player is
+  byte-for-byte unchanged. `netPieces.online` is the gate; `clearNetPieces()` on disconnect.
+- **No AI in online.** Both AI blocks gated with `!s.online`. The tick runs ONLY the
+  LOCAL player's physics (`runP1`/`runP2` = `!online || playerSide===N`); the remote
+  side is positioned purely by network events.
+- **shiftBoundary2P(g, n1, n2)** -- pure helper EXTRACTED from the tick (boundary
+  move + stack-follow + eviction + lastGain). Shared by the tick AND the online
+  `lk` handler so remote line-clears use identical boundary math.
+- **Protocol** (relayed peer-to-peer by the server, except seed/rematch which it mints):
+  - `mv {side,type,x,rot,y}` -- broadcast on every LOCAL piece change (gravity OR input)
+    via a useEffect keyed on the local piece. Opponent renders it directly.
+  - `lk {side,board,lines,piece,next,nextNext}` -- on LOCAL lock. `board` is the
+    PRE-shift (post-clear) snapshot (`state.lockBoard`); receiver merges the sender's
+    territory cells, runs `shiftBoundary2P` with the sender's `lines`, and ADOPTS the
+    sender's authoritative piece + NEXT queue (robust against eviction stream drift).
+    Driven by `lockStamp`/`lockLines` bumped in the tick.
+  - `go {}` -- LOCAL top-out (driven by `goStamp`). Receiver -> `phase:over, netResult:win`.
+    Sender already set `netResult:lose` in the tick.
+  - `rematch_request` -> server mints new seed -> broadcasts `rematch {seed}` to BOTH.
+- **Boundary** is never sent directly; each phone derives it from lineclear counts
+  (`shiftBoundary2P`). Commutative, so both converge.
+- **Game over UI**: online branch in the `phase==="over"` block shows YOU WIN / YOU LOSE
+  from `netResult`; REMATCH sends `rematch_request`; MENU disconnects.
+- **Demo countdown** disabled in online (`if (s.online ...) return s`).
+- Verified end-to-end via two same-origin iframes against the live PartyKit server:
+  role split, identical seeded opening board, sync held through gravity+locks to a
+  simultaneous game-over, correct WIN/LOSE split, and networked REMATCH reset both.
+- **Known limitation**: under heavy simultaneous boundary eviction the two phones'
+  piece-PRNG stream consumption can drift momentarily; the `lk` snapshot re-syncs
+  territory each lock and the opponent's piece is always adopted authoritatively, so
+  it self-heals. Not observed in testing.
 
 ---
 
