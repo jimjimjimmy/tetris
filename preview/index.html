@@ -1238,6 +1238,12 @@ function writeDriftProbe(snap) {
     ";p1rot=" + (s.p1rot != null ? s.p1rot : "-") +
     ";p2x=" + (s.p2x != null ? s.p2x : "-") +
     ";p2rot=" + (s.p2rot != null ? s.p2rot : "-") +
+    ";p1t=" + (s.p1type || "-") +
+    ";p2t=" + (s.p2type || "-") +
+    ";p1n=" + (s.p1n || "-") +
+    ";p2n=" + (s.p2n || "-") +
+    ";p1c=" + (s.p1c != null ? s.p1c : "-") +
+    ";p2c=" + (s.p2c != null ? s.p2c : "-") +
     ";bdy=" + (s.boundary != null ? s.boundary : "-") +
     ";l1=" + (s.p1Lines != null ? s.p1Lines : "-") +
     ";l2=" + (s.p2Lines != null ? s.p2Lines : "-") +
@@ -2123,6 +2129,10 @@ function TetrisGame2P() {
       phase: state.phase, playerSide: state.playerSide,
       p1x: state.p1.x, p1rot: state.p1.rot,
       p2x: state.p2.x, p2rot: state.p2.rot,
+      p1type: state.p1.type, p2type: state.p2.type,
+      p1n: state.p1Next, p2n: state.p2Next,
+      p1c: state.board.reduce((a,row)=>a+row.filter(v=>v===CELL_P1).length,0),
+      p2c: state.board.reduce((a,row)=>a+row.filter(v=>v===CELL_P2).length,0),
       boundary: state.boundary, p1Lines: state.p1Lines, p2Lines: state.p2Lines,
       showSettings: showSettings, level: settings.level, paused: state.paused,
       sfxOn: settings.soundFX, hapOn: settings.haptics, vol: settings.volume,
@@ -2274,7 +2284,10 @@ function TetrisGame2P() {
           return s;
         });
       } else if (msg.type === "opponent_left") {
-        setState(s => s.phase === "playing" ? { ...s, opponentLeft: true } : s);
+        // Mark opponent-left during an active match OR on the game-over screen
+        // (so the disconnect overlay covers REMATCH -- prevents rematching into
+        // a ghost game when the opponent quit to MENU).
+        setState(s => (s.phase === "playing" || s.phase === "over") ? { ...s, opponentLeft: true } : s);
       } else if (msg.type === "error") {
         disconnectRoom();
       }
@@ -3126,8 +3139,10 @@ function TetrisGame2P() {
         </div>
       </div>
 
-      {/* OPPONENT DISCONNECTED overlay */}
-      {state.opponentLeft && phase === "playing" && (
+      {/* OPPONENT DISCONNECTED overlay -- shown during play AND on the game-over
+          screen (zIndex 50 sits above the win/lose/draw overlay so it covers
+          REMATCH, preventing a rematch into a ghost game). */}
+      {state.opponentLeft && (phase === "playing" || phase === "over") && (
         <div style={{
           position: "absolute", inset: 0,
           background: "rgba(0,0,0,0.82)",
@@ -3232,7 +3247,7 @@ function TetrisGame2P() {
             </div>
             <div style={{display: "flex", gap: 12}}>
               <div
-                onPointerDown={() => netSend({ type: "rematch_request" })}
+                onPointerDown={() => { if (!state.opponentLeft) netSend({ type: "rematch_request" }); }}
                 onTouchStart={e => e.stopPropagation()}
                 style={{...btnBase, background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.18)"}}
               >REMATCH</div>

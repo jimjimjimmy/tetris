@@ -14,7 +14,7 @@
   Whichever machine (MacFQ or Gandalf) adds a component, updates a file,
   or makes a structural change: update this file before ending the session.
   Both machines depend on this as the single source of truth.
-  Last updated: 2026-06-06 - MacFQ (portrait lock native via Info.plist; UIRequiresFullScreen=YES; suppressMediaSession BGM fix; PartyKit Phase 1 multiplayer on feature/multiplayer branch. APP_COMMIT dd82230.)
+  Last updated: 2026-06-11 - MacFQ (multiplayer QA suite on feature/multiplayer: fixed third-player-reject disconnect false-positive + MENU-leaves-ghost-rematch; server now tracks the 2 real players. APP_COMMIT pending.)
 -->
 
 ## Required reading before building
@@ -705,6 +705,31 @@ Call sites: (1) page load immediately, (2) inside `bgmPlay()` after `.play()` re
 - Verified via two iframes: mirrored hard-drops -> D R A W on both (3/3 games);
   one-sided top-out -> correct LOSE/WIN; clear lead (>grace) -> WIN/LOSE; boundary
   never drifted from 22.
+### Full QA test suite (2026-06-11, two-iframe harness vs live PartyKit)
+All scenarios PASS. Two bugs found and fixed during the run:
+- **Third-player reject false-disconnect (server fix).** The old `onClose`
+  broadcast `opponent_left` to everyone whenever ANY socket closed, so a rejected
+  3rd connection's close told the two real players their opponent had left. Fix:
+  `party/server.ts` now tracks the (up to 2) real players in a `players[]` array;
+  rejected extras are never added, and only a real player's close notifies the
+  opponent. Relay + rematch also target `players` only. Redeployed.
+- **MENU-leaves-ghost-rematch (client fix).** When a player quit to MENU from the
+  game-over screen, the other (on its WIN/LOSE/DRAW screen) never learned -- the
+  `opponent_left` handler only acted when `phase==="playing"`. Tapping REMATCH then
+  stranded them in a game vs a frozen ghost. Fix: `opponent_left` now also fires on
+  `phase==="over"`; the OPPONENT-DISCONNECTED overlay (zIndex 50) renders over the
+  game-over overlay (covering REMATCH); and the online REMATCH handler is guarded to
+  no-op when `state.opponentLeft`.
+- Test-probe additions (TEST_PROBE infra): `p1t/p2t` (active piece types), `p1n/p2n`
+  (next-piece types), `p1c/p2c` (CELL_P1 / CELL_P2 board cell counts) -- used to
+  assert piece-sequence sync and board-snapshot sync across the two clients.
+- Scenarios verified: connection + role split; third-player room_full reject without
+  disturbing players; mid-game disconnect; same-seed identical sequences; shared
+  P1==P2 streams (BY DESIGN -- see Symmetry below, intentionally NOT independent);
+  rematch new seed -> new sequence; P1/P2 move + rotate + hard-drop + board-snapshot
+  sync; boundary shift P1/P2/simultaneous identical on both; all five game-over cases
+  (P1-only, P2-only, both-in-grace DRAW, both-outside-grace WIN/LOSE, mirrored DRAW
+  with boundary static at 22); rematch by either player; MENU graceful.
 - **Known limitation**: under heavy simultaneous boundary eviction the two phones'
   piece-PRNG stream consumption can drift momentarily; the `lk` snapshot re-syncs
   territory each lock and the opponent's piece is always adopted authoritatively, so

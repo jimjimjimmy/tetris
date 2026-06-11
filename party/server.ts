@@ -16,42 +16,53 @@ function makeSeed(): number {
 }
 
 export default class DriftServer implements Party.Server {
+  // Connection ids of the (up to 2) REAL players, in join order. A rejected
+  // third+ connection is never added here, so its later close does NOT trigger
+  // an "opponent_left" to the two players. Stable for the life of an active
+  // match (no hibernation while traffic flows).
+  players: string[] = [];
+
   constructor(readonly room: Party.Room) {}
 
-  onConnect(conn: Party.Connection) {
-    const connections = [...this.room.getConnections()];
-    const count = connections.length;
+  private send(id: string, payload: string) {
+    const c = this.room.getConnection(id);
+    if (c) c.send(payload);
+  }
 
-    // Third+ player: reject immediately.
-    if (count > 2) {
+  onConnect(conn: Party.Connection) {
+    // Third+ player: reject immediately and do NOT register as a player.
+    if (this.players.length >= 2) {
       conn.send(JSON.stringify({ type: "error", message: "room_full" }));
       conn.close();
       return;
     }
 
-    // Assign role based on join order.
-    const role = count === 1 ? "p1" : "p2";
+    // Register and assign role by join order.
+    const role = this.players.length === 0 ? "p1" : "p2";
+    this.players.push(conn.id);
     conn.send(JSON.stringify({ type: "role", role }));
 
     // Second player joined: notify both that match is ready, with a shared seed.
-    if (count === 2) {
+    if (this.players.length === 2) {
       const seed = makeSeed();
-      for (const c of connections) {
-        c.send(JSON.stringify({ type: "ready", seed }));
-      }
+      const payload = JSON.stringify({ type: "ready", seed });
+      for (const id of this.players) this.send(id, payload);
     }
   }
 
   onClose(conn: Party.Connection) {
-    // Notify remaining player that opponent left.
-    for (const c of this.room.getConnections()) {
-      if (c.id !== conn.id) {
-        c.send(JSON.stringify({ type: "opponent_left" }));
-      }
-    }
+    // Only a REAL player's departure notifies the opponent. A rejected extra
+    // connection closing is ignored (it was never a player).
+    if (!this.players.includes(conn.id)) return;
+    this.players = this.players.filter((id) => id !== conn.id);
+    const payload = JSON.stringify({ type: "opponent_left" });
+    for (const id of this.players) this.send(id, payload);
   }
 
   onMessage(message: string, sender: Party.Connection) {
+    // Ignore traffic from non-players (shouldn't happen -- they're closed).
+    if (!this.players.includes(sender.id)) return;
+
     // Rematch: a player requests a fresh match. The SERVER mints a new shared
     // seed and broadcasts it to BOTH players (including the requester) so both
     // boards reset to the same new piece sequence.
@@ -61,17 +72,13 @@ export default class DriftServer implements Party.Server {
     if (parsed && parsed.type === "rematch_request") {
       const seed = makeSeed();
       const payload = JSON.stringify({ type: "rematch", seed });
-      for (const c of this.room.getConnections()) {
-        c.send(payload);
-      }
+      for (const id of this.players) this.send(id, payload);
       return;
     }
 
-    // All other messages: relay to the other player only.
-    for (const conn of this.room.getConnections()) {
-      if (conn.id !== sender.id) {
-        conn.send(message);
-      }
+    // All other messages: relay to the OTHER player only.
+    for (const id of this.players) {
+      if (id !== sender.id) this.send(id, message);
     }
   }
 }
