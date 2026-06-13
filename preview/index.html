@@ -318,6 +318,19 @@ const SHAPES = {
   ],
 };
 
+// Rotation wall-kick offsets [dx, dy], tried in order until one lands valid.
+// Horizontal kicks come first so the existing feel for 2-3 wide pieces is
+// unchanged. Vertical kicks (and diagonals) follow so a 4-tall I-piece near
+// the floor / ceiling / boundary -- where a centered rotation would push it
+// out of bounds and NO horizontal kick can help -- still rotates instead of
+// silently doing nothing. dy is symmetric so it works for both P1 (floats up,
+// spawns on the floor) and P2 (falls down, spawns on the ceiling).
+const ROT_KICKS = [
+  [0, 0], [1, 0], [-1, 0], [2, 0], [-2, 0],
+  [0, -1], [0, 1], [0, -2], [0, 2],
+  [1, -1], [-1, -1], [1, 1], [-1, 1],
+];
+
 const PIECE_COLOR = "#B1B2B3";
 
 const CELL_EMPTY = 0;
@@ -1735,14 +1748,14 @@ function TetrisGame2P() {
       };
       if (action === "tap") {
         const nr = (p1.rot + 1) % 4;
-        // Basic wall kick: try centered, then +1, then -1. Lets the
-        // player rotate even when flush against a wall or against
-        // another piece. No full SRS table -- just the single-cell
-        // escape attempt. First-valid wins.
-        for (const dx of [0, 1, -1, 2, -2]) {
-          if (isValid2P(getCells(p1.type, nr, p1.x + dx, p1.y), board, boundary, 1)) {
+        // Wall kick: try the ROT_KICKS offsets (horizontal first, then
+        // vertical/diagonal) until one lands valid. The vertical kicks let a
+        // 4-tall I-piece rotate near the floor/boundary where a centered
+        // rotation would clip out of bounds. First-valid wins.
+        for (const [dx, dy] of ROT_KICKS) {
+          if (isValid2P(getCells(p1.type, nr, p1.x + dx, p1.y + dy), board, boundary, 1)) {
             haptic.light();
-            return { ...s, p1: { ...p1, rot: nr, x: p1.x + dx, ...lockReset(p1) } };
+            return { ...s, p1: { ...p1, rot: nr, x: p1.x + dx, y: p1.y + dy, ...lockReset(p1) } };
           }
         }
       } else if (action === "left") {
@@ -1800,11 +1813,12 @@ function TetrisGame2P() {
       };
       if (action === "tap") {
         const nr = (p2.rot + 1) % 4;
-        // Basic wall kick (mirror of P1): try centered, then +1, then -1.
-        for (const dx of [0, 1, -1, 2, -2]) {
-          if (isValid2P(getCells(p2.type, nr, p2.x + dx, p2.y), board, boundary, 2)) {
+        // Wall kick (mirror of P1): ROT_KICKS, horizontal first then
+        // vertical/diagonal so a 4-tall I-piece rotates near the ceiling/boundary.
+        for (const [dx, dy] of ROT_KICKS) {
+          if (isValid2P(getCells(p2.type, nr, p2.x + dx, p2.y + dy), board, boundary, 2)) {
             haptic.light();
-            return { ...s, p2: { ...p2, rot: nr, x: p2.x + dx, ...lockReset(p2) } };
+            return { ...s, p2: { ...p2, rot: nr, x: p2.x + dx, y: p2.y + dy, ...lockReset(p2) } };
           }
         }
       } else if (action === "left") {

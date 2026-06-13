@@ -14,7 +14,7 @@
   Whichever machine (MacFQ or Gandalf) adds a component, updates a file,
   or makes a structural change: update this file before ending the session.
   Both machines depend on this as the single source of truth.
-  Last updated: 2026-06-11 - MacFQ (multiplayer QA suite on feature/multiplayer: fixed third-player-reject disconnect false-positive + MENU-leaves-ghost-rematch; server now tracks the 2 real players. APP_COMMIT pending.)
+  Last updated: 2026-06-11 - MacFQ (I-piece floor-rotation fix: ROT_KICKS adds vertical/diagonal wall-kicks so a 4-tall I rotates near the floor/ceiling/boundary instead of silently failing. Also: multiplayer QA suite fixes (3rd-player reject + MENU ghost-rematch). feature/multiplayer.)
 -->
 
 ## Required reading before building
@@ -430,9 +430,17 @@ The top line is the truth (that is what is on GitHub). If git ever prints
     sites switched from x:3 literal to spawnX(type). Always false
     before push.
   - Line clear flash + wall kicks (4a2080c, closes #3 + #4):
-    Wall kicks: applyP1/applyP2 'tap' tries [0, +1, -1] x-offsets on
-    rotation; first valid (rot, x) wins. Updates both rot and x in
-    the same state change.
+    Wall kicks: applyP1/applyP2 'tap' tries offsets on rotation;
+    first valid wins. Updates rot + x (+ y) in the same state change.
+    NOTE (later fix): kicks now come from the module-level ROT_KICKS
+    table [[dx,dy],...] = horizontal first ([0,0],[+-1,0],[+-2,0]) then
+    vertical ([0,+-1],[0,+-2]) then diagonal. The vertical kicks fix the
+    I-piece (1x4): a centered rot near the floor/ceiling/boundary clips
+    out of bounds and NO horizontal kick can recover, so taps used to
+    silently do nothing. dy is symmetric (works for P1 spawn-on-floor and
+    P2 spawn-on-ceiling). Rotation now also adjusts y by the kick's dy.
+    (AI rotation in the tick still does a single centered rot, no kicks --
+    it only targets reachable placements, so unaffected.)
     Line clear flash: new state.clearAnim shape {rows: number[],
     ts: ms} | null. Tick scans for full rows BEFORE clearP*_2P
     mutates the board (per-side: P1 territory r>=boundary, P2
