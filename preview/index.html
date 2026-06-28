@@ -3244,6 +3244,12 @@ function TetrisGame2P() {
             fontFamily:"'Inter',sans-serif",color:"#fff",overflow:"hidden",
           }}>
             <div style={dg}/>
+            <div style={{position:"absolute",inset:0,pointerEvents:"none",
+              backgroundImage:
+                "radial-gradient(ellipse 663px 663px at 50% 211px, rgba(17,18,19,0.5) 0%, rgba(17,18,19,0) 100%)," +
+                "radial-gradient(ellipse 496px 496px at 50% 437px, rgba(17,18,19,0.5) 0%, rgba(17,18,19,0) 100%)",
+              backgroundColor:"rgba(0,0,0,0.3)",
+            }}/>
             {/* "Connection" label at 419px */}
             <div style={{
               position:"absolute",left:0,right:0,top:419,
@@ -3257,11 +3263,11 @@ function TetrisGame2P() {
               display:"flex",gap:16,alignItems:"center",justifyContent:"center",
               textTransform:"uppercase",
             }}>
-              {[0.1,0.2,0.3].map((o,i)=><span key={"dl"+i} style={{fontSize:12,letterSpacing:"2.4px",opacity:o}}>-</span>)}
-              <span style={{fontSize:16,letterSpacing:"3.2px",opacity:0.2}}>&rarr;</span>
-              <span style={{fontSize:16,fontWeight:500,letterSpacing:"8px",opacity:0.5}}>Lost</span>
-              <span style={{fontSize:16,letterSpacing:"3.2px",opacity:0.2}}>&larr;</span>
-              {[0.3,0.2,0.1].map((o,i)=><span key={"dr"+i} style={{fontSize:12,letterSpacing:"2.4px",opacity:o}}>-</span>)}
+              {[0.1,0.2,0.3].map((o,i)=><span key={"dl"+i} style={{fontWeight:400,fontSize:12,letterSpacing:"2.4px",opacity:o}}>-</span>)}
+              <span style={{fontWeight:400,fontSize:16,letterSpacing:"3.2px",opacity:0.2}}>&rarr;</span>
+              <span style={{fontSize:16,fontWeight:500,letterSpacing:"8px",marginRight:"-8px",opacity:0.5}}>Lost</span>
+              <span style={{fontWeight:400,fontSize:16,letterSpacing:"3.2px",opacity:0.2}}>&larr;</span>
+              {[0.3,0.2,0.1].map((o,i)=><span key={"dr"+i} style={{fontWeight:400,fontSize:12,letterSpacing:"2.4px",opacity:o}}>-</span>)}
             </div>
             {/* MENU at 599px */}
             <div style={{position:"absolute",left:0,right:0,top:599,display:"flex",justifyContent:"center"}}>
@@ -3290,17 +3296,23 @@ function TetrisGame2P() {
             fontFamily:"'Inter',sans-serif",color:"#fff",overflow:"hidden",
           }}>
             <div style={dg}/>
+            <div style={{position:"absolute",inset:0,pointerEvents:"none",
+              backgroundImage:
+                "radial-gradient(ellipse 663px 663px at 50% 211px, rgba(17,18,19,0.5) 0%, rgba(17,18,19,0) 100%)," +
+                "radial-gradient(ellipse 496px 496px at 50% 437px, rgba(17,18,19,0.5) 0%, rgba(17,18,19,0) 100%)",
+              backgroundColor:"rgba(0,0,0,0.3)",
+            }}/>
             {/* "→ Paused ←" decorative row at 448px */}
             <div style={{
               position:"absolute",left:0,right:0,top:448,
               display:"flex",gap:16,alignItems:"center",justifyContent:"center",
               textTransform:"uppercase",
             }}>
-              {[0.1,0.2,0.3].map((o,i)=><span key={"dl"+i} style={{fontSize:12,letterSpacing:"2.4px",opacity:o}}>-</span>)}
-              <span style={{fontSize:16,letterSpacing:"3.2px",opacity:0.2}}>&rarr;</span>
-              <span style={{fontSize:24,fontWeight:500,letterSpacing:"12px",opacity:0.5}}>Paused</span>
-              <span style={{fontSize:16,letterSpacing:"3.2px",opacity:0.2}}>&larr;</span>
-              {[0.3,0.2,0.1].map((o,i)=><span key={"dr"+i} style={{fontSize:12,letterSpacing:"2.4px",opacity:o}}>-</span>)}
+              {[0.1,0.2,0.3].map((o,i)=><span key={"dl"+i} style={{fontWeight:400,fontSize:12,letterSpacing:"2.4px",opacity:o}}>-</span>)}
+              <span style={{fontWeight:400,fontSize:16,letterSpacing:"3.2px",opacity:0.2}}>&rarr;</span>
+              <span style={{fontSize:24,fontWeight:500,letterSpacing:"12px",marginRight:"-12px",opacity:0.5}}>Paused</span>
+              <span style={{fontWeight:400,fontSize:16,letterSpacing:"3.2px",opacity:0.2}}>&larr;</span>
+              {[0.3,0.2,0.1].map((o,i)=><span key={"dr"+i} style={{fontWeight:400,fontSize:12,letterSpacing:"2.4px",opacity:o}}>-</span>)}
             </div>
             {/* Best of 3 + pips at 496px */}
             <div style={{
@@ -3308,7 +3320,7 @@ function TetrisGame2P() {
               display:"flex",flexDirection:"column",alignItems:"center",gap:12,
             }}>
               <span style={{fontSize:12,fontWeight:600,letterSpacing:"6px",opacity:0.3,textTransform:"uppercase"}}>Best of 3</span>
-              <div style={{display:"flex",gap:16,fontSize:10,letterSpacing:"10px"}}>
+              <div style={{display:"flex",gap:16,fontSize:10,fontWeight:500,letterSpacing:"10px"}}>
                 {[...Array(3)].map((_,i)=>{
                   if(i<p1Wins) return <span key={i} style={{color:"#990000"}}>&#9679;</span>;
                   if(i<p1Wins+p2Wins) return <span key={i} style={{color:"#339900"}}>&#9679;</span>;
@@ -3375,6 +3387,13 @@ function TetrisGame2P() {
             "linear-gradient(90deg,rgba(49,50,51,0.3) 1px,transparent 1px)",
           backgroundSize:"20px 20px",
         };
+        const vignette = {
+          position:"absolute",inset:0,pointerEvents:"none",
+          backgroundImage:
+            "radial-gradient(ellipse 663px 663px at 50% 211px, rgba(17,18,19,0.5) 0%, rgba(17,18,19,0) 100%)," +
+            "radial-gradient(ellipse 496px 496px at 50% 437px, rgba(17,18,19,0.5) 0%, rgba(17,18,19,0) 100%)",
+          backgroundColor:"rgba(0,0,0,0.3)",
+        };
 
         // Shared result-row renderer: - - - → TEXT ← - - -
         const ResultRow = ({text, color, arrowOp=1, textOp=1, size=24, tracking=24}) => (
@@ -3382,17 +3401,17 @@ function TetrisGame2P() {
             display:"flex",gap:16,alignItems:"center",justifyContent:"center",
             color:"#fff",textTransform:"uppercase",
           }}>
-            {[0.1,0.2,0.3].map((o,i)=><span key={"dl"+i} style={{fontSize:12,letterSpacing:"2.4px",opacity:o}}>-</span>)}
-            <span style={{fontSize:16,letterSpacing:"3.2px",opacity:arrowOp}}>&rarr;</span>
-            <span style={{fontSize:size,fontWeight:500,letterSpacing:tracking+"px",color,opacity:textOp}}>{text}</span>
-            <span style={{fontSize:16,letterSpacing:"3.2px",opacity:arrowOp}}>&larr;</span>
-            {[0.3,0.2,0.1].map((o,i)=><span key={"dr"+i} style={{fontSize:12,letterSpacing:"2.4px",opacity:o}}>-</span>)}
+            {[0.1,0.2,0.3].map((o,i)=><span key={"dl"+i} style={{fontWeight:400,fontSize:12,letterSpacing:"2.4px",opacity:o}}>-</span>)}
+            <span style={{fontWeight:400,fontSize:16,letterSpacing:"3.2px",opacity:arrowOp}}>&rarr;</span>
+            <span style={{fontSize:size,fontWeight:500,letterSpacing:tracking+"px",marginRight:"-"+tracking+"px",color,opacity:textOp}}>{text}</span>
+            <span style={{fontWeight:400,fontSize:16,letterSpacing:"3.2px",opacity:arrowOp}}>&larr;</span>
+            {[0.3,0.2,0.1].map((o,i)=><span key={"dr"+i} style={{fontWeight:400,fontSize:12,letterSpacing:"2.4px",opacity:o}}>-</span>)}
           </div>
         );
 
         // Shared pips: p1 red dots, p2 green dots, rest empty
         const Pips = ({p1, p2}) => (
-          <div style={{display:"flex",gap:16,fontSize:10,letterSpacing:"10px"}}>
+          <div style={{display:"flex",gap:16,fontSize:10,fontWeight:500,letterSpacing:"10px"}}>
             {[...Array(3)].map((_,i)=>{
               if(i<p1) return <span key={i} style={{color:"#990000"}}>&#9679;</span>;
               if(i<p1+p2) return <span key={i} style={{color:"#339900"}}>&#9679;</span>;
@@ -3409,6 +3428,7 @@ function TetrisGame2P() {
             animation:"fadeIn 0.35s ease-out both",
           }}>
             <div style={dg}/>
+            <div style={vignette}/>
             {/* "GAME OVER" label (set-over only) */}
             {gameOverLabel && (
               <div style={{
