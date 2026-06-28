@@ -673,6 +673,30 @@ function CompactNext({ type, color = NEXT_PIECE_COLOR }) {
 // on the wrapper to honor the design system's "opacity-30" pattern.
 // ============================================================
 
+function BgVignette() {
+  return (
+    <svg width="402" height="874" viewBox="0 0 402 874" fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      style={{position:"absolute",inset:0,pointerEvents:"none",width:"100%",height:"100%"}}>
+      <rect opacity="0.5" y="0.5" width="402" height="874" fill="url(#bv_g0)"/>
+      <rect opacity="0.5" y="0.5" width="402" height="874" fill="url(#bv_g1)"/>
+      <rect opacity="0.3" y="0.5" width="401" height="874" fill="black"/>
+      <defs>
+        <radialGradient id="bv_g0" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse"
+          gradientTransform="translate(201 211.391) rotate(90) scale(663.109 663.109)">
+          <stop stopColor="#111213"/>
+          <stop offset="1" stopColor="#111213" stopOpacity="0"/>
+        </radialGradient>
+        <radialGradient id="bv_g1" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse"
+          gradientTransform="translate(201 437.5) rotate(90) scale(496 496)">
+          <stop stopColor="#111213"/>
+          <stop offset="1" stopColor="#111213" stopOpacity="0"/>
+        </radialGradient>
+      </defs>
+    </svg>
+  );
+}
+
 function InfoIcon({ size = ICON_SIZE }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -2343,6 +2367,7 @@ function TetrisGame2P() {
         color: "#fff",
       }}>
         <div style={driftGrid} />
+        <BgVignette/>
 
         {/* 4-letter code display + label, top 254px */}
         <div style={{
@@ -2495,6 +2520,7 @@ function TetrisGame2P() {
           color: "#fff",
         }}>
           <div style={driftGrid} />
+          <BgVignette/>
           {/* DRIFT title - vertically centered minus 37px offset */}
           <div style={{
             position:"absolute", left:0, right:0,
@@ -2574,6 +2600,7 @@ function TetrisGame2P() {
         color: "#fff",
       }}>
         <div style={driftGrid} />
+        <BgVignette/>
         {/* DRIFT title */}
         <div style={{
           position:"absolute", left:0, right:0,
@@ -3254,12 +3281,7 @@ function TetrisGame2P() {
             fontFamily:"'Inter',sans-serif",color:"#fff",overflow:"hidden",
           }}>
             <div style={dg}/>
-            <div style={{position:"absolute",inset:0,pointerEvents:"none",
-              backgroundImage:
-                "radial-gradient(ellipse 663px 663px at 50% 211px, rgba(17,18,19,0.5) 0%, rgba(17,18,19,0) 100%)," +
-                "radial-gradient(ellipse 496px 496px at 50% 437px, rgba(17,18,19,0.5) 0%, rgba(17,18,19,0) 100%)",
-              backgroundColor:"rgba(0,0,0,0.3)",
-            }}/>
+            <BgVignette/>
             {/* "Connection" label at 419px */}
             <div style={{
               position:"absolute",left:0,right:0,top:419,
@@ -3306,12 +3328,7 @@ function TetrisGame2P() {
             fontFamily:"'Inter',sans-serif",color:"#fff",overflow:"hidden",
           }}>
             <div style={dg}/>
-            <div style={{position:"absolute",inset:0,pointerEvents:"none",
-              backgroundImage:
-                "radial-gradient(ellipse 663px 663px at 50% 211px, rgba(17,18,19,0.5) 0%, rgba(17,18,19,0) 100%)," +
-                "radial-gradient(ellipse 496px 496px at 50% 437px, rgba(17,18,19,0.5) 0%, rgba(17,18,19,0) 100%)",
-              backgroundColor:"rgba(0,0,0,0.3)",
-            }}/>
+            <BgVignette/>
             {/* "→ Paused ←" decorative row at 448px */}
             <div style={{
               position:"absolute",left:0,right:0,top:448,
@@ -3397,13 +3414,6 @@ function TetrisGame2P() {
             "linear-gradient(90deg,rgba(49,50,51,0.3) 1px,transparent 1px)",
           backgroundSize:"20px 20px",
         };
-        const vignette = {
-          position:"absolute",inset:0,pointerEvents:"none",
-          backgroundImage:
-            "radial-gradient(ellipse 663px 663px at 50% 211px, rgba(17,18,19,0.5) 0%, rgba(17,18,19,0) 100%)," +
-            "radial-gradient(ellipse 496px 496px at 50% 437px, rgba(17,18,19,0.5) 0%, rgba(17,18,19,0) 100%)",
-          backgroundColor:"rgba(0,0,0,0.3)",
-        };
 
         // Shared result-row renderer: - - - → TEXT ← - - -
         const ResultRow = ({text, color, arrowOp=1, textOp=1, size=24, tracking=24}) => (
@@ -3438,7 +3448,7 @@ function TetrisGame2P() {
             animation:"fadeIn 0.35s ease-out both",
           }}>
             <div style={dg}/>
-            <div style={vignette}/>
+            <BgVignette/>
             {/* "GAME OVER" label (set-over only) */}
             {gameOverLabel && (
               <div style={{
