@@ -59,6 +59,7 @@
       overflow: hidden;
     }
     @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes driftIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
   </style>
 </head>
 <body>
@@ -2484,13 +2485,14 @@ function TetrisGame2P() {
       // Design: Figma 269:7487
       const myCode = generatedCodeRef.current;
       return (
-        <div style={{
+        <div key={startTab} style={{
           width: FRAME_W, height: GAME_2P_H,
           background: "#212223",
           position: "relative", overflow: "hidden",
           fontFamily: "'Inter', sans-serif",
           userSelect: "none", WebkitUserSelect: "none",
           color: "#fff",
+          animation: "driftIn 0.25s ease forwards",
         }}>
           <div style={driftGrid} />
           {/* DRIFT title - vertically centered minus 37px offset */}
@@ -2559,13 +2561,14 @@ function TetrisGame2P() {
 
     // SINGLE TAB (default) - Design: Figma 247:5857
     return (
-      <div style={{
+      <div key={startTab} style={{
         width: FRAME_W, height: GAME_2P_H,
         background: "#212223",
         position: "relative", overflow: "hidden",
         fontFamily: "'Inter', sans-serif",
         userSelect: "none", WebkitUserSelect: "none",
         color: "#fff",
+        animation: "driftIn 0.25s ease forwards",
       }}>
         <div style={driftGrid} />
         {/* DRIFT title */}
