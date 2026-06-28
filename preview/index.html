@@ -1283,6 +1283,7 @@ function TetrisGame2P() {
   const generatedCodeRef = React.useRef(makeRoomCode());
   // Online: text the user typed into the "join with code" input.
   const [joinCode, setJoinCode] = React.useState("");
+  const [startTab, setStartTab] = React.useState("single"); // "single" | "2players"
   // Online: live WebSocket connection (not state -- no re-renders on ws events).
   const wsRef = React.useRef(null);
   // Online: synchronous mirror of the assigned role for use inside ws handlers.
@@ -2319,121 +2320,114 @@ function TetrisGame2P() {
     };
   };
 
-  // Online connection screen -- shown while waiting for an opponent.
+  // Online = "Enter Code" screen -- join with a 4-letter code.
+  // Design: Figma 269:7678 / 269:9127 / 269:9328
   if (phase === "online") {
-    const myCode = generatedCodeRef.current;
     const isWaiting = state.onlineStatus === "waiting";
-    const statusText = isWaiting ? "Waiting for opponent..." : "Opponent connected!";
+    const letters = joinCode.padEnd(4, " ").split(""); // always 4 slots
+    const driftGrid = {
+      position:"absolute", inset:0, pointerEvents:"none",
+      backgroundImage:
+        "linear-gradient(rgba(49,50,51,0.3) 1px,transparent 1px)," +
+        "linear-gradient(90deg,rgba(49,50,51,0.3) 1px,transparent 1px)",
+      backgroundSize:"20px 20px",
+    };
     return (
       <div style={{
         width: FRAME_W, height: GAME_2P_H,
-        background: "#0a0a0a",
-        position: "relative",
-        overflow: "hidden",
+        background: "#212223",
+        position: "relative", overflow: "hidden",
         fontFamily: "'Inter', sans-serif",
-        userSelect: "none",
-        WebkitUserSelect: "none",
+        userSelect: "none", WebkitUserSelect: "none",
         color: "#fff",
-        display: "flex", flexDirection: "column",
-        alignItems: "center", justifyContent: "center",
-        gap: 0,
-        paddingTop: "env(safe-area-inset-top)",
-        paddingBottom: "max(20px, env(safe-area-inset-bottom))",
       }}>
-        {/* Grid background */}
+        <div style={driftGrid} />
+
+        {/* 4-letter code display + label, top 254px */}
         <div style={{
-          position: "absolute", inset: 0, pointerEvents: "none",
-          backgroundImage:
-            "linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), " +
-            "linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)",
-          backgroundSize: "20px 20px",
-        }} />
-
-        {/* Back button */}
-        <div
-          onPointerDown={() => { disconnectRoom(); setState(s => ({...s, phase: "start"})); }}
-          onTouchStart={e => e.stopPropagation()}
-          style={{
-            position: "absolute", top: "calc(24px + env(safe-area-inset-top))", left: 24,
-            fontFamily: "monospace", fontSize: 11, fontWeight: 600,
-            letterSpacing: 3, color: "rgba(255,255,255,0.4)",
-            cursor: "pointer", textTransform: "uppercase",
-          }}
-        >[ back ]</div>
-
-        {/* Title */}
-        <div style={{fontFamily:"monospace", fontSize:13, fontWeight:600, letterSpacing:6, color:"rgba(255,255,255,0.5)", textTransform:"uppercase", marginBottom:48}}>
-          O N L I N E
-        </div>
-
-        {/* Your code block */}
-        <div style={{textAlign:"center", marginBottom:40}}>
-          <div style={{fontFamily:"monospace", fontSize:10, fontWeight:600, letterSpacing:4, color:"rgba(255,255,255,0.35)", textTransform:"uppercase", marginBottom:16}}>
-            your code
+          position:"absolute", left:0, right:0, top:254,
+          display:"flex", flexDirection:"column", alignItems:"center", gap:16,
+        }}>
+          {/* Letter slots */}
+          <div style={{display:"flex", gap:8, alignItems:"center", justifyContent:"center"}}>
+            {letters.map((ch, i) => (
+              <div key={i} style={{
+                width:80, borderBottom:"1px solid #616263",
+                display:"flex", flexDirection:"column",
+                alignItems:"center", justifyContent:"center",
+              }}>
+                <span style={{
+                  fontSize:80, fontWeight:100, letterSpacing:"40px",
+                  color:"#fff", textTransform:"uppercase",
+                  lineHeight:1, display:"block",
+                  width:"100%", textAlign:"center",
+                }}>{ch.trim()}</span>
+              </div>
+            ))}
           </div>
-          <div style={{
-            fontFamily:"monospace", fontSize:52, fontWeight:700, letterSpacing:12,
-            color:"#fff",
-            padding:"16px 28px",
-            border:"1px solid rgba(255,255,255,0.12)",
-          }}>
-            {myCode}
-          </div>
-          <div style={{fontFamily:"monospace", fontSize:10, fontWeight:500, letterSpacing:3, color:"rgba(255,255,255,0.25)", textTransform:"uppercase", marginTop:12}}>
-            share with opponent
-          </div>
-        </div>
-
-        {/* Divider */}
-        <div style={{width:200, height:1, background:"rgba(255,255,255,0.08)", marginBottom:32}} />
-
-        {/* Join with a different code */}
-        <div style={{textAlign:"center", marginBottom:32}}>
-          <div style={{fontFamily:"monospace", fontSize:10, fontWeight:600, letterSpacing:4, color:"rgba(255,255,255,0.35)", textTransform:"uppercase", marginBottom:12}}>
-            or join with code
-          </div>
+          {/* Hidden input to capture keyboard */}
           <input
             type="text"
             maxLength={4}
-            placeholder="XXXX"
+            autoCapitalize="characters"
             value={joinCode}
             onChange={ev => setJoinCode(ev.target.value.toUpperCase().replace(/[^A-Z]/g,""))}
             onTouchStart={e => e.stopPropagation()}
             style={{
-              fontFamily:"monospace", fontSize:28, fontWeight:700, letterSpacing:10,
-              background:"transparent", border:"none",
-              borderBottom:"1px solid rgba(255,255,255,0.2)",
-              color:"#fff", textAlign:"center",
-              width:160, outline:"none", padding:"8px 0",
+              position:"absolute", opacity:0, width:1, height:1, top:0, left:0,
+              pointerEvents:"none",
             }}
+            id="join-code-input"
           />
+          {/* "Join with Code" label */}
+          <span style={{
+            fontSize:10, letterSpacing:"5px", fontWeight:400,
+            opacity:0.5, textTransform:"uppercase", color:"#fff",
+          }}>Join with Code</span>
         </div>
 
-        {/* Connect button */}
+        {/* Tap area to focus input */}
         <div
-          onPointerDown={() => {
-            const code = joinCode.trim() || myCode;
-            connectToRoom(code);
-          }}
+          onPointerDown={() => { document.getElementById("join-code-input") && document.getElementById("join-code-input").focus(); }}
+          onTouchStart={e => { e.stopPropagation(); document.getElementById("join-code-input") && document.getElementById("join-code-input").focus(); }}
+          style={{position:"absolute", left:0, right:0, top:200, height:220, cursor:"text"}}
+        />
+
+        {/* CONNECT button at 435px -- only when code is full */}
+        {joinCode.length === 4 && (
+          <div
+            onPointerDown={() => connectToRoom(joinCode)}
+            onTouchStart={e => e.stopPropagation()}
+            style={{
+              position:"absolute", left:0, right:0, top:435,
+              display:"flex", justifyContent:"center",
+              fontSize:12, fontWeight:800, letterSpacing:"6px",
+              color:"#fff", textTransform:"uppercase", cursor:"pointer",
+            }}
+          >Connect</div>
+        )}
+
+        {/* Waiting status at 522px */}
+        {isWaiting && (
+          <div style={{
+            position:"absolute", left:0, right:0, top:522,
+            display:"flex", justifyContent:"center",
+            fontSize:10, letterSpacing:"3px", fontWeight:400,
+            color:"rgba(255,255,255,0.5)", textTransform:"uppercase",
+          }}>Waiting for opponent...</div>
+        )}
+
+        {/* Back link */}
+        <div
+          onPointerDown={() => { disconnectRoom(); setJoinCode(""); setState(s => ({...s, phase:"start"})); setStartTab("2players"); }}
           onTouchStart={e => e.stopPropagation()}
           style={{
-            fontFamily:"monospace", fontSize:14, fontWeight:600, letterSpacing:4,
-            color:"rgba(255,255,255,0.85)",
-            padding:"14px 32px",
-            border:"1px solid rgba(255,255,255,0.2)",
-            cursor:"pointer", textTransform:"uppercase", marginBottom:36,
+            position:"absolute", bottom:40, left:0, right:0,
+            display:"flex", justifyContent:"center",
+            fontSize:10, letterSpacing:"4px", fontWeight:400,
+            color:"rgba(255,255,255,0.3)", textTransform:"uppercase", cursor:"pointer",
           }}
-        >connect</div>
-
-        {/* Status */}
-        <div style={{
-          fontFamily:"monospace", fontSize:11, fontWeight:500, letterSpacing:3,
-          color: isWaiting ? "rgba(255,255,255,0.4)" : "#2fff00",
-          textTransform:"uppercase",
-          minHeight:20,
-        }}>
-          {state.onlineStatus !== "idle" ? statusText : ""}
-        </div>
+        >back</div>
       </div>
     );
   }
@@ -2442,175 +2436,257 @@ function TetrisGame2P() {
   // Level selector moved to Settings (gear icon). P1/P2 buttons still
   // start the game immediately. Settings overlay shared via showSettings state.
   if (phase === "start") {
+    // Shared grid background style
+    const driftGrid = {
+      position:"absolute", inset:0, pointerEvents:"none",
+      backgroundImage:
+        "linear-gradient(rgba(49,50,51,0.3) 1px,transparent 1px)," +
+        "linear-gradient(90deg,rgba(49,50,51,0.3) 1px,transparent 1px)",
+      backgroundSize:"20px 20px",
+    };
+
+    // Mode tab toggle row (SINGLE | 2 PLAYERS)
+    const modeRow = (
+      <div style={{
+        display:"flex", gap:16, alignItems:"center", justifyContent:"center",
+        color:"#fff", textTransform:"uppercase",
+      }}>
+        {[0,1].map(i=><span key={"dl"+i} style={{fontSize:12,letterSpacing:"2.4px",opacity:0.2}}>-</span>)}
+        <span style={{fontSize:16,letterSpacing:"3.2px",opacity:0.2}}>|</span>
+        <span
+          onPointerDown={()=>setStartTab("single")}
+          onTouchStart={e=>e.stopPropagation()}
+          style={{
+            fontSize:12, letterSpacing:"6px",
+            fontWeight: startTab==="single" ? 600 : 400,
+            opacity: startTab==="single" ? 1 : 0.3,
+            cursor:"pointer",
+          }}
+        >Single</span>
+        <span style={{fontSize:16,letterSpacing:"3.2px",opacity:0.2}}>|</span>
+        <span
+          onPointerDown={()=>setStartTab("2players")}
+          onTouchStart={e=>e.stopPropagation()}
+          style={{
+            fontSize:12, letterSpacing:"6px",
+            fontWeight: startTab==="2players" ? 800 : 400,
+            opacity: startTab==="2players" ? 1 : 0.3,
+            cursor:"pointer",
+          }}
+        >2 Players</span>
+        <span style={{fontSize:16,letterSpacing:"3.2px",opacity:0.2}}>|</span>
+        {[0,1].map(i=><span key={"dr"+i} style={{fontSize:12,letterSpacing:"2.4px",opacity:0.2}}>-</span>)}
+      </div>
+    );
+
+    if (startTab === "2players") {
+      // 2 PLAYERS TAB - show room code + join link
+      // Design: Figma 269:7487
+      const myCode = generatedCodeRef.current;
+      return (
+        <div style={{
+          width: FRAME_W, height: GAME_2P_H,
+          background: "#212223",
+          position: "relative", overflow: "hidden",
+          fontFamily: "'Inter', sans-serif",
+          userSelect: "none", WebkitUserSelect: "none",
+          color: "#fff",
+        }}>
+          <div style={driftGrid} />
+          {/* DRIFT title - vertically centered minus 37px offset */}
+          <div style={{
+            position:"absolute", left:0, right:0,
+            top:"calc(50% - 37px)",
+            display:"flex", justifyContent:"center",
+          }}>
+            <span style={{
+              fontSize:24, fontWeight:500, letterSpacing:"36px",
+              color:"#f60", textTransform:"uppercase", whiteSpace:"nowrap",
+            }}>drift</span>
+          </div>
+          {/* Mode toggle at 448px */}
+          <div style={{position:"absolute",left:0,right:0,top:448,display:"flex",justifyContent:"center"}}>
+            {modeRow}
+          </div>
+          {/* Code display at 507px */}
+          <div style={{
+            position:"absolute", left:0, right:0, top:507,
+            display:"flex", flexDirection:"column", alignItems:"center", gap:8,
+          }}>
+            <span style={{
+              fontSize:40, fontWeight:300, letterSpacing:"20px",
+              color:"#fff", textTransform:"uppercase",
+            }}>{myCode}</span>
+            <div style={{
+              display:"flex", flexDirection:"column", alignItems:"center",
+              opacity:0.3, fontSize:10, letterSpacing:"3px",
+              fontWeight:600, textTransform:"uppercase",
+            }}>
+              <span>Share your code</span>
+              <span>with opponent</span>
+            </div>
+          </div>
+          {/* OR + JOIN WITH CODE at 611px */}
+          <div style={{
+            position:"absolute", left:0, right:0, top:611,
+            display:"flex", flexDirection:"column", alignItems:"center", gap:24,
+          }}>
+            <span style={{fontSize:10,letterSpacing:"5px",fontWeight:600,opacity:0.3,textTransform:"uppercase"}}>or</span>
+            <span
+              onPointerDown={()=>{ setJoinCode(""); setState(s=>({...s,phase:"online"})); }}
+              onTouchStart={e=>e.stopPropagation()}
+              style={{
+                fontSize:12, letterSpacing:"3.6px", fontWeight:400,
+                opacity:0.5, textTransform:"uppercase", cursor:"pointer",
+              }}
+            >Join with Code</span>
+          </div>
+          {/* Version stamp */}
+          <div style={{
+            position:"absolute", left:0, right:0,
+            bottom:"max(20px,env(safe-area-inset-bottom))",
+            display:"flex", justifyContent:"space-between",
+            padding:"0 24px", fontSize:10, fontWeight:500,
+            letterSpacing:2, color:"rgba(255,255,255,0.2)",
+            pointerEvents:"none",
+          }}>
+            <span>{APP_VERSION} &nbsp;•&nbsp; {APP_COMMIT}</span>
+            <span>{relTime(APP_BUILD_DATE)}</span>
+          </div>
+        </div>
+      );
+    }
+
+    // SINGLE TAB (default) - Design: Figma 247:5857
     return (
       <div style={{
         width: FRAME_W, height: GAME_2P_H,
-        background: "#0a0a0a",
-        position: "relative",
-        overflow: "hidden",
+        background: "#212223",
+        position: "relative", overflow: "hidden",
         fontFamily: "'Inter', sans-serif",
-        userSelect: "none",
-        WebkitUserSelect: "none",
+        userSelect: "none", WebkitUserSelect: "none",
         color: "#fff",
       }}>
-        {/* Grid background */}
+        <div style={driftGrid} />
+        {/* DRIFT title */}
         <div style={{
-          position: "absolute", inset: 0,
-          backgroundImage:
-            `linear-gradient(${GRID_LINE_COLOR} 1px, transparent 1px), ` +
-            `linear-gradient(90deg, ${GRID_LINE_COLOR} 1px, transparent 1px)`,
-          backgroundSize: "20px 20px, 20px 20px",
-          backgroundPosition: "0 0, 1px 0",
-          pointerEvents: "none",
-        }} />
-
-        {/* Gear icon -- top-right, same position as in-game */}
-        <div
-          onPointerDown={() => openSettings()}
-          onTouchStart={e => e.stopPropagation()}
-          style={{
-            position: "absolute",
-            left: ICON_GEAR_X, top: `calc(${ICON_GEAR_Y}px + env(safe-area-inset-top))`,
-            width: ICON_SIZE, height: ICON_SIZE,
-            color: "#fff", opacity: CHROME_OPACITY,
-            cursor: "pointer",
-          }}>
-          <GearIcon />
-        </div>
-
-        {/* Centered text stack */}
-        <div style={{
-          position: "absolute", inset: 0,
-          display: "flex", flexDirection: "column",
-          alignItems: "center", justifyContent: "center",
-          gap: 48,
-          paddingTop: "env(safe-area-inset-top)",
-          paddingBottom: "max(20px, env(safe-area-inset-bottom))",
+          position:"absolute", left:0, right:0,
+          top:"calc(50% - 37px)",
+          display:"flex", justifyContent:"center",
         }}>
-          <div style={{
-            fontFamily: "monospace",
-            fontSize: 28, fontWeight: 700,
-            letterSpacing: 10,
-            color: "#fff",
-          }}>D R I F T</div>
-
-          <div style={{
-            fontFamily: "monospace",
-            fontSize: 11, fontWeight: 600,
-            letterSpacing: 4,
-            color: "rgba(255,255,255,0.5)",
-            textTransform: "uppercase",
-          }}>Select your side</div>
-
-          {/* Level indicator -- tapping opens settings scrolled to Game section */}
+          <span style={{
+            fontSize:24, fontWeight:500, letterSpacing:"36px",
+            color:"#f60", textTransform:"uppercase", whiteSpace:"nowrap",
+          }}>drift</span>
+        </div>
+        {/* Mode toggle at 448px */}
+        <div style={{position:"absolute",left:0,right:0,top:448,display:"flex",justifyContent:"center"}}>
+          {modeRow}
+        </div>
+        {/* UP / OR / DN direction arrows at 514px */}
+        <div style={{
+          position:"absolute", left:0, right:0, top:514,
+          display:"flex", gap:24, alignItems:"flex-start", justifyContent:"center",
+        }}>
           <div
-            onPointerDown={() => openSettings("game")}
-            onTouchStart={e => e.stopPropagation()}
+            onPointerDown={selectSide(1)}
+            onTouchStart={e=>e.stopPropagation()}
             style={{
-              fontFamily: "monospace", fontSize: 10, fontWeight: 600,
-              letterSpacing: 4, color: "rgba(255,255,255,0.25)",
-              textTransform: "uppercase",
-              cursor: "pointer",
+              display:"flex", flexDirection:"column", gap:2,
+              alignItems:"center", justifyContent:"center",
+              width:64, height:64, cursor:"pointer",
             }}
-          >Level &nbsp; {settings.level}</div>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: 24, alignItems: "stretch", width: 280 }}>
-            <div
-              onPointerDown={selectSide(1)}
-              onTouchStart={(e) => e.stopPropagation()}
-              style={{
-                fontFamily: "monospace",
-                fontSize: 16, fontWeight: 600,
-                letterSpacing: 2,
-                color: "rgba(255,255,255,0.85)",
-                padding: "16px 20px",
-                textAlign: "center",
-                cursor: "pointer",
-                userSelect: "none",
-              }}
-            >[ P1↑ ]</div>
-
-            <div
-              onPointerDown={selectSide(2)}
-              onTouchStart={(e) => e.stopPropagation()}
-              style={{
-                fontFamily: "monospace",
-                fontSize: 16, fontWeight: 600,
-                letterSpacing: 2,
-                color: "rgba(255,255,255,0.85)",
-                padding: "16px 20px",
-                textAlign: "center",
-                cursor: "pointer",
-                userSelect: "none",
-              }}
-            >[ P2↓ ]</div>
-
-            <div
-              onPointerDown={() => setState(s => ({...s, phase: "online"}))}
-              onTouchStart={(e) => e.stopPropagation()}
-              style={{
-                fontFamily: "monospace",
-                fontSize: 16, fontWeight: 600,
-                letterSpacing: 2,
-                color: "rgba(255,255,255,0.5)",
-                padding: "16px 20px",
-                textAlign: "center",
-                cursor: "pointer",
-                userSelect: "none",
-                borderTop: "1px solid rgba(255,255,255,0.08)",
-                marginTop: 8,
-                paddingTop: 24,
-              }}
-            >[ O N L I N E ]</div>
+          >
+            <span style={{fontSize:24,letterSpacing:"12px",opacity:0.5,fontWeight:300,color:"#fff"}}>↑</span>
+            <span style={{fontSize:10,letterSpacing:"5px",opacity:0.5,fontWeight:600,color:"#fff",textTransform:"uppercase"}}>up</span>
+          </div>
+          <div style={{display:"flex",alignItems:"flex-end",height:64,paddingBottom:10}}>
+            <span style={{fontSize:10,letterSpacing:"5px",opacity:0.3,fontWeight:600,color:"#fff",textTransform:"uppercase"}}>or</span>
+          </div>
+          <div
+            onPointerDown={selectSide(2)}
+            onTouchStart={e=>e.stopPropagation()}
+            style={{
+              display:"flex", flexDirection:"column", gap:2,
+              alignItems:"center", justifyContent:"center",
+              width:64, height:64, cursor:"pointer",
+            }}
+          >
+            <span style={{fontSize:24,letterSpacing:"12px",opacity:0.5,fontWeight:300,color:"#fff"}}>↓</span>
+            <span style={{fontSize:10,letterSpacing:"5px",opacity:0.5,fontWeight:600,color:"#fff",textTransform:"uppercase"}}>Dn</span>
           </div>
         </div>
-
+        {/* DIFFICULTY at 618px */}
+        <div style={{
+          position:"absolute", left:0, right:0, top:618,
+          display:"flex", gap:8, alignItems:"center", justifyContent:"center",
+        }}>
+          <span
+            onPointerDown={()=>openSettings("game")}
+            onTouchStart={e=>e.stopPropagation()}
+            style={{fontSize:10,letterSpacing:"5px",opacity:0.5,color:"#fff",textTransform:"uppercase",cursor:"pointer"}}
+          >Difficulty:</span>
+          <span style={{fontSize:10,letterSpacing:"5px",fontWeight:600,color:"#fff",textTransform:"uppercase"}}>{settings.level}</span>
+        </div>
+        {/* MUSIC at 654px */}
+        <div style={{
+          position:"absolute", left:0, right:0, top:654,
+          display:"flex", gap:8, alignItems:"center", justifyContent:"center",
+        }}>
+          <span style={{fontSize:10,letterSpacing:"5px",opacity:0.5,color:"#fff",textTransform:"uppercase"}}>Music:</span>
+          <span
+            onPointerDown={()=>updateSetting("music",!settings.music)}
+            onTouchStart={e=>e.stopPropagation()}
+            style={{fontSize:12,letterSpacing:"6px",fontWeight:600,color:"#fff",cursor:"pointer"}}
+          >{settings.music ? "✓" : "\xd7"}</span>
+        </div>
+        {/* Info + Gear icons at 754px */}
+        <div style={{
+          position:"absolute", left:0, right:0, top:754,
+          display:"flex", gap:24, alignItems:"center", justifyContent:"center",
+          opacity:0.5,
+        }}>
+          <div style={{color:"#fff",opacity:0.3,cursor:"pointer"}}>
+            <InfoIcon />
+          </div>
+          <div
+            onPointerDown={()=>openSettings()}
+            onTouchStart={e=>e.stopPropagation()}
+            style={{color:"#fff",opacity:0.3,cursor:"pointer"}}
+          >
+            <GearIcon />
+          </div>
+        </div>
         {/* Version stamp */}
         <div style={{
-          position: "absolute",
-          left: 0, right: 0,
-          bottom: `max(20px, env(safe-area-inset-bottom))`,
-          display: "flex", justifyContent: "space-between",
-          padding: "0 24px",
-          fontFamily: "monospace",
-          fontSize: 12, fontWeight: 500,
-          letterSpacing: 2,
-          color: "rgba(255,255,255,0.35)",
-          pointerEvents: "none",
+          position:"absolute", left:0, right:0,
+          bottom:"max(20px,env(safe-area-inset-bottom))",
+          display:"flex", justifyContent:"space-between",
+          padding:"0 24px", fontSize:10, fontWeight:500,
+          letterSpacing:2, color:"rgba(255,255,255,0.2)",
+          pointerEvents:"none",
         }}>
-          <span>{APP_VERSION} &nbsp; • &nbsp; {APP_COMMIT}</span>
+          <span>{APP_VERSION} &nbsp;•&nbsp; {APP_COMMIT}</span>
           <span>{relTime(APP_BUILD_DATE)}</span>
         </div>
-
-        {/* Settings overlay -- shared with in-game, accessible from start screen too */}
+        {/* Settings overlay */}
         {showSettings && (
           <SettingsScreen
             settings={settings}
             initialSection={settingsSection}
-            onUpdate={(key, val) => {
-              updateSetting(key, val);
-              // Level only affects SOLO. In online the tick rate is fixed
-              // (ONLINE_TICK_MS) so both phones stay symmetric.
-              if (key === "level") setState(s => s.online ? s : { ...s, aiLevel: val });
+            onUpdate={(key,val)=>{
+              updateSetting(key,val);
+              if (key==="level") setState(s=>s.online?s:{...s,aiLevel:val});
             }}
             onClose={closeSettings}
           />
         )}
-
-        {/* TEST PROBE (start screen copy) -- the main probe lives in the
-            playing-phase JSX; this duplicate keeps state readable while the
-            start screen is showing (phase=start, level, settings-open). */}
+        {/* TEST PROBE */}
         {TEST_PROBE && (
-          <div
-            ref={(el) => { driftProbeEl = el; }}
-            aria-live="polite"
-            style={{
-              position: "absolute", left: 0, top: 0,
-              width: 1, height: 1, overflow: "hidden",
-              opacity: 0.01, color: "transparent",
-              pointerEvents: "none", fontSize: 1,
-            }}
-          >DRIFT;</div>
+          <div ref={(el)=>{driftProbeEl=el;}} aria-live="polite" style={{
+            position:"absolute",left:0,top:0,width:1,height:1,overflow:"hidden",
+            opacity:0.01,color:"transparent",pointerEvents:"none",fontSize:1,
+          }}>DRIFT;</div>
         )}
       </div>
     );
@@ -3153,49 +3229,109 @@ function TetrisGame2P() {
         </div>
       </div>
 
-      {/* OPPONENT DISCONNECTED overlay -- shown during play AND on the game-over
-          screen (zIndex 50 sits above the win/lose/draw overlay so it covers
-          REMATCH, preventing a rematch into a ghost game). */}
-      {state.opponentLeft && (phase === "playing" || phase === "over") && (
-        <div style={{
-          position: "absolute", inset: 0,
-          background: "rgba(0,0,0,0.82)",
-          display: "flex", flexDirection: "column",
-          alignItems: "center", justifyContent: "center",
-          gap: 20,
-          zIndex: 50,
-        }}>
-          <div style={{fontFamily:"monospace", fontSize:14, fontWeight:600, letterSpacing:4, color:"#fff", textTransform:"uppercase"}}>
-            Opponent disconnected.
+      {/* OPPONENT DISCONNECTED / CONNECTION LOST -- Design: Figma 269:9540 */}
+      {state.opponentLeft && (phase === "playing" || phase === "over") && (() => {
+        const dg = {
+          position:"absolute",inset:0,pointerEvents:"none",
+          backgroundImage:
+            "linear-gradient(rgba(49,50,51,0.3) 1px,transparent 1px)," +
+            "linear-gradient(90deg,rgba(49,50,51,0.3) 1px,transparent 1px)",
+          backgroundSize:"20px 20px",
+        };
+        return (
+          <div style={{
+            position:"absolute",inset:0,background:"#212223",zIndex:50,
+            fontFamily:"'Inter',sans-serif",color:"#fff",overflow:"hidden",
+          }}>
+            <div style={dg}/>
+            {/* "Connection" label at 419px */}
+            <div style={{
+              position:"absolute",left:0,right:0,top:419,
+              display:"flex",justifyContent:"center",
+              fontSize:16,fontWeight:500,letterSpacing:"8px",
+              opacity:0.3,textTransform:"uppercase",
+            }}>Connection</div>
+            {/* "→ Lost ←" decorative row at 448px */}
+            <div style={{
+              position:"absolute",left:0,right:0,top:448,
+              display:"flex",gap:16,alignItems:"center",justifyContent:"center",
+              textTransform:"uppercase",
+            }}>
+              {[0.1,0.2,0.3].map((o,i)=><span key={"dl"+i} style={{fontSize:12,letterSpacing:"2.4px",opacity:o}}>-</span>)}
+              <span style={{fontSize:16,letterSpacing:"3.2px",opacity:0.2}}>&rarr;</span>
+              <span style={{fontSize:16,fontWeight:500,letterSpacing:"8px",opacity:0.5}}>Lost</span>
+              <span style={{fontSize:16,letterSpacing:"3.2px",opacity:0.2}}>&larr;</span>
+              {[0.3,0.2,0.1].map((o,i)=><span key={"dr"+i} style={{fontSize:12,letterSpacing:"2.4px",opacity:o}}>-</span>)}
+            </div>
+            {/* MENU at 599px */}
+            <div style={{position:"absolute",left:0,right:0,top:599,display:"flex",justifyContent:"center"}}>
+              <span
+                onPointerDown={()=>{ disconnectRoom(); setState(s=>({...makeInitState2P()})); }}
+                onTouchStart={e=>e.stopPropagation()}
+                style={{fontSize:12,fontWeight:600,letterSpacing:"6px",color:"#fff",textTransform:"uppercase",cursor:"pointer"}}
+              >Menu</span>
+            </div>
           </div>
-          <div style={{fontFamily:"monospace", fontSize:11, fontWeight:500, letterSpacing:3, color:"rgba(255,255,255,0.45)", textTransform:"uppercase"}}>
-            Waiting...
-          </div>
-          <div
-            onPointerDown={() => { disconnectRoom(); setState(s => ({...makeInitState2P()})); }}
-            onTouchStart={e => e.stopPropagation()}
-            style={{
-              fontFamily:"monospace", fontSize:12, fontWeight:600, letterSpacing:4,
-              color:"rgba(255,255,255,0.7)",
-              border:"1px solid rgba(255,255,255,0.2)",
-              padding:"12px 28px",
-              cursor:"pointer", textTransform:"uppercase", marginTop:8,
-            }}
-          >menu</div>
-        </div>
-      )}
+        );
+      })()}
 
-      {/* PAUSED overlay -- placeholder, simple text */}
-      {paused && !summary && phase === "playing" && (
-        <div style={{
-          position: "absolute", inset: 0,
-          background: "rgba(0,0,0,0.55)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          pointerEvents: "none",
-        }}>
-          <div style={{fontSize: 28, fontWeight: 700, letterSpacing: 8, color: "#fff"}}>PAUSED</div>
-        </div>
-      )}
+      {/* PAUSED screen -- Design: Figma 261:5916 */}
+      {paused && !summary && phase === "playing" && (() => {
+        const dg = {
+          position:"absolute",inset:0,pointerEvents:"none",
+          backgroundImage:
+            "linear-gradient(rgba(49,50,51,0.3) 1px,transparent 1px)," +
+            "linear-gradient(90deg,rgba(49,50,51,0.3) 1px,transparent 1px)",
+          backgroundSize:"20px 20px",
+        };
+        return (
+          <div style={{
+            position:"absolute",inset:0,background:"#212223",zIndex:40,
+            fontFamily:"'Inter',sans-serif",color:"#fff",overflow:"hidden",
+          }}>
+            <div style={dg}/>
+            {/* "→ Paused ←" decorative row at 448px */}
+            <div style={{
+              position:"absolute",left:0,right:0,top:448,
+              display:"flex",gap:16,alignItems:"center",justifyContent:"center",
+              textTransform:"uppercase",
+            }}>
+              {[0.1,0.2,0.3].map((o,i)=><span key={"dl"+i} style={{fontSize:12,letterSpacing:"2.4px",opacity:o}}>-</span>)}
+              <span style={{fontSize:16,letterSpacing:"3.2px",opacity:0.2}}>&rarr;</span>
+              <span style={{fontSize:24,fontWeight:500,letterSpacing:"12px",opacity:0.5}}>Paused</span>
+              <span style={{fontSize:16,letterSpacing:"3.2px",opacity:0.2}}>&larr;</span>
+              {[0.3,0.2,0.1].map((o,i)=><span key={"dr"+i} style={{fontSize:12,letterSpacing:"2.4px",opacity:o}}>-</span>)}
+            </div>
+            {/* Best of 3 + pips at 496px */}
+            <div style={{
+              position:"absolute",left:0,right:0,top:496,
+              display:"flex",flexDirection:"column",alignItems:"center",gap:12,
+            }}>
+              <span style={{fontSize:12,fontWeight:600,letterSpacing:"6px",opacity:0.3,textTransform:"uppercase"}}>Best of 3</span>
+              <div style={{display:"flex",gap:16,fontSize:10,letterSpacing:"10px"}}>
+                {[...Array(3)].map((_,i)=>{
+                  if(i<p1Wins) return <span key={i} style={{color:"#990000"}}>&#9679;</span>;
+                  if(i<p1Wins+p2Wins) return <span key={i} style={{color:"#339900"}}>&#9679;</span>;
+                  return <span key={i} style={{color:"#fff",opacity:0.2}}>&#9675;</span>;
+                })}
+              </div>
+            </div>
+            {/* RESUME at 599px, MENU at 639px */}
+            <div style={{position:"absolute",left:0,right:0,top:599,display:"flex",flexDirection:"column",alignItems:"center",gap:40}}>
+              <span
+                onPointerDown={()=>setState(s=>({...s,paused:false}))}
+                onTouchStart={e=>e.stopPropagation()}
+                style={{fontSize:12,fontWeight:600,letterSpacing:"6px",color:"#fff",textTransform:"uppercase",cursor:"pointer"}}
+              >Resume</span>
+              <span
+                onPointerDown={handleMenu}
+                onTouchStart={e=>e.stopPropagation()}
+                style={{fontSize:12,fontWeight:400,letterSpacing:"6px",color:"rgba(255,255,255,0.3)",textTransform:"uppercase",cursor:"pointer"}}
+              >Menu</span>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* DEMO COMPLETE summary overlay */}
       {summary && (
@@ -3227,145 +3363,134 @@ function TetrisGame2P() {
         </div>
       )}
 
-      {/* Match-over overlay and set-over overlay -- both gated on phase "over".
-          displayP1/displayP2 show the UPDATED tally (win credited instantly
-          so the score on-screen matches the pips). setOver = one player has
-          reached WINS_TO_WIN. Winner text fades in via CSS keyframe fadeIn. */}
-      {phase === "over" && state.online && (() => {
-        // ONLINE game over: this phone shows YOU WIN / YOU LOSE / D R A W based
-        // on netResult (fallback to winner-vs-playerSide). REMATCH asks the
-        // server for a fresh shared seed; MENU disconnects to the start screen.
-        const isDraw = state.netResult === "draw";
-        const won = state.netResult ? state.netResult === "win" : winner === playerSide;
-        const resultText = isDraw ? "D R A W" : (won ? "YOU WIN" : "YOU LOSE");
-        const overlayBase = {
-          position: "absolute", inset: 0,
-          background: "rgba(0,0,0,0.88)",
-          display: "flex", flexDirection: "column",
-          alignItems: "center", justifyContent: "center",
-          animation: "fadeIn 0.35s ease-out both",
+      {/* GAME OVER overlays -- Design: Figma 258:6577 (Win), 267:6222 (Lose),
+          267:6373 (Draw mid-set), 267:6673 (Win set-over), 267:6523 (Draw set-over).
+          Shared layout: full-screen #212223 + grid, result row at 448px,
+          "Best of 3" + pips at 496px, actions at 599px (gap 40px). */}
+      {phase === "over" && (() => {
+        const dg = {
+          position:"absolute",inset:0,pointerEvents:"none",
+          backgroundImage:
+            "linear-gradient(rgba(49,50,51,0.3) 1px,transparent 1px)," +
+            "linear-gradient(90deg,rgba(49,50,51,0.3) 1px,transparent 1px)",
+          backgroundSize:"20px 20px",
         };
-        const btnBase = {
-          padding: "11px 28px", color: "#fff", borderRadius: 2,
-          fontSize: 11, fontWeight: 700, letterSpacing: 3,
-          cursor: "pointer", fontFamily: "monospace",
-        };
-        return (
-          <div style={overlayBase}>
-            <div style={{
-              fontSize: 30, fontWeight: 700, letterSpacing: 7,
-              color: (won || isDraw) ? "#fff" : "rgba(255,255,255,0.55)", marginBottom: 28,
-              animation: "fadeIn 0.5s ease-out both",
-            }}>
-              {resultText}
+
+        // Shared result-row renderer: - - - → TEXT ← - - -
+        const ResultRow = ({text, color, arrowOp=1, textOp=1, size=24, tracking=24}) => (
+          <div style={{
+            display:"flex",gap:16,alignItems:"center",justifyContent:"center",
+            color:"#fff",textTransform:"uppercase",
+          }}>
+            {[0.1,0.2,0.3].map((o,i)=><span key={"dl"+i} style={{fontSize:12,letterSpacing:"2.4px",opacity:o}}>-</span>)}
+            <span style={{fontSize:16,letterSpacing:"3.2px",opacity:arrowOp}}>&rarr;</span>
+            <span style={{fontSize:size,fontWeight:500,letterSpacing:tracking+"px",color,opacity:textOp}}>{text}</span>
+            <span style={{fontSize:16,letterSpacing:"3.2px",opacity:arrowOp}}>&larr;</span>
+            {[0.3,0.2,0.1].map((o,i)=><span key={"dr"+i} style={{fontSize:12,letterSpacing:"2.4px",opacity:o}}>-</span>)}
+          </div>
+        );
+
+        // Shared pips: p1 red dots, p2 green dots, rest empty
+        const Pips = ({p1, p2}) => (
+          <div style={{display:"flex",gap:16,fontSize:10,letterSpacing:"10px"}}>
+            {[...Array(3)].map((_,i)=>{
+              if(i<p1) return <span key={i} style={{color:"#990000"}}>&#9679;</span>;
+              if(i<p1+p2) return <span key={i} style={{color:"#339900"}}>&#9679;</span>;
+              return <span key={i} style={{color:"#fff",opacity:0.2}}>&#9675;</span>;
+            })}
+          </div>
+        );
+
+        // Shared screen wrapper
+        const Screen = ({gameOverLabel, resultRow, p1, p2, primary, onPrimary, secondary, onSecondary}) => (
+          <div style={{
+            position:"absolute",inset:0,background:"#212223",zIndex:40,
+            fontFamily:"'Inter',sans-serif",color:"#fff",overflow:"hidden",
+            animation:"fadeIn 0.35s ease-out both",
+          }}>
+            <div style={dg}/>
+            {/* "GAME OVER" label (set-over only) */}
+            {gameOverLabel && (
+              <div style={{
+                position:"absolute",left:0,right:0,top:419,
+                display:"flex",justifyContent:"center",
+                fontSize:12,fontWeight:600,letterSpacing:"6px",
+                opacity:0.4,textTransform:"uppercase",
+              }}>Game Over</div>
+            )}
+            {/* Result row at 448px */}
+            <div style={{position:"absolute",left:0,right:0,top:448,display:"flex",justifyContent:"center"}}>
+              {resultRow}
             </div>
-            <div style={{display: "flex", gap: 12}}>
-              <div
-                onPointerDown={() => { if (!state.opponentLeft) netSend({ type: "rematch_request" }); }}
-                onTouchStart={e => e.stopPropagation()}
-                style={{...btnBase, background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.18)"}}
-              >REMATCH</div>
-              <div
-                onPointerDown={() => { disconnectRoom(); setState(s => ({...makeInitState2P()})); }}
-                onTouchStart={e => e.stopPropagation()}
-                style={{...btnBase, background: "transparent", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.4)"}}
-              >MENU</div>
+            {/* Best of 3 + pips at 496px */}
+            <div style={{
+              position:"absolute",left:0,right:0,top:496,
+              display:"flex",flexDirection:"column",alignItems:"center",gap:12,
+            }}>
+              <span style={{fontSize:12,fontWeight:600,letterSpacing:"6px",opacity:0.3,textTransform:"uppercase"}}>Best of 3</span>
+              <Pips p1={p1} p2={p2}/>
+            </div>
+            {/* Actions at 599px */}
+            <div style={{
+              position:"absolute",left:0,right:0,top:599,
+              display:"flex",flexDirection:"column",alignItems:"center",gap:40,
+            }}>
+              <span
+                onPointerDown={onPrimary}
+                onTouchStart={e=>e.stopPropagation()}
+                style={{fontSize:12,fontWeight:600,letterSpacing:"6px",color:"#fff",textTransform:"uppercase",cursor:"pointer"}}
+              >{primary}</span>
+              {secondary && (
+                <span
+                  onPointerDown={onSecondary}
+                  onTouchStart={e=>e.stopPropagation()}
+                  style={{fontSize:12,fontWeight:400,letterSpacing:"6px",color:"rgba(255,255,255,0.3)",textTransform:"uppercase",cursor:"pointer"}}
+                >{secondary}</span>
+              )}
             </div>
           </div>
         );
-      })()}
 
-      {phase === "over" && !state.online && (() => {
-        const displayP1 = p1Wins + (winner === 1 ? 1 : 0);
-        const displayP2 = p2Wins + (winner === 2 ? 1 : 0);
-        const setOver   = displayP1 >= WINS_TO_WIN || displayP2 >= WINS_TO_WIN;
-        const setWinner = displayP1 >= WINS_TO_WIN ? 1 : 2;
-
-        const overlayBase = {
-          position: "absolute", inset: 0,
-          background: "rgba(0,0,0,0.88)",
-          display: "flex", flexDirection: "column",
-          alignItems: "center", justifyContent: "center",
-          animation: "fadeIn 0.35s ease-out both",
-        };
-        const btnBase = {
-          padding: "11px 28px",
-          color: "#fff", borderRadius: 2,
-          fontSize: 11, fontWeight: 700, letterSpacing: 3,
-          cursor: "pointer",
-          fontFamily: "monospace",
-        };
-
-        if (!setOver) {
-          // Match over -- set continues. Show score, offer REMATCH or MENU.
+        if (state.online) {
+          const isDraw = state.netResult === "draw";
+          const won    = state.netResult ? state.netResult==="win" : winner===playerSide;
+          const dispP1 = p1Wins + (winner===1?1:0);
+          const dispP2 = p2Wins + (winner===2?1:0);
+          const setOver = dispP1>=WINS_TO_WIN || dispP2>=WINS_TO_WIN;
+          const txt   = isDraw ? "Draw" : (won ? "Win" : "Lose");
+          const col   = isDraw ? "#fff" : (won ? "#339900" : "#990000");
           return (
-            <div style={overlayBase}>
-              <div style={{
-                fontSize: 30, fontWeight: 700, letterSpacing: 7,
-                color: "#fff", marginBottom: 6,
-                animation: "fadeIn 0.5s ease-out both",
-              }}>
-                {"P" + winner + " WINS"}
-              </div>
-              <div style={{
-                fontSize: 11, letterSpacing: 3,
-                color: "rgba(255,255,255,0.75)",
-                marginBottom: 32,
-                fontFamily: "monospace",
-              }}>
-                {displayP1} - {displayP2}
-              </div>
-              <div style={{display: "flex", gap: 12}}>
-                <div
-                  onPointerDown={() => handleRematch(winner)}
-                  style={{...btnBase, background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.18)"}}
-                >REMATCH</div>
-                <div
-                  onPointerDown={handleMenu}
-                  style={{...btnBase, background: "transparent", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.4)"}}
-                >MENU</div>
-              </div>
-            </div>
-          );
-        } else {
-          // Set over -- one player won the best-of-3.
-          return (
-            <div style={overlayBase}>
-              <div style={{
-                fontSize: 11, letterSpacing: 4,
-                color: "rgba(255,255,255,0.60)",
-                marginBottom: 10,
-                fontFamily: "monospace",
-                textTransform: "uppercase",
-              }}>THE SET</div>
-              <div style={{
-                fontSize: 30, fontWeight: 700, letterSpacing: 7,
-                color: "#fff", marginBottom: 6,
-                animation: "fadeIn 0.5s ease-out both",
-              }}>
-                {"P" + setWinner + " WINS"}
-              </div>
-              <div style={{
-                fontSize: 11, letterSpacing: 3,
-                color: "rgba(255,255,255,0.75)",
-                marginBottom: 36,
-                fontFamily: "monospace",
-              }}>
-                {displayP1} - {displayP2}
-              </div>
-              <div style={{display: "flex", gap: 12}}>
-                <div
-                  onPointerDown={() => handlePlayAgain(setWinner)}
-                  style={{...btnBase, background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.18)"}}
-                >PLAY AGAIN</div>
-                <div
-                  onPointerDown={handleMenu}
-                  style={{...btnBase, background: "transparent", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.4)"}}
-                >MENU</div>
-              </div>
-            </div>
+            <Screen
+              gameOverLabel={setOver}
+              resultRow={<ResultRow text={txt} color={col}/>}
+              p1={dispP1} p2={dispP2}
+              primary="Rematch"
+              onPrimary={()=>{ if(!state.opponentLeft) netSend({type:"rematch_request"}); }}
+              secondary="Menu"
+              onSecondary={()=>{ disconnectRoom(); setState(s=>({...makeInitState2P()})); }}
+            />
           );
         }
+
+        // Offline game over
+        const displayP1 = p1Wins + (winner===1?1:0);
+        const displayP2 = p2Wins + (winner===2?1:0);
+        const setOver   = displayP1>=WINS_TO_WIN || displayP2>=WINS_TO_WIN;
+        // From human player's perspective: winner===playerSide = WIN, else LOSE
+        const humanWon  = winner === playerSide;
+        const txt  = humanWon ? "Win" : "Lose";
+        const col  = humanWon ? "#339900" : "#990000";
+        return (
+          <Screen
+            gameOverLabel={setOver}
+            resultRow={<ResultRow text={txt} color={col}/>}
+            p1={displayP1} p2={displayP2}
+            primary={setOver ? "Rematch" : "Rematch"}
+            onPrimary={setOver ? ()=>handlePlayAgain(displayP1>=WINS_TO_WIN?1:2) : ()=>handleRematch(winner)}
+            secondary="Menu"
+            onSecondary={handleMenu}
+          />
+        );
       })()}
 
       {/* Settings overlay -- rendered on top of everything, accessible from
