@@ -3347,11 +3347,15 @@ function TetrisGame2P() {
               display:"flex",flexDirection:"column",alignItems:"center",gap:12,
             }}>
               <span style={{fontSize:12,fontWeight:600,letterSpacing:"6px",opacity:0.3,textTransform:"uppercase"}}>Best of 3</span>
-              <div style={{display:"flex",gap:16,fontSize:10,fontWeight:500,letterSpacing:"10px"}}>
+              <div style={{display:"flex",gap:16,alignItems:"center"}}>
                 {[...Array(3)].map((_,i)=>{
-                  if(i<p1Wins) return <span key={i} style={{color:"#990000"}}>&#9679;</span>;
-                  if(i<p1Wins+p2Wins) return <span key={i} style={{color:"#339900"}}>&#9679;</span>;
-                  return <span key={i} style={{color:"#fff",opacity:0.2}}>&#9675;</span>;
+                  const filled = i<p1Wins || i<p1Wins+p2Wins;
+                  const color = i<p1Wins ? "#990000" : "#339900";
+                  return <div key={i} style={{
+                    width:8, height:8, borderRadius:"50%", flexShrink:0,
+                    background: filled ? color : "transparent",
+                    border: filled ? "none" : "1px solid rgba(255,255,255,0.2)",
+                  }}/>;
                 })}
               </div>
             </div>
@@ -3430,12 +3434,19 @@ function TetrisGame2P() {
         );
 
         // Shared pips: p1 red dots, p2 green dots, rest empty
+        const Pip = ({color, filled}) => (
+          <div style={{
+            width:8, height:8, borderRadius:"50%", flexShrink:0,
+            background: filled ? color : "transparent",
+            border: filled ? "none" : "1px solid rgba(255,255,255,0.2)",
+          }}/>
+        );
         const Pips = ({p1, p2}) => (
-          <div style={{display:"flex",gap:16,fontSize:10,fontWeight:500,letterSpacing:"10px"}}>
+          <div style={{display:"flex",gap:16,alignItems:"center"}}>
             {[...Array(3)].map((_,i)=>{
-              if(i<p1) return <span key={i} style={{color:"#990000"}}>&#9679;</span>;
-              if(i<p1+p2) return <span key={i} style={{color:"#339900"}}>&#9679;</span>;
-              return <span key={i} style={{color:"#fff",opacity:0.2}}>&#9675;</span>;
+              if(i<p1) return <Pip key={i} color="#990000" filled/>;
+              if(i<p1+p2) return <Pip key={i} color="#339900" filled/>;
+              return <Pip key={i} filled={false}/>;
             })}
           </div>
         );
