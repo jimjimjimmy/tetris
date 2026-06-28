@@ -2500,7 +2500,7 @@ function TetrisGame2P() {
             display:"flex", justifyContent:"center",
           }}>
             <span style={{
-              fontSize:24, fontWeight:500, letterSpacing:"36px",
+              fontSize:24, fontWeight:500, letterSpacing:"36px", marginRight:"-36px",
               color:"#f60", textTransform:"uppercase", whiteSpace:"nowrap",
             }}>drift</span>
           </div>
@@ -2597,8 +2597,8 @@ function TetrisGame2P() {
               width:64, height:64, cursor:"pointer",
             }}
           >
-            <span style={{fontSize:24,letterSpacing:"12px",opacity:0.5,fontWeight:300,color:"#fff"}}>↑</span>
-            <span style={{fontSize:10,letterSpacing:"5px",opacity:0.5,fontWeight:600,color:"#fff",textTransform:"uppercase"}}>up</span>
+            <span style={{fontSize:24,letterSpacing:"12px",marginRight:"-12px",opacity:0.5,fontWeight:300,color:"#fff"}}>↑</span>
+            <span style={{fontSize:10,letterSpacing:"5px",marginRight:"-5px",opacity:0.5,fontWeight:600,color:"#fff",textTransform:"uppercase"}}>up</span>
           </div>
           <div style={{display:"flex",alignItems:"flex-end",height:64,paddingBottom:10}}>
             <span style={{fontSize:10,letterSpacing:"5px",opacity:0.3,fontWeight:600,color:"#fff",textTransform:"uppercase"}}>or</span>
@@ -2612,8 +2612,8 @@ function TetrisGame2P() {
               width:64, height:64, cursor:"pointer",
             }}
           >
-            <span style={{fontSize:24,letterSpacing:"12px",opacity:0.5,fontWeight:300,color:"#fff"}}>↓</span>
-            <span style={{fontSize:10,letterSpacing:"5px",opacity:0.5,fontWeight:600,color:"#fff",textTransform:"uppercase"}}>Dn</span>
+            <span style={{fontSize:24,letterSpacing:"12px",marginRight:"-12px",opacity:0.5,fontWeight:300,color:"#fff"}}>↓</span>
+            <span style={{fontSize:10,letterSpacing:"5px",marginRight:"-5px",opacity:0.5,fontWeight:600,color:"#fff",textTransform:"uppercase"}}>Dn</span>
           </div>
         </div>
         {/* DIFFICULTY at 618px */}
@@ -3264,9 +3264,9 @@ function TetrisGame2P() {
               textTransform:"uppercase",
             }}>
               {[0.1,0.2,0.3].map((o,i)=><span key={"dl"+i} style={{fontWeight:400,fontSize:12,letterSpacing:"2.4px",opacity:o}}>-</span>)}
-              <span style={{fontWeight:400,fontSize:16,letterSpacing:"3.2px",opacity:0.2}}>&rarr;</span>
+              <span style={{fontWeight:300,fontSize:16,letterSpacing:"3.2px",opacity:0.2}}>&rarr;</span>
               <span style={{fontSize:16,fontWeight:500,letterSpacing:"8px",marginRight:"-8px",opacity:0.5}}>Lost</span>
-              <span style={{fontWeight:400,fontSize:16,letterSpacing:"3.2px",opacity:0.2}}>&larr;</span>
+              <span style={{fontWeight:300,fontSize:16,letterSpacing:"3.2px",opacity:0.2}}>&larr;</span>
               {[0.3,0.2,0.1].map((o,i)=><span key={"dr"+i} style={{fontWeight:400,fontSize:12,letterSpacing:"2.4px",opacity:o}}>-</span>)}
             </div>
             {/* MENU at 599px */}
@@ -3309,9 +3309,9 @@ function TetrisGame2P() {
               textTransform:"uppercase",
             }}>
               {[0.1,0.2,0.3].map((o,i)=><span key={"dl"+i} style={{fontWeight:400,fontSize:12,letterSpacing:"2.4px",opacity:o}}>-</span>)}
-              <span style={{fontWeight:400,fontSize:16,letterSpacing:"3.2px",opacity:0.2}}>&rarr;</span>
+              <span style={{fontWeight:300,fontSize:16,letterSpacing:"3.2px",opacity:0.2}}>&rarr;</span>
               <span style={{fontSize:24,fontWeight:500,letterSpacing:"12px",marginRight:"-12px",opacity:0.5}}>Paused</span>
-              <span style={{fontWeight:400,fontSize:16,letterSpacing:"3.2px",opacity:0.2}}>&larr;</span>
+              <span style={{fontWeight:300,fontSize:16,letterSpacing:"3.2px",opacity:0.2}}>&larr;</span>
               {[0.3,0.2,0.1].map((o,i)=><span key={"dr"+i} style={{fontWeight:400,fontSize:12,letterSpacing:"2.4px",opacity:o}}>-</span>)}
             </div>
             {/* Best of 3 + pips at 496px */}
@@ -3402,9 +3402,9 @@ function TetrisGame2P() {
             color:"#fff",textTransform:"uppercase",
           }}>
             {[0.1,0.2,0.3].map((o,i)=><span key={"dl"+i} style={{fontWeight:400,fontSize:12,letterSpacing:"2.4px",opacity:o}}>-</span>)}
-            <span style={{fontWeight:400,fontSize:16,letterSpacing:"3.2px",opacity:arrowOp}}>&rarr;</span>
+            <span style={{fontWeight:300,fontSize:16,letterSpacing:"3.2px",opacity:arrowOp}}>&rarr;</span>
             <span style={{fontSize:size,fontWeight:500,letterSpacing:tracking+"px",marginRight:"-"+tracking+"px",color,opacity:textOp}}>{text}</span>
-            <span style={{fontWeight:400,fontSize:16,letterSpacing:"3.2px",opacity:arrowOp}}>&larr;</span>
+            <span style={{fontWeight:300,fontSize:16,letterSpacing:"3.2px",opacity:arrowOp}}>&larr;</span>
             {[0.3,0.2,0.1].map((o,i)=><span key={"dr"+i} style={{fontWeight:400,fontSize:12,letterSpacing:"2.4px",opacity:o}}>-</span>)}
           </div>
         );
