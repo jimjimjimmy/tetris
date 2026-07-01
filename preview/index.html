@@ -64,6 +64,7 @@
     @keyframes slideIn  { from { transform: translateX(24px); }                                                          to { transform: translateX(0); } }
     @keyframes driftInLeft { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
     @keyframes driftOutRight { from { opacity: 1; transform: translateX(0); } to { opacity: 0; transform: translateX(20px); } }
+    @keyframes slideInLeft { from { transform: translateX(-16px); } to { transform: translateX(0); } }
   </style>
 </head>
 <body>
@@ -2519,9 +2520,9 @@ function TetrisGame2P() {
       // 2 PLAYERS TAB - show room code + join link
       // Design: Figma 269:7487
       const myCode = generatedCodeRef.current;
-      const di = (n) => ({animation:`driftIn 0.18s ease ${n*45}ms both`});
+      const di = (n) => ({animation:`${startKey>0?"slideInLeft":"driftIn"} 0.18s ease ${n*45}ms both`});
       return (
-        <div key={startTab+"-"+startKey} style={{
+        <div key={startTab} style={{
           width: FRAME_W, height: GAME_2P_H,
           background: "#212223",
           position: "relative", overflow: "hidden",
@@ -2532,6 +2533,7 @@ function TetrisGame2P() {
         }}>
           <div style={driftGrid} />
           <BgVignette/>
+          <React.Fragment key={startKey}>
           {/* DRIFT title - vertically centered minus 37px offset */}
           <div style={{
             position:"absolute", left:0, right:0,
@@ -2595,14 +2597,15 @@ function TetrisGame2P() {
             <span>{APP_VERSION} &nbsp;•&nbsp; {APP_COMMIT}</span>
             <span>{relTime(APP_BUILD_DATE)}</span>
           </div>
+          </React.Fragment>
         </div>
       );
     }
 
     // SINGLE TAB (default) - Design: Figma 247:5857
-    const di = (n) => ({animation:`driftIn 0.18s ease ${n*45}ms both`});
+    const di = (n) => ({animation:`${startKey>0?"slideInLeft":"driftIn"} 0.18s ease ${n*45}ms both`});
     return (
-      <div key={startTab+"-"+startKey} style={{
+      <div key={startTab} style={{
         width: FRAME_W, height: GAME_2P_H,
         background: "#212223",
         position: "relative", overflow: "hidden",
@@ -2724,6 +2727,7 @@ function TetrisGame2P() {
           <span>{APP_VERSION} &nbsp;•&nbsp; {APP_COMMIT}</span>
           <span>{relTime(APP_BUILD_DATE)}</span>
         </div>
+        </React.Fragment>
         {/* Settings overlay */}
         {showSettings && (
           <SettingsScreen
