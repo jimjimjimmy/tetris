@@ -1066,7 +1066,7 @@ function SettingsScreen({ settings, onUpdate, onClose, initialSection }) {
       zIndex: 100,
       userSelect: "none", WebkitUserSelect: "none",
     }}>
-      {/* Grid texture */}
+      {/* (1) Grid lines */}
       <div style={{
         position: "absolute", inset: 0,
         backgroundImage:
@@ -1076,7 +1076,20 @@ function SettingsScreen({ settings, onUpdate, onClose, initialSection }) {
         backgroundPosition: "0 0, 1px 0",
         pointerEvents: "none",
       }} />
-      <BgVignette />
+      {/* (2)+(3) Radial gradients -- same Mobile-Safari compensated values as game screen */}
+      <div style={{
+        position: "absolute", inset: 0,
+        background:
+          "radial-gradient(circle 663px at 201px 211px, rgba(36,38,44,0.55), rgba(36,38,44,0)), " +
+          "radial-gradient(circle 496px at 201px 437px, rgba(36,38,44,0.55), rgba(36,38,44,0))",
+        pointerEvents: "none",
+      }} />
+      {/* (4) Gradient stripe */}
+      <div style={{
+        position: "absolute", left: 0, top: 0, width: 322, height: GAME_2P_H,
+        background: "rgba(0, 0, 0, 0.18)",
+        pointerEvents: "none",
+      }} />
 
       {/* Title */}
       <div style={{
