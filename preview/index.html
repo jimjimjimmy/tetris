@@ -2532,9 +2532,9 @@ function TetrisGame2P() {
           color: "#fff",
           ...(startExiting ? {animation:"driftOut 0.15s ease both",pointerEvents:"none"} : {}),
         }}>
+          <React.Fragment key={startKey}>
           <div style={driftGrid} />
           <BgVignette/>
-          <React.Fragment key={startKey}>
           {/* DRIFT title - vertically centered minus 37px offset */}
           <div style={{
             position:"absolute", left:0, right:0,
@@ -2615,9 +2615,9 @@ function TetrisGame2P() {
         color: "#fff",
         ...(startExiting ? {animation:"driftOut 0.15s ease both",pointerEvents:"none"} : {}),
       }}>
+        <React.Fragment key={startKey}>
         <div style={driftGrid} />
         <BgVignette/>
-        <React.Fragment key={startKey}>
         {/* DRIFT title */}
         <div style={{
           position:"absolute", left:0, right:0,
