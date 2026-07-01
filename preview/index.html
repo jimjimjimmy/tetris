@@ -63,6 +63,7 @@
     @keyframes driftOut { from { opacity: 1; transform: translateX(0); }            to { opacity: 0; transform: translateX(-20px); } }
     @keyframes slideIn  { from { transform: translateX(24px); }                                                          to { transform: translateX(0); } }
     @keyframes driftInLeft { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
+    @keyframes driftOutRight { from { opacity: 1; transform: translateX(0); } to { opacity: 0; transform: translateX(20px); } }
   </style>
 </head>
 <body>
@@ -1082,7 +1083,7 @@ function SettingsScreen({ settings, onUpdate, onClose, initialSection, exiting }
       background: "#212223",
       zIndex: 100,
       userSelect: "none", WebkitUserSelect: "none",
-      animation: exiting ? "driftOut 0.15s ease both" : "driftInLeft 0.15s ease both",
+      animation: exiting ? "driftOutRight 0.15s ease both" : "driftIn 0.15s ease both",
     }}>
       {/* Grid -- same as start screen driftGrid */}
       <div style={{
@@ -1300,6 +1301,7 @@ function TetrisGame2P() {
   const [showSettings, setShowSettings] = React.useState(false);
   const [settingsSection, setSettingsSection] = React.useState(null);
   const [startExiting, setStartExiting] = React.useState(false);
+  const [startReturning, setStartReturning] = React.useState(false);
   const [settingsExiting, setSettingsExiting] = React.useState(false);
   const [state, setState]   = React.useState(makeInitState2P);
   // Session win counts -- persist across rematches, reset on MENU or PLAY AGAIN.
@@ -1365,7 +1367,13 @@ function TetrisGame2P() {
   };
   const closeSettings = () => {
     setSettingsExiting(true);
-    setTimeout(() => { setShowSettings(false); setSettingsSection(null); setSettingsExiting(false); }, 150);
+    setTimeout(() => {
+      setShowSettings(false);
+      setSettingsSection(null);
+      setSettingsExiting(false);
+      setStartReturning(true);
+      setTimeout(() => setStartReturning(false), 200);
+    }, 150);
   };
 
   React.useEffect(() => {
@@ -2521,7 +2529,7 @@ function TetrisGame2P() {
           fontFamily: "'Inter', sans-serif",
           userSelect: "none", WebkitUserSelect: "none",
           color: "#fff",
-          ...(startExiting ? {animation:"driftOut 0.15s ease both",pointerEvents:"none"} : {}),
+          ...(startExiting ? {animation:"driftOut 0.15s ease both",pointerEvents:"none"} : startReturning ? {animation:"driftInLeft 0.15s ease both"} : {}),
         }}>
           <div style={driftGrid} />
           <BgVignette/>
@@ -2602,7 +2610,7 @@ function TetrisGame2P() {
         fontFamily: "'Inter', sans-serif",
         userSelect: "none", WebkitUserSelect: "none",
         color: "#fff",
-        ...(startExiting ? {animation:"driftOut 0.15s ease both",pointerEvents:"none"} : {}),
+        ...(startExiting ? {animation:"driftOut 0.15s ease both",pointerEvents:"none"} : startReturning ? {animation:"driftInLeft 0.15s ease both"} : {}),
       }}>
         <div style={driftGrid} />
         <BgVignette/>
