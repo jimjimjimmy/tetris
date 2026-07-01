@@ -3333,17 +3333,17 @@ function TetrisGame2P() {
           }}>
             <div style={dg}/>
             <BgVignette/>
-            {/* "→ Paused ←" decorative row at 448px */}
+            {/* "-> Paused <-" decorative row at 448px */}
             <div style={{
               position:"absolute",left:0,right:0,top:448,
               display:"flex",gap:16,alignItems:"center",justifyContent:"center",
               textTransform:"uppercase",
             }}>
-              {[0.1,0.2,0.3].map((o,i)=><span key={"dl"+i} style={{fontWeight:400,fontSize:12,letterSpacing:"2.4px",opacity:o}}>-</span>)}
-              <span style={{fontWeight:300,fontSize:16,letterSpacing:"3.2px",opacity:0.2}}>&rarr;</span>
-              <span style={{fontSize:24,fontWeight:500,letterSpacing:"12px",marginRight:"-12px",opacity:0.5}}>Paused</span>
-              <span style={{fontWeight:300,fontSize:16,letterSpacing:"3.2px",opacity:0.2}}>&larr;</span>
-              {[0.3,0.2,0.1].map((o,i)=><span key={"dr"+i} style={{fontWeight:400,fontSize:12,letterSpacing:"2.4px",opacity:o}}>-</span>)}
+              {[0.1,0.2,0.3].map((o,i)=><span key={"dl"+i} style={{fontFamily:"'Inter',sans-serif",fontWeight:400,fontSize:12,letterSpacing:"2.4px",opacity:o}}>-</span>)}
+              <span style={{fontFamily:"'Inter',sans-serif",fontWeight:400,fontSize:16,letterSpacing:"3.2px"}}>&rarr;</span>
+              <span style={{fontFamily:"'Inter',sans-serif",fontSize:24,fontWeight:500,letterSpacing:"12px",marginRight:"-12px",opacity:0.5}}>Paused</span>
+              <span style={{fontFamily:"'Inter',sans-serif",fontWeight:400,fontSize:16,letterSpacing:"3.2px"}}>&larr;</span>
+              {[0.3,0.2,0.1].map((o,i)=><span key={"dr"+i} style={{fontFamily:"'Inter',sans-serif",fontWeight:400,fontSize:12,letterSpacing:"2.4px",opacity:o}}>-</span>)}
             </div>
             {/* Best of 3 + pips at 496px */}
             <div style={{
@@ -3353,17 +3353,19 @@ function TetrisGame2P() {
               <span style={{fontSize:12,fontWeight:600,letterSpacing:"6px",opacity:0.3,textTransform:"uppercase"}}>Best of 3</span>
               <div style={{display:"flex",gap:16,alignItems:"center"}}>
                 {[...Array(3)].map((_,i)=>{
-                  const filled = i<p1Wins || i<p1Wins+p2Wins;
-                  const color = i<p1Wins ? "#990000" : "#339900";
+                  const myW  = playerSide===1 ? p1Wins : p2Wins;
+                  const oppW = playerSide===1 ? p2Wins : p1Wins;
+                  const bg   = i<myW ? "#339900" : i<myW+oppW ? "#990000" : "transparent";
+                  const bordered = i>=myW+oppW;
                   return <div key={i} style={{
                     width:8, height:8, borderRadius:"50%", flexShrink:0,
-                    background: filled ? color : "transparent",
-                    border: filled ? "none" : "1px solid rgba(255,255,255,0.2)",
+                    background: bg,
+                    border: bordered ? "1px solid rgba(255,255,255,0.2)" : "none",
                   }}/>;
                 })}
               </div>
             </div>
-            {/* RESUME at 599px, MENU at 639px */}
+            {/* Resume + Restart at 599px, gap:40 */}
             <div style={{position:"absolute",left:0,right:0,top:599,display:"flex",flexDirection:"column",alignItems:"center",gap:40}}>
               <span
                 onPointerDown={()=>setState(s=>({...s,paused:false}))}
@@ -3374,7 +3376,7 @@ function TetrisGame2P() {
                 onPointerDown={handleMenu}
                 onTouchStart={e=>e.stopPropagation()}
                 style={{fontSize:12,fontWeight:400,letterSpacing:"6px",color:"rgba(255,255,255,0.3)",textTransform:"uppercase",cursor:"pointer"}}
-              >Menu</span>
+              >Restart</span>
             </div>
           </div>
         );
