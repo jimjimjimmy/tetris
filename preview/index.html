@@ -1369,11 +1369,11 @@ function TetrisGame2P() {
   };
   const closeSettings = () => {
     setSettingsExiting(true);
+    setStartKey(k => k + 1);
     setTimeout(() => {
       setShowSettings(false);
       setSettingsSection(null);
       setSettingsExiting(false);
-      setStartKey(k => k + 1);
     }, 150);
   };
 
@@ -2521,7 +2521,7 @@ function TetrisGame2P() {
       // 2 PLAYERS TAB - show room code + join link
       // Design: Figma 269:7487
       const myCode = generatedCodeRef.current;
-      const di = (n) => ({animation:`${startKey>0?"slideInLeft":"driftIn"} 0.18s ease ${n*45}ms both`});
+      const di = (n) => ({animation:`${startKey>0?"slideInLeft 0.15s":"driftIn 0.18s"} ease ${n*45}ms both`});
       return (
         <div key={startTab} style={{
           width: FRAME_W, height: GAME_2P_H,
@@ -2604,7 +2604,7 @@ function TetrisGame2P() {
     }
 
     // SINGLE TAB (default) - Design: Figma 247:5857
-    const di = (n) => ({animation:`${startKey>0?"slideInLeft":"driftIn"} 0.18s ease ${n*45}ms both`});
+    const di = (n) => ({animation:`${startKey>0?"slideInLeft 0.15s":"driftIn 0.18s"} ease ${n*45}ms both`});
     return (
       <div key={startTab} style={{
         width: FRAME_W, height: GAME_2P_H,
