@@ -1301,6 +1301,7 @@ function TetrisGame2P() {
   const [showSettings, setShowSettings] = React.useState(false);
   const [settingsSection, setSettingsSection] = React.useState(null);
   const [startExiting, setStartExiting] = React.useState(false);
+  const [startKey, setStartKey] = React.useState(0);
   const [settingsExiting, setSettingsExiting] = React.useState(false);
   const [state, setState]   = React.useState(makeInitState2P);
   // Session win counts -- persist across rematches, reset on MENU or PLAY AGAIN.
@@ -1370,6 +1371,7 @@ function TetrisGame2P() {
       setShowSettings(false);
       setSettingsSection(null);
       setSettingsExiting(false);
+      setStartKey(k => k + 1);
     }, 150);
   };
 
@@ -2519,7 +2521,7 @@ function TetrisGame2P() {
       const myCode = generatedCodeRef.current;
       const di = (n) => ({animation:`driftIn 0.18s ease ${n*45}ms both`});
       return (
-        <div key={startTab} style={{
+        <div key={startTab+"-"+startKey} style={{
           width: FRAME_W, height: GAME_2P_H,
           background: "#212223",
           position: "relative", overflow: "hidden",
@@ -2600,7 +2602,7 @@ function TetrisGame2P() {
     // SINGLE TAB (default) - Design: Figma 247:5857
     const di = (n) => ({animation:`driftIn 0.18s ease ${n*45}ms both`});
     return (
-      <div key={startTab} style={{
+      <div key={startTab+"-"+startKey} style={{
         width: FRAME_W, height: GAME_2P_H,
         background: "#212223",
         position: "relative", overflow: "hidden",
