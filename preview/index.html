@@ -1086,101 +1086,108 @@ function SettingsScreen({ settings, onUpdate, onClose, initialSection }) {
 
       {/* Settings content */}
       <div style={{
-        position: "absolute", left: 44, top: 181, width: 314,
-        display: "flex", flexDirection: "column", gap: 56,
+        position: "absolute", left: 44, top: 160, width: 314,
+        display: "flex", flexDirection: "column", gap: 40,
       }}>
 
         {/* SOUND section */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 32 }}>
-          <div style={secLabel}>Sound</div>
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          <div style={{...secLabel, marginBottom: 8}}>Sound</div>
 
           {/* Sound FX */}
-          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", minHeight: 44 }}>
             <div style={rowLbl}>Sound Fx</div>
             {[false, true].map(v => (
               <div key={String(v)}
                 onPointerDown={() => onUpdate("soundFX", v)}
                 onTouchStart={e => e.stopPropagation()}
-                style={opt(settings.soundFX === v)}
+                style={{...opt(settings.soundFX === v), padding: "17px 16px"}}
               >{v ? "ON" : "Off"}</div>
             ))}
           </div>
 
           {/* Music */}
-          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", minHeight: 44 }}>
             <div style={rowLbl}>Music</div>
             {[false, true].map(v => (
               <div key={String(v)}
                 onPointerDown={() => onUpdate("music", v)}
                 onTouchStart={e => e.stopPropagation()}
-                style={opt(settings.music === v)}
+                style={{...opt(settings.music === v), padding: "17px 16px"}}
               >{v ? "ON" : "Off"}</div>
             ))}
           </div>
 
           {/* Volume 1-5 */}
-          <div style={{ display: "flex", alignItems: "center", gap: 40 }}>
-            <div style={rowLbl}>Volume</div>
-            {[1, 2, 3, 4, 5].map(n => (
-              <div key={n}
-                onPointerDown={() => onUpdate("volume", n)}
-                onTouchStart={e => e.stopPropagation()}
-                style={opt(settings.volume === n)}
-              >{n}</div>
-            ))}
+          <div style={{ display: "flex", alignItems: "center", minHeight: 44 }}>
+            <div style={{...rowLbl, flex: "0 0 80px"}}>Volume</div>
+            <div style={{ flex: 1, display: "flex", justifyContent: "space-between" }}>
+              {[1, 2, 3, 4, 5].map(n => (
+                <div key={n}
+                  onPointerDown={() => onUpdate("volume", n)}
+                  onTouchStart={e => e.stopPropagation()}
+                  style={{...opt(settings.volume === n), padding: "17px 10px"}}
+                >{n}</div>
+              ))}
+            </div>
           </div>
         </div>
 
         {/* HAPTICS section */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 32 }}>
-          <div style={secLabel}>Haptics</div>
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          <div style={{...secLabel, marginBottom: 8}}>Haptics</div>
 
           {/* Haptics toggle */}
-          <div style={{ display: "flex", alignItems: "center" }}>
+          <div style={{ display: "flex", alignItems: "center", minHeight: 44 }}>
             <div style={rowLbl}>Haptics</div>
             <div
               onPointerDown={() => onUpdate("haptics", !settings.haptics)}
               onTouchStart={e => e.stopPropagation()}
-              style={opt(true)}
+              style={{...opt(true), padding: "17px 16px"}}
             >{settings.haptics ? "ON" : "Off"}</div>
           </div>
 
           {/* Intensity */}
-          <div style={{ display: "flex", alignItems: "center", gap: 32, opacity: settings.haptics ? 1 : 0.3 }}>
-            <div style={rowLbl}>Intensity</div>
-            {[["light","Low"],["medium","Mid"],["strong","High"]].map(([val, label]) => (
-              <div key={val}
-                onPointerDown={() => settings.haptics && onUpdate("hapticIntensity", val)}
-                onTouchStart={e => e.stopPropagation()}
-                style={{
-                  fontFamily: inter, fontSize: 10, fontWeight: 600,
-                  letterSpacing: "3px", color: "#fff", textTransform: "uppercase",
-                  opacity: settings.hapticIntensity === val ? 1 : 0.3,
-                  cursor: "pointer", userSelect: "none",
-                }}
-              >{label}</div>
-            ))}
+          <div style={{ display: "flex", alignItems: "center", minHeight: 44, opacity: settings.haptics ? 1 : 0.3 }}>
+            <div style={{...rowLbl, flex: "0 0 80px"}}>Intensity</div>
+            <div style={{ flex: 1, display: "flex", justifyContent: "space-between" }}>
+              {[["light","Low"],["medium","Mid"],["strong","High"]].map(([val, label]) => (
+                <div key={val}
+                  onPointerDown={() => settings.haptics && onUpdate("hapticIntensity", val)}
+                  onTouchStart={e => e.stopPropagation()}
+                  style={{
+                    fontFamily: inter, fontSize: 10, fontWeight: 600,
+                    letterSpacing: "3px", color: "#fff", textTransform: "uppercase",
+                    opacity: settings.hapticIntensity === val ? 1 : 0.3,
+                    cursor: "pointer", userSelect: "none",
+                    padding: "17px 10px",
+                  }}
+                >{label}</div>
+              ))}
+            </div>
           </div>
         </div>
 
         {/* GAME section */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 32 }}>
-          <div style={secLabel}>Game</div>
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          <div style={{...secLabel, marginBottom: 8}}>Game</div>
 
           {/* Level */}
-          <div style={{ display: "flex", alignItems: "center", gap: 40 }}>
-            <div style={rowLbl}>Level</div>
-            {[1, 2, 3, 4, 5].map(n => (
-              <div key={n}
-                onPointerDown={() => onUpdate("level", n)}
-                onTouchStart={e => e.stopPropagation()}
-                style={opt(settings.level === n)}
-              >{n}</div>
-            ))}
+          <div style={{ display: "flex", alignItems: "center", minHeight: 44 }}>
+            <div style={{...rowLbl, flex: "0 0 80px"}}>Level</div>
+            <div style={{ flex: 1, display: "flex", justifyContent: "space-between" }}>
+              {[1, 2, 3, 4, 5].map(n => (
+                <div key={n}
+                  onPointerDown={() => onUpdate("level", n)}
+                  onTouchStart={e => e.stopPropagation()}
+                  style={{...opt(settings.level === n), padding: "17px 10px"}}
+                >{n}</div>
+              ))}
+            </div>
           </div>
 
           {/* Side */}
-          <div style={{ display: "flex", alignItems: "center", gap: 32 }}>
+          <div style={{ display: "flex", alignItems: "center", minHeight: 44 }}>
             <div style={rowLbl}>Side</div>
             {[{s:1, label:"↑ Up"}, {s:2, label:"↓Dn"}].map(({s, label}) => (
               <div key={s}
@@ -1191,6 +1198,7 @@ function SettingsScreen({ settings, onUpdate, onClose, initialSection }) {
                   letterSpacing: "2px", color: "#fff", textTransform: "uppercase",
                   opacity: settings.side === s ? 1 : 0.3,
                   cursor: "pointer", userSelect: "none",
+                  padding: "17px 16px",
                 }}
               >{label}</div>
             ))}
@@ -1200,8 +1208,8 @@ function SettingsScreen({ settings, onUpdate, onClose, initialSection }) {
 
       {/* Cancel / Done */}
       <div style={{
-        position: "absolute", left: 0, right: 0, top: 726,
-        display: "flex", justifyContent: "center", alignItems: "center", gap: 40,
+        position: "absolute", left: 0, right: 0, bottom: "max(40px,env(safe-area-inset-bottom))",
+        display: "flex", justifyContent: "center", alignItems: "center",
       }}>
         <div
           onPointerDown={onClose}
@@ -1210,6 +1218,7 @@ function SettingsScreen({ settings, onUpdate, onClose, initialSection }) {
             fontFamily: inter, fontSize: 12, fontWeight: 400,
             letterSpacing: "6px", color: "#fff", textTransform: "uppercase",
             opacity: 0.3, cursor: "pointer", userSelect: "none",
+            padding: "22px 40px",
           }}
         >Cancel</div>
         <div
@@ -1219,6 +1228,7 @@ function SettingsScreen({ settings, onUpdate, onClose, initialSection }) {
             fontFamily: inter, fontSize: 12, fontWeight: 800,
             letterSpacing: "6px", color: "#fff", textTransform: "uppercase",
             cursor: "pointer", userSelect: "none",
+            padding: "22px 40px",
           }}
         >Done</div>
       </div>
