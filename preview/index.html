@@ -1021,7 +1021,7 @@ function loadSettings() {
   const defaults = {
     soundFX: true, music: false, volume: 4,
     haptics: true, hapticIntensity: "medium",
-    level: AI_LEVEL_DEFAULT, side: 1,
+    level: AI_LEVEL_DEFAULT, direction: 1,
   };
   try { return { ...defaults, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}") }; }
   catch { return { ...defaults }; }
@@ -1119,17 +1119,15 @@ function SettingsScreen({ settings, onUpdate, onClose, initialSection }) {
           </div>
 
           {/* Volume 1-5 */}
-          <div style={{ display: "flex", alignItems: "center", minHeight: 44 }}>
-            <div style={{...rowLbl, flex: "0 0 80px"}}>Volume</div>
-            <div style={{ flex: 1, display: "flex", justifyContent: "space-between" }}>
-              {[1, 2, 3, 4, 5].map(n => (
-                <div key={n}
-                  onPointerDown={() => onUpdate("volume", n)}
-                  onTouchStart={e => e.stopPropagation()}
-                  style={{...opt(settings.volume === n), padding: "17px 10px"}}
-                >{n}</div>
-              ))}
-            </div>
+          <div style={{ display: "flex", alignItems: "center", minHeight: 44, gap: 40 }}>
+            <div style={rowLbl}>Volume</div>
+            {[1, 2, 3, 4, 5].map(n => (
+              <div key={n}
+                onPointerDown={() => onUpdate("volume", n)}
+                onTouchStart={e => e.stopPropagation()}
+                style={{...opt(settings.volume === n), padding: "17px 0"}}
+              >{n}</div>
+            ))}
           </div>
         </div>
 
@@ -1173,32 +1171,30 @@ function SettingsScreen({ settings, onUpdate, onClose, initialSection }) {
           <div style={{...secLabel, marginBottom: 8}}>Game</div>
 
           {/* Level */}
-          <div style={{ display: "flex", alignItems: "center", minHeight: 44 }}>
-            <div style={{...rowLbl, flex: "0 0 80px"}}>Level</div>
-            <div style={{ flex: 1, display: "flex", justifyContent: "space-between" }}>
-              {[1, 2, 3, 4, 5].map(n => (
-                <div key={n}
-                  onPointerDown={() => onUpdate("level", n)}
-                  onTouchStart={e => e.stopPropagation()}
-                  style={{...opt(settings.level === n), padding: "17px 10px"}}
-                >{n}</div>
-              ))}
-            </div>
+          <div style={{ display: "flex", alignItems: "center", minHeight: 44, gap: 40 }}>
+            <div style={rowLbl}>Level</div>
+            {[1, 2, 3, 4, 5].map(n => (
+              <div key={n}
+                onPointerDown={() => onUpdate("level", n)}
+                onTouchStart={e => e.stopPropagation()}
+                style={{...opt(settings.level === n), padding: "17px 0"}}
+              >{n}</div>
+            ))}
           </div>
 
-          {/* Side */}
-          <div style={{ display: "flex", alignItems: "center", minHeight: 44 }}>
-            <div style={rowLbl}>Side</div>
+          {/* Direction */}
+          <div style={{ display: "flex", alignItems: "center", minHeight: 44, gap: 32 }}>
+            <div style={rowLbl}>Direction</div>
             {[{s:1, label:"↑ Up"}, {s:2, label:"↓Dn"}].map(({s, label}) => (
               <div key={s}
-                onPointerDown={() => onUpdate("side", s)}
+                onPointerDown={() => onUpdate("direction", s)}
                 onTouchStart={e => e.stopPropagation()}
                 style={{
                   fontFamily: inter, fontSize: 10, fontWeight: 600,
                   letterSpacing: "2px", color: "#fff", textTransform: "uppercase",
-                  opacity: settings.side === s ? 1 : 0.3,
+                  opacity: settings.direction === s ? 1 : 0.3,
                   cursor: "pointer", userSelect: "none",
-                  padding: "17px 16px",
+                  padding: "17px 0",
                 }}
               >{label}</div>
             ))}
@@ -2182,7 +2178,7 @@ function TetrisGame2P() {
   // selectSide starts the game and saves the side preference to settings.
   const selectSide = (side) => (e) => {
     if (e && e.stopPropagation) e.stopPropagation();
-    updateSetting("side", side);
+    updateSetting("direction", side);
     sfx.preload();  // no-op if already attempted; preload() calls diagnose() internally
     sfx._unlock(); // play silence at vol=0 to unlock iOS WebKit audio for the session
     if (settings.music) { sfx.bgmPlay(settings.volume / 5); }
