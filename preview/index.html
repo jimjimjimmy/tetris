@@ -1138,33 +1138,33 @@ function SettingsScreen({ settings, onUpdate, onClose, initialSection }) {
           <div style={{...secLabel, marginBottom: 8}}>Haptics</div>
 
           {/* Haptics toggle */}
-          <div style={{ display: "flex", alignItems: "center", minHeight: 44 }}>
+          <div style={{ display: "flex", alignItems: "center", minHeight: 44, gap: 16 }}>
             <div style={rowLbl}>Haptics</div>
-            <div
-              onPointerDown={() => onUpdate("haptics", !settings.haptics)}
-              onTouchStart={e => e.stopPropagation()}
-              style={{...opt(true), padding: "17px 16px"}}
-            >{settings.haptics ? "ON" : "Off"}</div>
+            {[false, true].map(v => (
+              <div key={String(v)}
+                onPointerDown={() => onUpdate("haptics", v)}
+                onTouchStart={e => e.stopPropagation()}
+                style={{...opt(settings.haptics === v), padding: "17px 16px"}}
+              >{v ? "ON" : "Off"}</div>
+            ))}
           </div>
 
           {/* Intensity */}
-          <div style={{ display: "flex", alignItems: "center", minHeight: 44, opacity: settings.haptics ? 1 : 0.3 }}>
-            <div style={{...rowLbl, flex: "0 0 80px"}}>Intensity</div>
-            <div style={{ flex: 1, display: "flex", justifyContent: "space-between" }}>
-              {[["light","Low"],["medium","Mid"],["strong","High"]].map(([val, label]) => (
-                <div key={val}
-                  onPointerDown={() => settings.haptics && onUpdate("hapticIntensity", val)}
-                  onTouchStart={e => e.stopPropagation()}
-                  style={{
-                    fontFamily: inter, fontSize: 10, fontWeight: 600,
-                    letterSpacing: "3px", color: "#fff", textTransform: "uppercase",
-                    opacity: settings.hapticIntensity === val ? 1 : 0.3,
-                    cursor: "pointer", userSelect: "none",
-                    padding: "17px 10px",
-                  }}
-                >{label}</div>
-              ))}
-            </div>
+          <div style={{ display: "flex", alignItems: "center", minHeight: 44, gap: 32, opacity: settings.haptics ? 1 : 0.3 }}>
+            <div style={rowLbl}>Intensity</div>
+            {[["light","Low"],["medium","Mid"],["strong","High"]].map(([val, label]) => (
+              <div key={val}
+                onPointerDown={() => settings.haptics && onUpdate("hapticIntensity", val)}
+                onTouchStart={e => e.stopPropagation()}
+                style={{
+                  fontFamily: inter, fontSize: 10, fontWeight: 600,
+                  letterSpacing: "3px", color: "#fff", textTransform: "uppercase",
+                  opacity: settings.hapticIntensity === val ? 1 : 0.3,
+                  cursor: "pointer", userSelect: "none",
+                  padding: "17px 10px",
+                }}
+              >{label}</div>
+            ))}
           </div>
         </div>
 
