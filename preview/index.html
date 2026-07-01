@@ -1364,8 +1364,7 @@ function TetrisGame2P() {
 
   const openSettings = (section) => {
     setSettingsSection(section || null);
-    setStartExiting(true);
-    setTimeout(() => { setShowSettings(true); setStartExiting(false); }, 160);
+    setShowSettings(true);
   };
   const closeSettings = () => {
     setSettingsExiting(true);
