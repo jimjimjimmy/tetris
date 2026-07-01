@@ -885,7 +885,7 @@ const sfx = {
   // Zero <audio> / HTMLMediaElement on the page. This is the ONLY way to
   // prevent WKWebView from switching AVAudioSession to .playback, which is
   // what causes the Now Playing widget to appear on the iOS lock screen.
-  _s:        { soundFX: true, volume: 7 },
+  _s:        { soundFX: true, volume: 4 },
   _attempted: false,
   _ctx:      null,   // shared AudioContext (SFX + BGM)
   _bufs:     {},     // key -> AudioBuffer
@@ -1019,7 +1019,7 @@ const sfx = {
 
 function loadSettings() {
   const defaults = {
-    soundFX: true, music: false, volume: 7,
+    soundFX: true, music: false, volume: 4,
     haptics: true, hapticIntensity: "medium",
     level: AI_LEVEL_DEFAULT, side: 1,
   };
@@ -1038,50 +1038,33 @@ function useSettings() {
 }
 
 function SettingsScreen({ settings, onUpdate, onClose, initialSection }) {
-  const scrollRef = React.useRef(null);
-  const gameSecRef = React.useRef(null);
+  const inter = "'Inter', sans-serif";
 
-  React.useEffect(() => {
-    if (initialSection === "game" && scrollRef.current && gameSecRef.current) {
-      const top = gameSecRef.current.offsetTop - 56;
-      scrollRef.current.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
-    }
-  }, []);
-
-  // ---- shared style helpers (plain objects, not components, to avoid hook rules) ----
   const secLabel = {
-    fontFamily: "monospace", fontSize: 10, fontWeight: 600,
-    letterSpacing: 4, color: "rgba(255,255,255,0.35)",
-    textTransform: "uppercase", marginBottom: 4,
-  };
-  const rowLbl = {
-    fontFamily: "monospace", fontSize: 12, fontWeight: 500,
-    letterSpacing: 3, color: "rgba(255,255,255,0.5)",
+    fontFamily: inter, fontSize: 12, fontWeight: 600,
+    letterSpacing: "3.6px", color: "#fff",
     textTransform: "uppercase",
   };
-  const optStyle = (active) => ({
-    fontFamily: "monospace", fontSize: 12, fontWeight: 600,
-    letterSpacing: 3, textTransform: "uppercase",
-    color: active ? "#fff" : "rgba(255,255,255,0.2)",
-    padding: "6px 10px",
+  const rowLbl = {
+    fontFamily: inter, fontSize: 10, fontWeight: 400,
+    letterSpacing: "3px", color: "#fff", opacity: 0.5,
+    textTransform: "uppercase", flex: "1 0 0", minWidth: 0,
+  };
+  const opt = (active) => ({
+    fontFamily: inter, fontSize: 10, fontWeight: 600,
+    letterSpacing: "5px", color: "#fff",
+    textTransform: "uppercase",
+    opacity: active ? 1 : 0.3,
     cursor: "pointer", userSelect: "none",
   });
-  const row = {
-    display: "flex", justifyContent: "space-between",
-    alignItems: "center", padding: "8px 0",
-  };
 
   return (
-    <div ref={scrollRef} style={{
+    <div style={{
       position: "absolute", inset: 0,
       width: FRAME_W, height: GAME_2P_H,
       background: "#0a0a0a",
       zIndex: 100,
-      fontFamily: "'Inter', sans-serif",
-      color: "#fff",
       userSelect: "none", WebkitUserSelect: "none",
-      overflowY: "auto",
-      overflowX: "hidden",
     }}>
       {/* Grid texture */}
       <div style={{
@@ -1094,160 +1077,151 @@ function SettingsScreen({ settings, onUpdate, onClose, initialSection }) {
         pointerEvents: "none",
       }} />
 
+      {/* Title */}
       <div style={{
-        position: "relative",
-        display: "flex", flexDirection: "column",
-        padding: "0 40px",
-        paddingTop: "max(56px, calc(env(safe-area-inset-top) + 40px))",
-        paddingBottom: "max(40px, env(safe-area-inset-bottom))",
-        gap: 40,
-        minHeight: GAME_2P_H,
-        boxSizing: "border-box",
+        position: "absolute", left: 44, top: 82,
+        fontFamily: inter, fontSize: 16, fontWeight: 500,
+        letterSpacing: "8px", textTransform: "uppercase",
+        opacity: 0.5, color: "#fff",
+      }}>Settings</div>
+
+      {/* Settings content */}
+      <div style={{
+        position: "absolute", left: 44, top: 181, width: 314,
+        display: "flex", flexDirection: "column", gap: 56,
       }}>
 
-        {/* Title */}
-        <div style={{
-          fontFamily: "monospace", fontSize: 20, fontWeight: 700,
-          letterSpacing: 8, textTransform: "uppercase",
-        }}>Settings</div>
-
         {/* SOUND section */}
-        <div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 32 }}>
           <div style={secLabel}>Sound</div>
+
           {/* Sound FX */}
-          <div style={row}>
-            <div style={rowLbl}>Sound FX</div>
-            <div style={{ display: "flex" }}>
-              {[false, true].map(v => (
-                <div key={String(v)}
-                  onPointerDown={() => onUpdate("soundFX", v)}
-                  onTouchStart={e => e.stopPropagation()}
-                  style={optStyle(settings.soundFX === v)}
-                >{v ? "ON" : "OFF"}</div>
-              ))}
-            </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+            <div style={rowLbl}>Sound Fx</div>
+            {[false, true].map(v => (
+              <div key={String(v)}
+                onPointerDown={() => onUpdate("soundFX", v)}
+                onTouchStart={e => e.stopPropagation()}
+                style={opt(settings.soundFX === v)}
+              >{v ? "ON" : "Off"}</div>
+            ))}
           </div>
+
           {/* Music */}
-          <div style={row}>
+          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
             <div style={rowLbl}>Music</div>
-            <div style={{ display: "flex" }}>
-              {[false, true].map(v => (
-                <div key={String(v)}
-                  onPointerDown={() => onUpdate("music", v)}
-                  onTouchStart={e => e.stopPropagation()}
-                  style={optStyle(settings.music === v)}
-                >{v ? "ON" : "OFF"}</div>
-              ))}
-            </div>
+            {[false, true].map(v => (
+              <div key={String(v)}
+                onPointerDown={() => onUpdate("music", v)}
+                onTouchStart={e => e.stopPropagation()}
+                style={opt(settings.music === v)}
+              >{v ? "ON" : "Off"}</div>
+            ))}
           </div>
-          {/* Volume bar: 10 tappable segments */}
-          <div style={row}>
+
+          {/* Volume 1-5 */}
+          <div style={{ display: "flex", alignItems: "center", gap: 40 }}>
             <div style={rowLbl}>Volume</div>
-            <div style={{ display: "flex", gap: 3, alignItems: "center" }}>
-              {Array.from({ length: 10 }, (_, i) => (
-                <div key={i}
-                  onPointerDown={() => onUpdate("volume", i + 1)}
-                  onTouchStart={e => e.stopPropagation()}
-                  style={{
-                    width: 16, height: 4,
-                    background: i < settings.volume ? "#fff" : "rgba(255,255,255,0.12)",
-                    cursor: "pointer",
-                  }}
-                />
-              ))}
-            </div>
+            {[1, 2, 3, 4, 5].map(n => (
+              <div key={n}
+                onPointerDown={() => onUpdate("volume", n)}
+                onTouchStart={e => e.stopPropagation()}
+                style={opt(settings.volume === n)}
+              >{n}</div>
+            ))}
           </div>
         </div>
 
         {/* HAPTICS section */}
-        <div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 32 }}>
           <div style={secLabel}>Haptics</div>
-          {/* Haptics on/off */}
-          <div style={row}>
+
+          {/* Haptics toggle */}
+          <div style={{ display: "flex", alignItems: "center" }}>
             <div style={rowLbl}>Haptics</div>
-            <div style={{ display: "flex" }}>
-              {[false, true].map(v => (
-                <div key={String(v)}
-                  onPointerDown={() => onUpdate("haptics", v)}
-                  onTouchStart={e => e.stopPropagation()}
-                  style={optStyle(settings.haptics === v)}
-                >{v ? "ON" : "OFF"}</div>
-              ))}
-            </div>
+            <div
+              onPointerDown={() => onUpdate("haptics", !settings.haptics)}
+              onTouchStart={e => e.stopPropagation()}
+              style={opt(true)}
+            >{settings.haptics ? "ON" : "Off"}</div>
           </div>
-          {/* Intensity 3-way */}
-          <div style={row}>
-            <div style={{ ...rowLbl, opacity: settings.haptics ? 1 : 0.4 }}>Intensity</div>
-            <div style={{ display: "flex", opacity: settings.haptics ? 1 : 0.3 }}>
-              {["light", "medium", "strong"].map(opt => (
-                <div key={opt}
-                  onPointerDown={() => settings.haptics && onUpdate("hapticIntensity", opt)}
-                  onTouchStart={e => e.stopPropagation()}
-                  style={optStyle(settings.hapticIntensity === opt)}
-                >{opt}</div>
-              ))}
-            </div>
+
+          {/* Intensity */}
+          <div style={{ display: "flex", alignItems: "center", gap: 32, opacity: settings.haptics ? 1 : 0.3 }}>
+            <div style={rowLbl}>Intensity</div>
+            {[["light","Low"],["medium","Mid"],["strong","High"]].map(([val, label]) => (
+              <div key={val}
+                onPointerDown={() => settings.haptics && onUpdate("hapticIntensity", val)}
+                onTouchStart={e => e.stopPropagation()}
+                style={{
+                  fontFamily: inter, fontSize: 10, fontWeight: 600,
+                  letterSpacing: "3px", color: "#fff", textTransform: "uppercase",
+                  opacity: settings.hapticIntensity === val ? 1 : 0.3,
+                  cursor: "pointer", userSelect: "none",
+                }}
+              >{label}</div>
+            ))}
           </div>
         </div>
 
         {/* GAME section */}
-        <div ref={gameSecRef}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 32 }}>
           <div style={secLabel}>Game</div>
+
           {/* Level */}
-          <div style={row}>
+          <div style={{ display: "flex", alignItems: "center", gap: 40 }}>
             <div style={rowLbl}>Level</div>
-            <div style={{ display: "flex" }}>
-              {[1, 2, 3, 4, 5].map(n => (
-                <div key={n}
-                  onPointerDown={() => onUpdate("level", n)}
-                  onTouchStart={e => e.stopPropagation()}
-                  style={{
-                    fontFamily: "monospace", fontSize: 16, fontWeight: 600,
-                    letterSpacing: 2,
-                    color: n === settings.level ? "#fff" : "rgba(255,255,255,0.2)",
-                    padding: "6px 12px",
-                    cursor: "pointer", userSelect: "none",
-                  }}
-                >{n}</div>
-              ))}
-            </div>
+            {[1, 2, 3, 4, 5].map(n => (
+              <div key={n}
+                onPointerDown={() => onUpdate("level", n)}
+                onTouchStart={e => e.stopPropagation()}
+                style={opt(settings.level === n)}
+              >{n}</div>
+            ))}
           </div>
+
           {/* Side */}
-          <div style={row}>
+          <div style={{ display: "flex", alignItems: "center", gap: 32 }}>
             <div style={rowLbl}>Side</div>
-            <div style={{ display: "flex" }}>
-              {[{ s: 1, label: "P1↑" }, { s: 2, label: "P2↓" }].map(({ s, label }) => (
-                <div key={s}
-                  onPointerDown={() => onUpdate("side", s)}
-                  onTouchStart={e => e.stopPropagation()}
-                  style={{
-                    fontFamily: "monospace", fontSize: 14, fontWeight: 600,
-                    letterSpacing: 2,
-                    color: settings.side === s ? "#fff" : "rgba(255,255,255,0.2)",
-                    padding: "6px 14px",
-                    cursor: "pointer", userSelect: "none",
-                  }}
-                >{label}</div>
-              ))}
-            </div>
+            {[{s:1, label:"↑ Up"}, {s:2, label:"↓Dn"}].map(({s, label}) => (
+              <div key={s}
+                onPointerDown={() => onUpdate("side", s)}
+                onTouchStart={e => e.stopPropagation()}
+                style={{
+                  fontFamily: inter, fontSize: 10, fontWeight: 600,
+                  letterSpacing: "2px", color: "#fff", textTransform: "uppercase",
+                  opacity: settings.side === s ? 1 : 0.3,
+                  cursor: "pointer", userSelect: "none",
+                }}
+              >{label}</div>
+            ))}
           </div>
         </div>
+      </div>
 
-        {/* Back button -- pushes to bottom via flex spacer */}
-        <div style={{ flex: 1, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-          <div
-            onPointerDown={onClose}
-            onTouchStart={e => e.stopPropagation()}
-            style={{
-              fontFamily: "monospace", fontSize: 16, fontWeight: 600,
-              letterSpacing: 4,
-              color: "rgba(255,255,255,0.85)",
-              padding: "16px 40px",
-              cursor: "pointer", userSelect: "none",
-            }}
-          >[ BACK ]</div>
-        </div>
-
+      {/* Cancel / Done */}
+      <div style={{
+        position: "absolute", left: 0, right: 0, top: 726,
+        display: "flex", justifyContent: "center", alignItems: "center", gap: 40,
+      }}>
+        <div
+          onPointerDown={onClose}
+          onTouchStart={e => e.stopPropagation()}
+          style={{
+            fontFamily: inter, fontSize: 12, fontWeight: 400,
+            letterSpacing: "6px", color: "#fff", textTransform: "uppercase",
+            opacity: 0.3, cursor: "pointer", userSelect: "none",
+          }}
+        >Cancel</div>
+        <div
+          onPointerDown={onClose}
+          onTouchStart={e => e.stopPropagation()}
+          style={{
+            fontFamily: inter, fontSize: 12, fontWeight: 800,
+            letterSpacing: "6px", color: "#fff", textTransform: "uppercase",
+            cursor: "pointer", userSelect: "none",
+          }}
+        >Done</div>
       </div>
     </div>
   );
@@ -1327,7 +1301,7 @@ function TetrisGame2P() {
   React.useEffect(() => {
     const ph = state.phase, pa = state.paused, su = state.summary;
     if (!settings.music) { sfx.bgmStop(); return; }
-    const vol = settings.volume / 10;
+    const vol = settings.volume / 5;
     if (ph === "playing" && !pa && !su) {
       sfx.bgmVolume(vol);
       sfx.bgmPlay(vol);
@@ -1350,7 +1324,7 @@ function TetrisGame2P() {
         // Only resume if the game logic wants music playing right now.
         const ph = state.phase, pa = state.paused, su = state.summary;
         if (settings.music && ph === "playing" && !pa && !su) {
-          sfx.bgmPlay(settings.volume / 10);
+          sfx.bgmPlay(settings.volume / 5);
         }
       }
     };
@@ -2202,7 +2176,7 @@ function TetrisGame2P() {
     updateSetting("side", side);
     sfx.preload();  // no-op if already attempted; preload() calls diagnose() internally
     sfx._unlock(); // play silence at vol=0 to unlock iOS WebKit audio for the session
-    if (settings.music) { sfx.bgmPlay(settings.volume / 10); }
+    if (settings.music) { sfx.bgmPlay(settings.volume / 5); }
     console.log("[diag] selectSide", side, "| haptics:", settings.haptics,
       "| intensity:", settings.hapticIntensity, "| soundFX:", settings.soundFX,
       "| volume:", settings.volume, "| musicOn:", settings.music);
@@ -2256,11 +2230,11 @@ function TetrisGame2P() {
       } else if (msg.type === "ready") {
         sfx.preload();
         sfx._unlock();
-        if (settings.music) sfx.bgmPlay(settings.volume / 10);
+        if (settings.music) sfx.bgmPlay(settings.volume / 5);
         setState(() => buildFreshOnline(msg.seed, onlineRoleRef.current));
       } else if (msg.type === "rematch") {
         // Server minted a new shared seed: both phones reset identically.
-        if (settings.music) sfx.bgmPlay(settings.volume / 10);
+        if (settings.music) sfx.bgmPlay(settings.volume / 5);
         setState(() => buildFreshOnline(msg.seed, onlineRoleRef.current));
       } else if (msg.k === "mv") {
         // Opponent's piece moved -- render it directly on our board.
@@ -2792,7 +2766,7 @@ function TetrisGame2P() {
   const handleRematch = (winnerSide) => {
     setP1Wins(w => w + (winnerSide === 1 ? 1 : 0));
     setP2Wins(w => w + (winnerSide === 2 ? 1 : 0));
-    if (settings.music) { sfx.bgmPlay(settings.volume / 10); }
+    if (settings.music) { sfx.bgmPlay(settings.volume / 5); }
     setState(s => ({...makeInitState2P(), phase: "playing", playerSide: s.playerSide, aiLevel: s.aiLevel}));
   };
 
@@ -2809,7 +2783,7 @@ function TetrisGame2P() {
   const handlePlayAgain = (winnerSide) => {
     setP1Wins(0);
     setP2Wins(0);
-    if (settings.music) { sfx.bgmPlay(settings.volume / 10); }
+    if (settings.music) { sfx.bgmPlay(settings.volume / 5); }
     setState(s => ({...makeInitState2P(), phase: "playing", playerSide: s.playerSide, aiLevel: s.aiLevel}));
   };
 
