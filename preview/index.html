@@ -1074,7 +1074,7 @@ function SettingsScreen({ settings, onUpdate, onClose, initialSection, exiting }
     opacity: active ? 1 : 0.3,
     cursor: "pointer", userSelect: "none",
   });
-  const di = () => ({});
+  const di = (n) => exiting ? {} : {animation:`driftIn 0.18s ease ${n*50}ms both`};
 
   return (
     <div style={{
@@ -1083,7 +1083,7 @@ function SettingsScreen({ settings, onUpdate, onClose, initialSection, exiting }
       background: "#212223",
       zIndex: 100,
       userSelect: "none", WebkitUserSelect: "none",
-      animation: exiting ? "driftOutRight 0.15s ease both" : "driftIn 0.15s ease both",
+      animation: exiting ? "driftOutRight 0.15s ease both" : undefined,
     }}>
       {/* Grid -- same as start screen driftGrid */}
       <div style={{
