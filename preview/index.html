@@ -2674,16 +2674,18 @@ function TetrisGame2P() {
           onTouchStart={e=>e.stopPropagation()}
           style={{
             position:"absolute", left:0, right:0, top:654,
-            display:"flex", gap:8, alignItems:"center", justifyContent:"center",
+            display:"flex", alignItems:"center", justifyContent:"center",
             minHeight:44, cursor:"pointer",
             ...di(3),
           }}>
-          <span style={{fontSize:10,letterSpacing:"5px",opacity:0.5,color:"#fff",textTransform:"uppercase"}}>Music:</span>
-          <span style={{
-            fontSize:10,letterSpacing:"5px",fontWeight:600,color:"#fff",textTransform:"uppercase",
-            opacity:settings.music?1:0.5,
-            display:"inline-block", minWidth:30, textAlign:"left",
-          }}>{settings.music ? "On" : "Off"}</span>
+          <div style={{display:"flex", gap:8, alignItems:"center"}}>
+            <span style={{fontSize:10,letterSpacing:"5px",opacity:0.5,color:"#fff",textTransform:"uppercase"}}>Music:</span>
+            <span style={{
+              fontSize:10,letterSpacing:"5px",fontWeight:600,color:"#fff",textTransform:"uppercase",
+              opacity:settings.music?1:0.5,
+              display:"inline-block", width:44, textAlign:"left",
+            }}>{settings.music ? "On" : "Off"}</span>
+          </div>
         </div>
         {/* Info + Gear icons at 754px */}
         <div style={{
