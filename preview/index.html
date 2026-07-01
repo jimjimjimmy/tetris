@@ -1150,8 +1150,8 @@ function SettingsScreen({ settings, onUpdate, onClose, initialSection }) {
           </div>
 
           {/* Intensity */}
-          <div style={{ display: "flex", alignItems: "center", minHeight: 44, gap: 32, opacity: settings.haptics ? 1 : 0.3 }}>
-            <div style={rowLbl}>Intensity</div>
+          <div style={{ display: "flex", alignItems: "stretch", minHeight: 44, gap: 32, opacity: settings.haptics ? 1 : 0.3 }}>
+            <div style={{...rowLbl, display:"flex", alignItems:"center"}}>Intensity</div>
             {[["light","Low"],["medium","Mid"],["strong","High"]].map(([val, label]) => (
               <div key={val}
                 onPointerDown={() => settings.haptics && onUpdate("hapticIntensity", val)}
@@ -1161,7 +1161,7 @@ function SettingsScreen({ settings, onUpdate, onClose, initialSection }) {
                   letterSpacing: "3px", color: "#fff", textTransform: "uppercase",
                   opacity: settings.hapticIntensity === val ? 1 : 0.3,
                   cursor: "pointer", userSelect: "none",
-                  padding: "17px 10px",
+                  display: "flex", alignItems: "center",
                 }}
               >{label}</div>
             ))}
