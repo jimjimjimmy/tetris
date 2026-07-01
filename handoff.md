@@ -1,57 +1,55 @@
-# Handoff - Tetris iOS - 2026-06-06
+# Handoff - Tetris (Drift) - 2026-07-01
 
 ## What this is
-Personal two-player iOS Tetris game (jimjimjimmy/tetris), MacFQ code machine. This session focused on adding background music (BGM) to gameplay.
+Personal Tetris game (jimjimjimmy/tetris), MacFQ session, focused on start screen polish and page transition animations.
 
 ## Current state
-- BGM is working on device - `[sfx] bgm playing` confirmed in Xcode console
-- BGM audio file: `preview/assets/Sound fx/Music/bgm.m4a` (ominous ticking clock, M4A/AAC)
-- BGM plays when game starts, pauses when paused, stops on menu/game over
-- BGM volume is still too loud - iOS ignores `audio.volume` JS property; baking 25% into the audio file via Python audioop + afconvert did not produce audible difference
-- Game does NOT pause when Settings or Info screen is opened (known bug, not yet fixed)
-- SFX (non-music sounds) status: user still looking for better SFX files
+- All transitions working: Settings opens (content drifts in from right), closes (exits right, home content slides in from left)
+- Start screen: Music label no longer shifts on toggle, 44px tap areas on Music/Difficulty/Single/2 Players
+- Series score pips visible during gameplay, "Play Game 2/3" button naming correct
+- Pause screen: Resume/Restart(solo)/Quit(online), POV-correct pip colors
+- SVG arrow assets (ArrowR/ArrowL) used everywhere instead of text arrows
+- Animation library documented in CLAUDE.md
+- Transitions need verification on device after Xcode rebuild
 
 ## Files changed this session
 
 | File | Status | What changed |
 |------|--------|-------------|
-| preview/index.html | committed | BGM routed through sfx object; bgmPlay/bgmStop/bgmPause/bgmVolume methods added; BGM useEffect added to TetrisGame2P; gesture handlers call bgmPlay on user interaction |
-| preview/assets/Sound fx/Music/bgm.m4a | committed | Converted from WAV (unsupported by WKWebView) to M4A; re-encoded at 25% amplitude (may not have taken effect - needs verification) |
-| preview/assets/Sound fx/Music/bgm.wav | committed | Original WAV retained in repo |
+| preview/index.html | committed | Start screen tap areas, Music label fix, all page transitions (driftIn/driftOut/slideInLeft/driftOutRight), React.Fragment stagger system, Settings stagger, 2 Players nowrap |
+| CLAUDE.md | committed | Added full Animation Library section: keyframes table, forward/back nav rules, stagger pattern, Settings specifics |
 
 ## Uncommitted work
-Only untracked SFX candidate files the user has been browsing. Not part of the build. Safe to ignore.
+None. All changes committed and pushed.
 
 ## Open questions / decisions pending
-- BGM volume: iOS ignores `audio.volume` JS. The 25% bake via Python audioop + afconvert did not seem to work. Need to verify m4a was actually re-encoded at lower amplitude, or try ffmpeg for volume reduction.
-- Game pause on Settings/Info open: when user taps Settings or Info icon, the game continues running. Should pause the game tick and BGM.
-- SFX: user still selecting better sound effect files from candidates in `preview/assets/Sound fx/`.
+- Transitions on device need verification after full Xcode rebuild (user reported "no transition work" before doing the rebuild)
+- Consider whether start screen should animate OUT when a game starts (no exit animation currently when tapping Single/2 Players)
 
 ## What to do next
-1. Fix BGM volume - verify the m4a amplitude was actually reduced, or re-encode using a different tool. Test on device.
-2. Pause game when Settings or Info screen is opened.
-3. SFX selection - user to pick files; wire them in once selected.
+1. Verify transitions on device after Xcode rebuild: Cmd+Shift+K (clean) then Cmd+R (run) on Gandalf
+2. If transitions still broken on device, check WKWebView CSS animation compatibility
+3. Consider transitions for game-start and game-over screens using same animation library
+4. Any remaining Figma design items
 
 ## How to resume
-
+On Gandalf:
 ```bash
-# On MacFQ (code machine):
+cd ~/Developer/tetris && git pull && npx cap sync ios
+# Then Xcode: Cmd+Shift+K + Cmd+R
+```
+
+On MacFQ:
+```bash
 cd "/Users/jimmyche/Library/CloudStorage/Dropbox/04 Projects/AI Shared/Tetris"
 git pull
-
-# On Gandalf (build machine):
-cd ~/Developer/tetris && git pull && npx cap sync ios
-# Copy to DerivedData (Xcode caches web assets - must do this every time):
-cp ios/App/App/public/index.html ~/Library/Developer/Xcode/DerivedData/App-cxxgmxbgxoonhecemrbvkjfgirae/Build/Products/Debug-iphoneos/App.app/public/index.html
-cp "ios/App/App/public/assets/Sound fx/Music/bgm.m4a" ~/Library/Developer/Xcode/DerivedData/App-cxxgmxbgxoonhecemrbvkjfgirae/Build/Products/Debug-iphoneos/App.app/public/assets/Sound\ fx/Music/bgm.m4a
-# Then Run in Xcode
 ```
 
 ## Machine / account notes
 - Handoff generated on MacFQ
-- Gandalf is build-only - never commit/push from Gandalf
-- Push command (jimjimjimmy personal account):
+- Personal repo - always push with explicit token:
   ```bash
-  GITHUB_TOKEN=$(gh auth token --hostname github.com -u jimjimjimmy 2>/dev/null) && git push "https://jimjimjimmy:${GITHUB_TOKEN}@github.com/jimjimjimmy/tetris.git" main
+  GITHUB_TOKEN=$(gh auth token --hostname github.com -u jimjimjimmy 2>/dev/null)
+  git push "https://jimjimjimmy:${GITHUB_TOKEN}@github.com/jimjimjimmy/tetris.git" main
   ```
-- DerivedData path on Gandalf: `~/Library/Developer/Xcode/DerivedData/App-cxxgmxbgxoonhecemrbvkjfgirae/Build/Products/Debug-iphoneos/App.app/public/`
+- Never commit/push from Gandalf - MacFQ is the sole writer
