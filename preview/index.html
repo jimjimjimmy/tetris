@@ -697,6 +697,19 @@ function BgVignette() {
   );
 }
 
+const ArrowR = ({opacity=1}) => (
+  <svg width="11.693" height="10.182" viewBox="0 0 11.6932 10.182" fill="none"
+    style={{display:"block",flexShrink:0,opacity}} xmlns="http://www.w3.org/2000/svg">
+    <path d="M6.60227 10.1818L5.72727 9.31818L9.32955 5.71591H0V4.46591H9.32955L5.72727 0.875L6.60227 0L11.6932 5.09091L6.60227 10.1818Z" fill="white"/>
+  </svg>
+);
+const ArrowL = ({opacity=1}) => (
+  <svg width="11.693" height="10.182" viewBox="0 0 11.6932 10.182" fill="none"
+    style={{display:"block",flexShrink:0,opacity}} xmlns="http://www.w3.org/2000/svg">
+    <path d="M5.09091 10.1818L0 5.09091L5.09091 0L5.96591 0.863636L2.36364 4.46591H11.6932V5.71591H2.36364L5.96591 9.30682L5.09091 10.1818Z" fill="white"/>
+  </svg>
+);
+
 function InfoIcon({ size = ICON_SIZE }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -3300,9 +3313,9 @@ function TetrisGame2P() {
               textTransform:"uppercase",
             }}>
               {[0.1,0.2,0.3].map((o,i)=><span key={"dl"+i} style={{fontWeight:400,fontSize:12,letterSpacing:"2.4px",opacity:o}}>-</span>)}
-              <span style={{fontWeight:300,fontSize:16,letterSpacing:"3.2px",opacity:0.2}}>&rarr;</span>
+              <ArrowR opacity={0.2}/>
               <span style={{fontSize:16,fontWeight:500,letterSpacing:"8px",marginRight:"-8px",opacity:0.5}}>Lost</span>
-              <span style={{fontWeight:300,fontSize:16,letterSpacing:"3.2px",opacity:0.2}}>&larr;</span>
+              <ArrowL opacity={0.2}/>
               {[0.3,0.2,0.1].map((o,i)=><span key={"dr"+i} style={{fontWeight:400,fontSize:12,letterSpacing:"2.4px",opacity:o}}>-</span>)}
             </div>
             {/* MENU at 599px */}
@@ -3340,9 +3353,9 @@ function TetrisGame2P() {
               textTransform:"uppercase",
             }}>
               {[0.1,0.2,0.3].map((o,i)=><span key={"dl"+i} style={{fontFamily:"'Inter',sans-serif",fontWeight:400,fontSize:12,letterSpacing:"2.4px",opacity:o}}>-</span>)}
-              <span style={{fontFamily:"'Inter',sans-serif",fontWeight:400,fontSize:16,letterSpacing:"3.2px"}}>&rarr;</span>
+              <ArrowR/>
               <span style={{fontFamily:"'Inter',sans-serif",fontSize:24,fontWeight:500,letterSpacing:"12px",marginRight:"-12px",opacity:0.5}}>Paused</span>
-              <span style={{fontFamily:"'Inter',sans-serif",fontWeight:400,fontSize:16,letterSpacing:"3.2px"}}>&larr;</span>
+              <ArrowL/>
               {[0.3,0.2,0.1].map((o,i)=><span key={"dr"+i} style={{fontFamily:"'Inter',sans-serif",fontWeight:400,fontSize:12,letterSpacing:"2.4px",opacity:o}}>-</span>)}
             </div>
             {/* Best of 3 + pips at 496px */}
@@ -3432,9 +3445,9 @@ function TetrisGame2P() {
             color:"#fff",textTransform:"uppercase",
           }}>
             {[0.1,0.2,0.3].map((o,i)=><span key={"dl"+i} style={{fontWeight:400,fontSize:12,letterSpacing:"2.4px",opacity:o}}>-</span>)}
-            <span style={{fontFamily:"'Inter',sans-serif",fontWeight:400,fontSize:16,letterSpacing:"3.2px",opacity:arrowOp}}>&rarr;</span>
+            <ArrowR opacity={arrowOp}/>
             <span style={{fontFamily:"'Inter',sans-serif",fontSize:size,fontWeight:500,letterSpacing:tracking+"px",marginRight:"-"+tracking+"px",color,opacity:textOp}}>{text}</span>
-            <span style={{fontFamily:"'Inter',sans-serif",fontWeight:400,fontSize:16,letterSpacing:"3.2px",opacity:arrowOp}}>&larr;</span>
+            <ArrowL opacity={arrowOp}/>
             {[0.3,0.2,0.1].map((o,i)=><span key={"dr"+i} style={{fontWeight:400,fontSize:12,letterSpacing:"2.4px",opacity:o}}>-</span>)}
           </div>
         );
