@@ -1062,34 +1062,19 @@ function SettingsScreen({ settings, onUpdate, onClose, initialSection }) {
     <div style={{
       position: "absolute", inset: 0,
       width: FRAME_W, height: GAME_2P_H,
-      background: "#0a0a0a",
+      background: "#212223",
       zIndex: 100,
       userSelect: "none", WebkitUserSelect: "none",
     }}>
-      {/* (1) Grid lines */}
+      {/* Grid -- same as start screen driftGrid */}
       <div style={{
-        position: "absolute", inset: 0,
+        position: "absolute", inset: 0, pointerEvents: "none",
         backgroundImage:
-          `linear-gradient(${GRID_LINE_COLOR} 1px, transparent 1px), ` +
-          `linear-gradient(90deg, ${GRID_LINE_COLOR} 1px, transparent 1px)`,
-        backgroundSize: "20px 20px, 20px 20px",
-        backgroundPosition: "0 0, 1px 0",
-        pointerEvents: "none",
+          "linear-gradient(rgba(49,50,51,0.3) 1px,transparent 1px)," +
+          "linear-gradient(90deg,rgba(49,50,51,0.3) 1px,transparent 1px)",
+        backgroundSize: "20px 20px",
       }} />
-      {/* (2)+(3) Radial gradients -- same Mobile-Safari compensated values as game screen */}
-      <div style={{
-        position: "absolute", inset: 0,
-        background:
-          "radial-gradient(circle 663px at 201px 211px, rgba(36,38,44,0.55), rgba(36,38,44,0)), " +
-          "radial-gradient(circle 496px at 201px 437px, rgba(36,38,44,0.55), rgba(36,38,44,0))",
-        pointerEvents: "none",
-      }} />
-      {/* (4) Gradient stripe */}
-      <div style={{
-        position: "absolute", left: 0, top: 0, width: 322, height: GAME_2P_H,
-        background: "rgba(0, 0, 0, 0.18)",
-        pointerEvents: "none",
-      }} />
+      <BgVignette />
 
       {/* Title */}
       <div style={{
