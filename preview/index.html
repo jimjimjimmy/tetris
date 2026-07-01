@@ -3215,6 +3215,29 @@ function TetrisGame2P() {
           env(safe-area-inset-bottom)) so on iPhones with a home indicator
           (~34px), the strip clears the indicator. The 20px floor keeps
           some breathing room on devices without a real bottom inset. */}
+      {/* Series score pips -- visible during play so user knows game 2/3 */}
+      {(p1Wins + p2Wins) > 0 && phase === "playing" && (() => {
+        const myW   = playerSide===1 ? p1Wins : p2Wins;
+        const oppW  = playerSide===1 ? p2Wins : p1Wins;
+        return (
+          <div style={{
+            position:"absolute", left:NEXT_X, top: `calc(${NEXT_Y - 36}px - max(20px, env(safe-area-inset-bottom)))`,
+            width:NEXT_W, display:"flex", flexDirection:"column", alignItems:"center", gap:4,
+          }}>
+            <span style={{fontFamily:"'Inter',sans-serif",fontSize:8,fontWeight:600,letterSpacing:"2px",textTransform:"uppercase",color:"#fff",opacity:0.3}}>Series</span>
+            <div style={{display:"flex",gap:6,alignItems:"center"}}>
+              {[...Array(WINS_TO_WIN)].map((_,i)=>(
+                <div key={i} style={{
+                  width:6,height:6,borderRadius:"50%",flexShrink:0,
+                  background: i<myW ? "#339900" : i<myW+oppW ? "#990000" : "transparent",
+                  border: i<myW+oppW ? "none" : "1px solid rgba(255,255,255,0.2)",
+                }}/>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
       <div style={{position: "absolute", left: NEXT_X, top: `calc(${NEXT_Y}px - max(20px, env(safe-area-inset-bottom)))`, width: NEXT_W, color: "#fff"}}>
         <div style={{
           width: NEXT_W, height: NEXT_LABEL_H,
