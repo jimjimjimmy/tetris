@@ -1301,7 +1301,6 @@ function TetrisGame2P() {
   const [showSettings, setShowSettings] = React.useState(false);
   const [settingsSection, setSettingsSection] = React.useState(null);
   const [startExiting, setStartExiting] = React.useState(false);
-  const [startReturning, setStartReturning] = React.useState(false);
   const [settingsExiting, setSettingsExiting] = React.useState(false);
   const [state, setState]   = React.useState(makeInitState2P);
   // Session win counts -- persist across rematches, reset on MENU or PLAY AGAIN.
@@ -1371,8 +1370,6 @@ function TetrisGame2P() {
       setShowSettings(false);
       setSettingsSection(null);
       setSettingsExiting(false);
-      setStartReturning(true);
-      setTimeout(() => setStartReturning(false), 200);
     }, 150);
   };
 
@@ -2529,7 +2526,7 @@ function TetrisGame2P() {
           fontFamily: "'Inter', sans-serif",
           userSelect: "none", WebkitUserSelect: "none",
           color: "#fff",
-          ...(startExiting ? {animation:"driftOut 0.15s ease both",pointerEvents:"none"} : startReturning ? {animation:"driftInLeft 0.15s ease both"} : {}),
+          ...(startExiting ? {animation:"driftOut 0.15s ease both",pointerEvents:"none"} : {}),
         }}>
           <div style={driftGrid} />
           <BgVignette/>
@@ -2610,7 +2607,7 @@ function TetrisGame2P() {
         fontFamily: "'Inter', sans-serif",
         userSelect: "none", WebkitUserSelect: "none",
         color: "#fff",
-        ...(startExiting ? {animation:"driftOut 0.15s ease both",pointerEvents:"none"} : startReturning ? {animation:"driftInLeft 0.15s ease both"} : {}),
+        ...(startExiting ? {animation:"driftOut 0.15s ease both",pointerEvents:"none"} : {}),
       }}>
         <div style={driftGrid} />
         <BgVignette/>
