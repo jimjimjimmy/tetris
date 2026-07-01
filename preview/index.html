@@ -3376,7 +3376,7 @@ function TetrisGame2P() {
                 onPointerDown={handleMenu}
                 onTouchStart={e=>e.stopPropagation()}
                 style={{fontSize:12,fontWeight:400,letterSpacing:"6px",color:"rgba(255,255,255,0.3)",textTransform:"uppercase",cursor:"pointer"}}
-              >Restart</span>
+              >{state.online ? "Quit" : "Restart"}</span>
             </div>
           </div>
         );
