@@ -2480,7 +2480,7 @@ function TetrisGame2P() {
             fontSize:12, letterSpacing:"6px",
             fontWeight: startTab==="single" ? 600 : 400,
             opacity: startTab==="single" ? 1 : 0.3,
-            cursor:"pointer",
+            cursor:"pointer", padding:"17px 8px",
           }}
         >Single</span>
         <span style={{fontSize:16,letterSpacing:"3.2px",opacity:0.2}}>|</span>
@@ -2491,7 +2491,7 @@ function TetrisGame2P() {
             fontSize:12, letterSpacing:"6px",
             fontWeight: startTab==="2players" ? 800 : 400,
             opacity: startTab==="2players" ? 1 : 0.3,
-            cursor:"pointer",
+            cursor:"pointer", padding:"17px 8px",
           }}
         >2 Players</span>
         <span style={{fontSize:16,letterSpacing:"3.2px",opacity:0.2}}>|</span>
@@ -2646,30 +2646,34 @@ function TetrisGame2P() {
           </div>
         </div>
         {/* DIFFICULTY at 618px */}
-        <div style={{
-          position:"absolute", left:0, right:0, top:618,
-          display:"flex", gap:8, alignItems:"center", justifyContent:"center",
-          ...di(2),
-        }}>
-          <span
-            onPointerDown={()=>openSettings("game")}
-            onTouchStart={e=>e.stopPropagation()}
-            style={{fontSize:10,letterSpacing:"5px",opacity:0.5,color:"#fff",textTransform:"uppercase",cursor:"pointer"}}
-          >Difficulty:</span>
+        <div
+          onPointerDown={()=>openSettings("game")}
+          onTouchStart={e=>e.stopPropagation()}
+          style={{
+            position:"absolute", left:0, right:0, top:618,
+            display:"flex", gap:8, alignItems:"center", justifyContent:"center",
+            minHeight:44, cursor:"pointer",
+            ...di(2),
+          }}>
+          <span style={{fontSize:10,letterSpacing:"5px",opacity:0.5,color:"#fff",textTransform:"uppercase"}}>Difficulty:</span>
           <span style={{fontSize:10,letterSpacing:"5px",fontWeight:600,color:"#fff",textTransform:"uppercase"}}>{settings.level}</span>
         </div>
         {/* MUSIC at 654px */}
-        <div style={{
-          position:"absolute", left:0, right:0, top:654,
-          display:"flex", gap:8, alignItems:"center", justifyContent:"center",
-          ...di(3),
-        }}>
+        <div
+          onPointerDown={()=>updateSetting("music",!settings.music)}
+          onTouchStart={e=>e.stopPropagation()}
+          style={{
+            position:"absolute", left:0, right:0, top:654,
+            display:"flex", gap:8, alignItems:"center", justifyContent:"center",
+            minHeight:44, cursor:"pointer",
+            ...di(3),
+          }}>
           <span style={{fontSize:10,letterSpacing:"5px",opacity:0.5,color:"#fff",textTransform:"uppercase"}}>Music:</span>
-          <span
-            onPointerDown={()=>updateSetting("music",!settings.music)}
-            onTouchStart={e=>e.stopPropagation()}
-            style={{fontSize:10,letterSpacing:"5px",fontWeight:600,color:"#fff",textTransform:"uppercase",cursor:"pointer",opacity:settings.music?1:0.5}}
-          >{settings.music ? "On" : "Off"}</span>
+          <span style={{
+            fontSize:10,letterSpacing:"5px",fontWeight:600,color:"#fff",textTransform:"uppercase",
+            opacity:settings.music?1:0.5,
+            display:"inline-block", minWidth:30, textAlign:"left",
+          }}>{settings.music ? "On" : "Off"}</span>
         </div>
         {/* Info + Gear icons at 754px */}
         <div style={{
