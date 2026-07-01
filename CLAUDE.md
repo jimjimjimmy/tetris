@@ -748,3 +748,48 @@ All scenarios PASS. Two bugs found and fixed during the run:
 ## Memory
 
 User preferences: `~/Dropbox/04 Projects/AI Shared/memory/MEMORY.md`
+
+---
+
+## Animation library
+
+All keyframes live in the `<style>` block at the top of `preview/index.html`.
+
+### Keyframes
+
+| Name | From | To | Use for |
+|---|---|---|---|
+| `driftIn` | opacity:0, translateX(20px) | opacity:1, translateX(0) | Forward nav - new page enters from right |
+| `driftOut` | opacity:1, translateX(0) | opacity:0, translateX(-20px) | Forward nav - current page exits left |
+| `driftInLeft` | opacity:0, translateX(-20px) | opacity:1, translateX(0) | Back nav - previous page enters from left (with opacity) |
+| `driftOutRight` | opacity:1, translateX(0) | opacity:0, translateX(20px) | Back nav - current page exits right |
+| `slideInLeft` | translateX(-16px) | translateX(0) | Back nav - content re-enters from left with NO opacity change (avoids flash when element was already visible) |
+| `fadeIn` | opacity:0 | opacity:1 | Opacity-only fade in |
+
+### Navigation transition rules
+
+**Forward (going deeper - e.g. Home -> Settings):**
+- Current page: no animation needed if new page covers it with zIndex
+- New page background: mounts instantly (opaque), no container animation
+- New page content: `driftIn` stagger top-down (n * 50ms delay)
+
+**Back (returning - e.g. Settings -> Home):**
+- Current page container: `driftOutRight 0.15s ease both`
+- Previous page: `setStartKey(k => k+1)` at t=0 (while current page still covers)
+- Previous page content: `slideInLeft 0.15s ease` stagger - plays under the exit, settled by reveal time
+
+### Stagger pattern
+
+```js
+const di = (n) => ({ animation: `driftIn 0.18s ease ${n * 50}ms both` });
+// Apply to elements in order: di(0), di(1), di(2)...
+```
+
+On return, swap `driftIn` for `slideInLeft 0.15s` (no opacity, avoids flash).
+
+### Settings screen specifics
+
+- `SettingsScreen` receives `exiting` prop
+- Entry: container has no animation; children use `di(n)` stagger (`driftIn`)
+- Exit: container plays `driftOutRight 0.15s ease both`; `di()` returns `{}` when exiting
+- `closeSettings`: sets `settingsExiting=true`, increments `startKey` immediately (t=0), unmounts Settings after 150ms
