@@ -1095,25 +1095,25 @@ function SettingsScreen({ settings, onUpdate, onClose, initialSection }) {
           <div style={{...secLabel, marginBottom: 8}}>Sound</div>
 
           {/* Sound FX */}
-          <div style={{ display: "flex", alignItems: "center", minHeight: 44 }}>
+          <div style={{ display: "flex", alignItems: "center", minHeight: 44, gap: 16 }}>
             <div style={rowLbl}>Sound Fx</div>
             {[false, true].map(v => (
               <div key={String(v)}
                 onPointerDown={() => onUpdate("soundFX", v)}
                 onTouchStart={e => e.stopPropagation()}
-                style={{...opt(settings.soundFX === v), padding: "17px 16px"}}
+                style={{...opt(settings.soundFX === v), padding: "17px 0"}}
               >{v ? "ON" : "Off"}</div>
             ))}
           </div>
 
           {/* Music */}
-          <div style={{ display: "flex", alignItems: "center", minHeight: 44 }}>
+          <div style={{ display: "flex", alignItems: "center", minHeight: 44, gap: 16 }}>
             <div style={rowLbl}>Music</div>
             {[false, true].map(v => (
               <div key={String(v)}
                 onPointerDown={() => onUpdate("music", v)}
                 onTouchStart={e => e.stopPropagation()}
-                style={{...opt(settings.music === v), padding: "17px 16px"}}
+                style={{...opt(settings.music === v), padding: "17px 0"}}
               >{v ? "ON" : "Off"}</div>
             ))}
           </div>
@@ -1142,7 +1142,7 @@ function SettingsScreen({ settings, onUpdate, onClose, initialSection }) {
               <div key={String(v)}
                 onPointerDown={() => onUpdate("haptics", v)}
                 onTouchStart={e => e.stopPropagation()}
-                style={{...opt(settings.haptics === v), padding: "17px 16px"}}
+                style={{...opt(settings.haptics === v), padding: "17px 0"}}
               >{v ? "ON" : "Off"}</div>
             ))}
           </div>
