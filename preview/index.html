@@ -1119,7 +1119,7 @@ function SettingsScreen({ settings, onUpdate, onClose, initialSection }) {
           </div>
 
           {/* Volume 1-5 */}
-          <div style={{ display: "flex", alignItems: "center", minHeight: 44, gap: 40 }}>
+          <div style={{ display: "flex", alignItems: "center", minHeight: 44, gap: 40, opacity: settings.music ? 1 : 0.3 }}>
             <div style={rowLbl}>Volume</div>
             {[1, 2, 3, 4, 5].map(n => (
               <div key={n}
