@@ -1206,10 +1206,10 @@ function SettingsScreen({ settings, onUpdate, onClose, initialSection }) {
         </div>
       </div>
 
-      {/* Cancel / Done */}
+      {/* Cancel / Done -- Figma y:726 */}
       <div style={{
-        position: "absolute", left: 0, right: 0, bottom: "max(40px,env(safe-area-inset-bottom))",
-        display: "flex", justifyContent: "center", alignItems: "center",
+        position: "absolute", left: 0, right: 0, top: 726,
+        display: "flex", justifyContent: "center", alignItems: "center", gap: 40,
       }}>
         <div
           onPointerDown={onClose}
@@ -1218,7 +1218,7 @@ function SettingsScreen({ settings, onUpdate, onClose, initialSection }) {
             fontFamily: inter, fontSize: 12, fontWeight: 400,
             letterSpacing: "6px", color: "#fff", textTransform: "uppercase",
             opacity: 0.3, cursor: "pointer", userSelect: "none",
-            padding: "22px 40px",
+            padding: "17px 40px",
           }}
         >Cancel</div>
         <div
@@ -1228,7 +1228,7 @@ function SettingsScreen({ settings, onUpdate, onClose, initialSection }) {
             fontFamily: inter, fontSize: 12, fontWeight: 800,
             letterSpacing: "6px", color: "#fff", textTransform: "uppercase",
             cursor: "pointer", userSelect: "none",
-            padding: "22px 40px",
+            padding: "17px 40px",
           }}
         >Done</div>
       </div>
