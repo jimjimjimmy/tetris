@@ -59,7 +59,8 @@
       overflow: hidden;
     }
     @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-    @keyframes driftIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+    @keyframes driftIn  { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+    @keyframes driftOut { from { opacity: 1; transform: translateX(0); }            to { opacity: 0; transform: translateX(-20px); } }
   </style>
 </head>
 <body>
@@ -1050,7 +1051,7 @@ function useSettings() {
   return [s, update];
 }
 
-function SettingsScreen({ settings, onUpdate, onClose, initialSection }) {
+function SettingsScreen({ settings, onUpdate, onClose, initialSection, exiting }) {
   const inter = "'Inter', sans-serif";
 
   const secLabel = {
@@ -1078,6 +1079,7 @@ function SettingsScreen({ settings, onUpdate, onClose, initialSection }) {
       background: "#212223",
       zIndex: 100,
       userSelect: "none", WebkitUserSelect: "none",
+      animation: exiting ? "driftOut 0.15s ease both" : "driftIn 0.15s ease both",
     }}>
       {/* Grid -- same as start screen driftGrid */}
       <div style={{
@@ -1292,6 +1294,8 @@ function TetrisGame2P() {
   const [settings, updateSetting] = useSettings();
   const [showSettings, setShowSettings] = React.useState(false);
   const [settingsSection, setSettingsSection] = React.useState(null);
+  const [startExiting, setStartExiting] = React.useState(false);
+  const [settingsExiting, setSettingsExiting] = React.useState(false);
   const [state, setState]   = React.useState(makeInitState2P);
   // Session win counts -- persist across rematches, reset on MENU or PLAY AGAIN.
   const [p1Wins, setP1Wins] = React.useState(0);
@@ -1352,11 +1356,12 @@ function TetrisGame2P() {
 
   const openSettings = (section) => {
     setSettingsSection(section || null);
-    setShowSettings(true);
+    setStartExiting(true);
+    setTimeout(() => { setShowSettings(true); setStartExiting(false); }, 150);
   };
   const closeSettings = () => {
-    setShowSettings(false);
-    setSettingsSection(null);
+    setSettingsExiting(true);
+    setTimeout(() => { setShowSettings(false); setSettingsSection(null); setSettingsExiting(false); }, 150);
   };
 
   React.useEffect(() => {
@@ -2512,6 +2517,7 @@ function TetrisGame2P() {
           fontFamily: "'Inter', sans-serif",
           userSelect: "none", WebkitUserSelect: "none",
           color: "#fff",
+          ...(startExiting ? {animation:"driftOut 0.15s ease both",pointerEvents:"none"} : {}),
         }}>
           <div style={driftGrid} />
           <BgVignette/>
@@ -2592,6 +2598,7 @@ function TetrisGame2P() {
         fontFamily: "'Inter', sans-serif",
         userSelect: "none", WebkitUserSelect: "none",
         color: "#fff",
+        ...(startExiting ? {animation:"driftOut 0.15s ease both",pointerEvents:"none"} : {}),
       }}>
         <div style={driftGrid} />
         <BgVignette/>
@@ -2709,6 +2716,7 @@ function TetrisGame2P() {
           <SettingsScreen
             settings={settings}
             initialSection={settingsSection}
+            exiting={settingsExiting}
             onUpdate={(key,val)=>{
               updateSetting(key,val);
               if (key==="level") setState(s=>s.online?s:{...s,aiLevel:val});
@@ -3578,6 +3586,7 @@ function TetrisGame2P() {
         <SettingsScreen
           settings={settings}
           initialSection={settingsSection}
+          exiting={settingsExiting}
           onUpdate={(key, val) => {
             updateSetting(key, val);
             if (key === "level") setState(s => ({ ...s, aiLevel: val }));
