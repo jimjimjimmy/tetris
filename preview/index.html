@@ -1080,7 +1080,7 @@ function SettingsScreen({ settings, onUpdate, onClose, initialSection, exiting }
       background: "#212223",
       zIndex: 100,
       userSelect: "none", WebkitUserSelect: "none",
-      animation: exiting ? "driftOut 0.15s ease both" : undefined,
+      animation: exiting ? "driftOut 0.15s ease both" : "fadeIn 0.15s ease both",
     }}>
       {/* Grid -- same as start screen driftGrid */}
       <div style={{
