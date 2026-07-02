@@ -631,6 +631,25 @@ The top line is the truth (that is what is on GitHub). If git ever prints
 
 ---
 
+## App icon (RIVAL)
+
+- Source master: `assets/icon.svg` (1024-scaled, viewBox 180x180) - orange
+  `#FF6600` background with the white "VΛ" Rival mark centered (Figma App Icon
+  `354:6401`; mark is the sub-glyph SVG, 136x44.156 at x22/y67.92 in the 180
+  frame). This is a DIFFERENT mark from the full `RivalLogo` wordmark - it is
+  the double-chevron center only.
+- iOS uses the single-image app icon: `ios/App/App/Assets.xcassets/
+  AppIcon.appiconset/AppIcon-512@2x.png` (1024x1024). Regenerate from the SVG
+  with sharp (already in node_modules), FLATTENED to strip alpha (iOS rejects
+  icons with an alpha channel):
+  ```bash
+  node -e "const sharp=require('sharp'); sharp('assets/icon.svg',{density:512}).resize(1024,1024).flatten({background:'#FF6600'}).png().toFile('ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png')"
+  ```
+  Verify `sips -g hasAlpha <png>` returns `no`. `AppIcon.appiconset` IS tracked
+  in git, so committing the PNG is what carries the icon to Gandalf's build
+  (cap sync does NOT regenerate it). Rebuild on Gandalf to see it on the home
+  screen.
+
 ## Native iOS config (ios/App/App/Info.plist)
 
 - Portrait-only lock: `UISupportedInterfaceOrientations` = `[UIInterfaceOrientationPortrait]` for both iPhone and iPad (`~ipad` variant). JS overlay approach was removed entirely.
