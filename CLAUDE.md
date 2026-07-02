@@ -603,6 +603,18 @@ The top line is the truth (that is what is on GitHub). If git ever prints
 ### Components
 - `NextPieceDisplay` - renders upcoming P1 piece using 18px cells. Shows "NEXT" label above.
 - `CompactNext` - compact piece preview for 37px NEXT strips. 7px cells, no text label.
+- `RivalLogo` - the RIVAL wordmark (inline SVG, 220 x 31.95, #FF6600). Replaced
+  the old "drift" text wordmark on the start screen (both Single + 2 Players
+  tabs). Figma: `352:6358` (@ `247:5857`) / `352:6375` (@ `269:7487`); the old
+  `drift` text nodes are `hidden` in the design. SVG was fetched from the Figma
+  MCP asset server and inlined (no localhost URL committed). Positioned via a
+  centered flex container: **top 391** on the Single tab, **top 398.5** on the
+  2 Players tab (matches the two frames; note the ~7.5px per-tab difference is
+  from the design, not a bug). Game name is now RIVAL, but the app id
+  (`com.typographic.drift`) and Capacitor `appName` were NOT renamed - visual
+  wordmark only.
+- 2 Players room code: the large code letters (`fontSize:40`) render at
+  `opacity:0.5` per the updated `269:7487` design.
 
 ### P2 Standalone
 - `TetrisGameP2` - standard gravity Tetris (P2 perspective, for independent testing alongside TetrisGame).

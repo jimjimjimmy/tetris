@@ -718,6 +718,14 @@ const ArrowL = ({opacity=1}) => (
     <path d="M5.09091 10.1818L0 5.09091L5.09091 0L5.96591 0.863636L2.36364 4.46591H11.6932V5.71591H2.36364L5.96591 9.30682L5.09091 10.1818Z" fill="white"/>
   </svg>
 );
+// RIVAL wordmark logo (Figma 352:6358 / 352:6375). Replaces the old "drift"
+// text on any screen that showed the game name. 220 x 31.95, #FF6600.
+const RivalLogo = () => (
+  <svg width="220" height="31.9463" viewBox="0 0 220 31.9463" fill="none"
+    style={{display:"block"}} xmlns="http://www.w3.org/2000/svg">
+    <path d="M97.7393 21.3555L114.466 0.152344H122.785L97.7393 31.9463L72.6709 0.152344H81.0127L97.7393 21.3555ZM33.8457 6.70312H6.55078V31.8154H0V0.152344H33.8457V6.70312ZM56.8613 0.152344V31.8154H50.3105V0.152344H56.8613ZM172.594 31.8154H164.252L147.548 10.5908L130.821 31.8154H122.479L147.548 0L172.594 31.8154ZM192.705 25.2646H220V31.8154H186.154V0.152344H192.705V25.2646Z" fill="#FF6600"/>
+  </svg>
+);
 
 function InfoIcon({ size = ICON_SIZE }) {
   return (
@@ -2551,17 +2559,14 @@ function TetrisGame2P() {
           <div style={driftGrid} />
           <BgVignette/>
           <React.Fragment key={`${startTab}-${startKey}`}>
-          {/* DRIFT title - vertically centered minus 37px offset */}
+          {/* RIVAL logo (Figma 352:6375 @ 269:7487, top 398.5) */}
           <div style={{
             position:"absolute", left:0, right:0,
-            top:"calc(50% - 37px)",
+            top:398.5,
             display:"flex", justifyContent:"center",
             ...di(0),
           }}>
-            <span style={{
-              fontSize:24, fontWeight:500, letterSpacing:"36px", marginRight:"-36px",
-              color:"#f60", textTransform:"uppercase", whiteSpace:"nowrap",
-            }}>drift</span>
+            <RivalLogo/>
           </div>
           {/* Mode toggle at 448px */}
           <div style={{position:"absolute",left:0,right:0,top:448,display:"flex",justifyContent:"center"}}>
@@ -2575,7 +2580,7 @@ function TetrisGame2P() {
           }}>
             <span style={{
               fontSize:40, fontWeight:300, letterSpacing:"20px",
-              color:"#fff", textTransform:"uppercase",
+              color:"#fff", opacity:0.5, textTransform:"uppercase",
             }}>{myCode}</span>
             <div style={{
               display:"flex", flexDirection:"column", alignItems:"center",
@@ -2636,17 +2641,14 @@ function TetrisGame2P() {
         <div style={driftGrid} />
         <BgVignette/>
         <React.Fragment key={`${startTab}-${startKey}`}>
-        {/* DRIFT title */}
+        {/* RIVAL logo (Figma 352:6358 @ 247:5857, top 391) */}
         <div style={{
           position:"absolute", left:0, right:0,
-          top:"calc(50% - 37px)",
+          top:391,
           display:"flex", justifyContent:"center",
           ...di(0),
         }}>
-          <span style={{
-            fontSize:24, fontWeight:500, letterSpacing:"36px", marginRight:"-36px",
-            color:"#f60", textTransform:"uppercase", whiteSpace:"nowrap",
-          }}>drift</span>
+          <RivalLogo/>
         </div>
         {/* Mode toggle at 448px */}
         <div style={{position:"absolute",left:0,right:0,top:448,display:"flex",justifyContent:"center"}}>
