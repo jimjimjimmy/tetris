@@ -650,6 +650,16 @@ The top line is the truth (that is what is on GitHub). If git ever prints
   (cap sync does NOT regenerate it). Rebuild on Gandalf to see it on the home
   screen.
 
+## App name (RIVAL)
+
+- Home-screen display name is `CFBundleDisplayName` = `Rival` in
+  `ios/App/App/Info.plist` (was "Drift - Test"). `capacitor.config.json`
+  `appName` is also `Rival` for consistency. `cap sync` does NOT push appName
+  into Info.plist, so the plist is the source of truth for the label - edit it
+  directly. Bundle id `com.typographic.drift` (appId) is UNCHANGED on purpose
+  (renaming it would break app identity/provisioning). `preview/index.html`
+  `<title>` stays "Tetris" (browser-tab only, not the native app).
+
 ## Native iOS config (ios/App/App/Info.plist)
 
 - Portrait-only lock: `UISupportedInterfaceOrientations` = `[UIInterfaceOrientationPortrait]` for both iPhone and iPad (`~ipad` variant). JS overlay approach was removed entirely.
