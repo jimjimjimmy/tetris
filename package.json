@@ -7,6 +7,7 @@
     "cap:sync": "cap sync",
     "cap:open": "cap open ios",
     "cap:run": "cap run ios",
+    "device": "git fetch origin && git reset --hard origin/main && npx cap sync ios && grep -c pageInRight ios/App/App/public/index.html && npx cap open ios",
     "uitest": "npx cap sync ios && xcodebuild test -project ios/App/App.xcodeproj -scheme App -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -configuration Debug",
     "uitest:nobuild": "xcodebuild test-without-building -project ios/App/App.xcodeproj -scheme App -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -configuration Debug"
   },
