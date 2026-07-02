@@ -608,9 +608,10 @@ The top line is the truth (that is what is on GitHub). If git ever prints
   tabs). Figma: `352:6358` (@ `247:5857`) / `352:6375` (@ `269:7487`); the old
   `drift` text nodes are `hidden` in the design. SVG was fetched from the Figma
   MCP asset server and inlined (no localhost URL committed). Positioned via a
-  centered flex container: **top 391** on the Single tab, **top 398.5** on the
-  2 Players tab (matches the two frames; note the ~7.5px per-tab difference is
-  from the design, not a bug). Game name is now RIVAL, but the app id
+  centered flex container at **top 391** on BOTH tabs. The Single screen
+  (`247:5857`) is the canonical reference for ALL Rival placement - the
+  2 Players frame's slightly different Y was a design slip, so both tabs use
+  391 for consistency (no jump on tab switch). Game name is now RIVAL, but the app id
   (`com.typographic.drift`) and Capacitor `appName` were NOT renamed - visual
   wordmark only.
 - 2 Players room code: the large code letters (`fontSize:40`) render at
