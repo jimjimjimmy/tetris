@@ -643,6 +643,14 @@ setting -- it is folded into the `soundFX` toggle:
   session, so the clock tick is still silenced by the iPhone mute switch
   (same as all SFX). Making audio play on silent is a separate `.playback`
   change (brings back the Now Playing widget) - not done.
+- Design confirmation (spec pull 2026-07-02): this MATCHES Figma, it is not a
+  divergence. On the Start Screen frame `247:5857` the `Music` frame
+  (`260:5908`) is `hidden`; on the Settings frame `324:6417` the `Music` row
+  (`324:6547`) is `hidden` with `Volume` occupying the slot right after
+  `Sound Fx`. All other start-screen elements sit at their Figma Y-positions
+  (drift 400, mode toggle 448, Up/Or/Dn 514, Difficulty 618, Icons 754) - the
+  code already uses these, so removing Music required NO repositioning. Visual
+  diff of both screens vs the frames: DIFF none.
 
 ## BGM Now Playing suppression
 
