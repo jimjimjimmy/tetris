@@ -65,6 +65,10 @@
     @keyframes driftInLeft { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
     @keyframes driftOutRight { from { opacity: 1; transform: translateX(0); } to { opacity: 0; transform: translateX(20px); } }
     @keyframes slideInLeft { from { transform: translateX(-16px); } to { transform: translateX(0); } }
+    /* Full-page screen transitions (start/online/playing swaps). Directional:
+       incoming enters from the right moving left; outgoing exits to the right. */
+    @keyframes pageInRight  { from { opacity: 0; transform: translateX(100%); } to { opacity: 1; transform: translateX(0); } }
+    @keyframes pageOutRight { from { opacity: 1; transform: translateX(0); }    to { opacity: 0; transform: translateX(100%); } }
   </style>
 </head>
 <body>
@@ -1376,19 +1380,25 @@ function TetrisGame2P() {
     }, 150);
   };
 
-  // Screen-to-screen navigation with directional drift.
-  // The outgoing screen exits left-to-right (driftOutRight) while
-  // navExiting is true; after NAV_EXIT_MS the phase swaps and the
-  // incoming screen mounts fresh, playing driftIn (right-to-left)
-  // via its own root. `apply` performs the actual phase change.
-  const NAV_EXIT_MS = 150;
+  // Screen-to-screen navigation with a full-page directional slide.
+  // The outgoing screen slides out to the right (pageOutRight) while
+  // navExiting is true; after NAV_MS the phase swaps and the incoming
+  // screen mounts fresh, sliding in from the right (pageInRight) via
+  // its own root. `apply` performs the actual phase change.
+  // NAV_MS MUST match the animation duration so the exit finishes
+  // exactly as the swap happens (no truncation, no dead frames).
+  const NAV_MS = 300;
   const navTo = (apply) => {
     setNavExiting(true);
     setTimeout(() => {
       apply();
       setNavExiting(false);
-    }, NAV_EXIT_MS);
+    }, NAV_MS);
   };
+  // Root-level animation for any top-level screen (start/online/playing).
+  const screenAnim = navExiting
+    ? { animation: `pageOutRight ${NAV_MS}ms cubic-bezier(0.4,0,0.2,1) both`, pointerEvents: "none" }
+    : { animation: `pageInRight ${NAV_MS}ms cubic-bezier(0.4,0,0.2,1) both` };
 
   React.useEffect(() => {
     const id = setInterval(() => {
@@ -2388,8 +2398,7 @@ function TetrisGame2P() {
         fontFamily: "'Inter', sans-serif",
         userSelect: "none", WebkitUserSelect: "none",
         color: "#fff",
-        animation: navExiting ? "driftOutRight 0.15s ease both" : "driftIn 0.18s ease both",
-        ...(navExiting ? {pointerEvents:"none"} : {}),
+        ...screenAnim,
       }}>
         <div style={driftGrid} />
         <BgVignette/>
@@ -2545,7 +2554,7 @@ function TetrisGame2P() {
           fontFamily: "'Inter', sans-serif",
           userSelect: "none", WebkitUserSelect: "none",
           color: "#fff",
-          ...(navExiting ? {animation:"driftOutRight 0.15s ease both",pointerEvents:"none"} : {}),
+          ...screenAnim,
         }}>
           <React.Fragment key={startKey}>
           <div style={driftGrid} />
@@ -2628,7 +2637,7 @@ function TetrisGame2P() {
         fontFamily: "'Inter', sans-serif",
         userSelect: "none", WebkitUserSelect: "none",
         color: "#fff",
-        ...(navExiting ? {animation:"driftOutRight 0.15s ease both",pointerEvents:"none"} : {}),
+        ...screenAnim,
       }}>
         <React.Fragment key={startKey}>
         <div style={driftGrid} />
@@ -2919,7 +2928,7 @@ function TetrisGame2P() {
       fontFamily: "monospace",
       userSelect: "none",
       WebkitUserSelect: "none",
-      animation: navExiting ? "driftOutRight 0.15s ease both" : "driftIn 0.18s ease both",
+      ...screenAnim,
     }}>
 
       {/* Background-layer stack (Figma 145-3068, exact match, BOTTOM->TOP):

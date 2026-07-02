@@ -798,27 +798,42 @@ On return, swap `driftIn` for `slideInLeft 0.15s` (no opacity, avoids flash).
 
 The top-level phase screens (`start`, `online`, `playing`) swap via early
 `return`s keyed on `state.phase`. They are orchestrated by `navTo(apply)` +
-the `navExiting` state so the swap is animated instead of an instant cut:
+the `navExiting` state so the swap is a full-page directional SLIDE instead of
+an instant cut.
 
-- Rule (directional): the OUTGOING screen exits left-to-right (`driftOutRight`);
-  the INCOMING screen mounts fresh and enters right-to-left (`driftIn`).
-- `navTo(apply)`: sets `navExiting=true` (outgoing screen picks up
-  `driftOutRight` + `pointerEvents:none`), waits `NAV_EXIT_MS`=150ms, then runs
-  `apply()` (the actual `setState` phase change) and clears `navExiting`. The new
-  screen mounts with `navExiting=false` so its root's `driftIn` plays once.
-- Screen roots:
-  - `start` roots (both tabs): `navExiting ? driftOutRight : {}` (enter is the
-    child `di()` stagger, not a container animation).
-  - `online` + `playing` roots: `navExiting ? driftOutRight : driftIn`.
+- Keyframes (dedicated, NOT the 20px Settings drift): `pageInRight`
+  (translateX 100% -> 0, opacity 0 -> 1) and `pageOutRight` (translateX 0 ->
+  100%, opacity 1 -> 0). These move the WHOLE page a full frame width so the
+  transition is clearly visible. The old 20px `driftOutRight`/`driftIn` was
+  imperceptible for a page transition and was replaced here (those keyframes
+  are still used by the Settings overlay + start-screen child stagger).
+- Rule (directional): INCOMING screen enters from the right moving left
+  (`pageInRight`); OUTGOING screen exits to the right (`pageOutRight`).
+- `NAV_MS` = 300 is the single source of truth for BOTH the CSS animation
+  duration AND the `navTo` swap timer -- they MUST stay equal so the exit
+  finishes exactly as the phase swaps (no truncation, no dead frames). Easing
+  cubic-bezier(0.4,0,0.2,1).
+- `screenAnim` (computed once per render from `navExiting`) is spread into all
+  three screen roots: `navExiting ? pageOutRight(+pointerEvents:none)
+  : pageInRight`. So every screen slides in on mount and slides out on exit,
+  uniformly. Do NOT re-add per-root animation literals -- use `screenAnim`.
+- `navTo(apply)`: sets `navExiting=true` (current screen slides out), waits
+  `NAV_MS`, then runs `apply()` (the `setState` phase change) and clears
+  `navExiting`. The new screen mounts with `navExiting=false` -> `pageInRight`
+  plays once.
 - Wired call sites: `selectSide` (start->playing), `handleMenu`
   (playing->start), `connectToRoom` + join-with-code (start->online), online
   BACK + opponent-disconnect MENU (online/playing->start).
 - On any full-screen RETURN to start, `setStartKey(0)` is called inside `navTo`
-  so the start content uses `driftIn` (with fade), NOT the Settings-return
-  `slideInLeft`. `startKey>0` (`slideInLeft`) is reserved for the Settings
-  overlay close, where the content was already visible underneath.
+  so the start CONTENT stagger uses `driftIn`, NOT the Settings-return
+  `slideInLeft`. (The container itself slides via `pageInRight`; the child
+  stagger plays on top.) `startKey>0` (`slideInLeft`) is reserved for the
+  Settings overlay close, where content was already visible underneath.
 - Dead `startExiting` state was removed; `navExiting` replaced it.
 - NOT animated: the network-driven online->playing auto-start (fires on the
   WebSocket `ready` event, `buildFreshOnline`), and mid-game resets that stay in
   `playing` (rematch / play-again). Game-over + pause are overlays inside the
-  playing root, so they ride the root's `driftOutRight` on quit.
+  playing root, so they ride the root's `pageOutRight` on quit.
+- Verified in-browser (MacFQ): exit sampled at translateX(238px)+fading mid
+  slide; incoming root running `pageInRight`; settles centered, no console
+  errors.
