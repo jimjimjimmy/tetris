@@ -660,6 +660,21 @@ The top line is the truth (that is what is on GitHub). If git ever prints
   (renaming it would break app identity/provisioning). `preview/index.html`
   `<title>` stays "Tetris" (browser-tab only, not the native app).
 
+## Splash / launch screen (RIVAL)
+
+- Source: `assets/splash.svg` (2732x2732) - `#0a0a0a` background with the RIVAL
+  wordmark (orange `#FF6600`, same path as `RivalLogo`) centered at 720px wide
+  (~57% of the visible phone width, matching the start screen). Replaced the
+  old plain "DRIFT" text splash.
+- Six PNGs in `ios/App/App/Assets.xcassets/Splash.imageset/` (1x/2x/3x, light +
+  dark), all 2732x2732, no alpha. Game is dark-themed so light + dark
+  appearances use the SAME dark splash. Regenerate from the SVG with sharp:
+  ```bash
+  node -e "const sharp=require('sharp');const d='ios/App/App/Assets.xcassets/Splash.imageset/';['Default@1x~universal~anyany.png','Default@2x~universal~anyany.png','Default@3x~universal~anyany.png','Default@1x~universal~anyany-dark.png','Default@2x~universal~anyany-dark.png','Default@3x~universal~anyany-dark.png'].forEach(async f=>require('fs').writeFileSync(d+f,await sharp('assets/splash.svg',{density:200}).resize(2732,2732).flatten({background:'#0a0a0a'}).png().toBuffer()))"
+  ```
+  Splash.imageset is git-tracked; committing the PNGs carries the splash to
+  Gandalf's build.
+
 ## Native iOS config (ios/App/App/Info.plist)
 
 - Portrait-only lock: `UISupportedInterfaceOrientations` = `[UIInterfaceOrientationPortrait]` for both iPhone and iPad (`~ipad` variant). JS overlay approach was removed entirely.
