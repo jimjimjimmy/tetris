@@ -824,6 +824,14 @@ an instant cut.
 - Wired call sites: `selectSide` (start->playing), `handleMenu`
   (playing->start), `connectToRoom` + join-with-code (start->online), online
   BACK + opponent-disconnect MENU (online/playing->start).
+- Start-screen tab switch (Single <-> 2 Players): the root has NO `key={startTab}`
+  so it persists across tab switches (no `pageInRight` replay). The background
+  (`driftGrid` + `BgVignette`) sits directly under the root, OUTSIDE the keyed
+  content Fragment, so it stays static. Only the content Fragment is keyed
+  (`` `${startTab}-${startKey}` ``) so it remounts and animates (via `di()`) on a
+  tab switch while the background holds still. Verified: vignette X unchanged
+  and no page slide runs during a tab switch. Do NOT put `key={startTab}` back
+  on the root or the whole background will slide on every tab switch.
 - On any full-screen RETURN to start, `setStartKey(0)` is called inside `navTo`
   so the start CONTENT stagger uses `driftIn`, NOT the Settings-return
   `slideInLeft`. (The container itself slides via `pageInRight`; the child

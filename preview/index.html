@@ -2547,7 +2547,7 @@ function TetrisGame2P() {
       const myCode = generatedCodeRef.current;
       const di = (n) => ({animation:`${startKey>0?"slideInLeft 0.15s":"driftIn 0.18s"} ease ${n*45}ms both`});
       return (
-        <div key={startTab} style={{
+        <div style={{
           width: FRAME_W, height: GAME_2P_H,
           background: "#212223",
           position: "relative", overflow: "hidden",
@@ -2556,9 +2556,11 @@ function TetrisGame2P() {
           color: "#fff",
           ...screenAnim,
         }}>
-          <React.Fragment key={startKey}>
+          {/* Background stays static across tab switches (outside the keyed
+              content Fragment) so only the content animates, not the grid. */}
           <div style={driftGrid} />
           <BgVignette/>
+          <React.Fragment key={`${startTab}-${startKey}`}>
           {/* DRIFT title - vertically centered minus 37px offset */}
           <div style={{
             position:"absolute", left:0, right:0,
@@ -2630,7 +2632,7 @@ function TetrisGame2P() {
     // SINGLE TAB (default) - Design: Figma 247:5857
     const di = (n) => ({animation:`${startKey>0?"slideInLeft 0.15s":"driftIn 0.18s"} ease ${n*45}ms both`});
     return (
-      <div key={startTab} style={{
+      <div style={{
         width: FRAME_W, height: GAME_2P_H,
         background: "#212223",
         position: "relative", overflow: "hidden",
@@ -2639,9 +2641,11 @@ function TetrisGame2P() {
         color: "#fff",
         ...screenAnim,
       }}>
-        <React.Fragment key={startKey}>
+        {/* Background stays static across tab switches (outside the keyed
+            content Fragment) so only the content animates, not the grid. */}
         <div style={driftGrid} />
         <BgVignette/>
+        <React.Fragment key={`${startTab}-${startKey}`}>
         {/* DRIFT title */}
         <div style={{
           position:"absolute", left:0, right:0,
