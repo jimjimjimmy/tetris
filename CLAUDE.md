@@ -624,6 +624,26 @@ The top line is the truth (that is what is on GitHub). If git ever prints
 - `UIRequiresFullScreen = YES`: suppresses Xcode warning "All interface orientations must be supported unless the app requires full screen".
 - After any Info.plist change: on Gandalf run `git pull && npx cap sync ios` then rebuild in Xcode.
 
+## Music folded into Sound Fx (8062e4e onward)
+
+The BGM (the `bgm.m4a` clock-tick loop) is no longer a separate "Music"
+setting -- it is folded into the `soundFX` toggle:
+- There is NO standalone Music control anywhere. Removed: the start-screen
+  `MUSIC: On/Off` quick toggle (it showed when the game was not active) and
+  the Settings `Music` row. The `music` field is gone from `loadSettings`.
+- All BGM gating now reads `settings.soundFX` (BGM effect, `selectSide`,
+  rematch/play-again, online connect, visibilitychange). So when Sound Fx is
+  ON, the clock-tick loop plays during gameplay; Sound Fx OFF silences
+  everything.
+- The `Volume` slider is KEPT and now gated on `soundFX` (opacity 1 when on,
+  0.3 when off). `bgmPlay(volume)` now honors it: gain =
+  `max(0.05, volume * 0.25)` (was hardcoded 0.25), so Volume affects the
+  clock tick, matching the SFX volume behavior.
+- This is a SETTINGS/UX change only. It does NOT change the `.ambient` audio
+  session, so the clock tick is still silenced by the iPhone mute switch
+  (same as all SFX). Making audio play on silent is a separate `.playback`
+  change (brings back the Now Playing widget) - not done.
+
 ## BGM Now Playing suppression
 
 iOS WKWebView shows a Now Playing widget on the lock screen when any audio plays. `disableRemotePlayback = true` alone does NOT suppress it. Use `suppressMediaSession()`:
