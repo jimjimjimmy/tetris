@@ -793,3 +793,32 @@ On return, swap `driftIn` for `slideInLeft 0.15s` (no opacity, avoids flash).
 - Entry: container has no animation; children use `di(n)` stagger (`driftIn`)
 - Exit: container plays `driftOutRight 0.15s ease both`; `di()` returns `{}` when exiting
 - `closeSettings`: sets `settingsExiting=true`, increments `startKey` immediately (t=0), unmounts Settings after 150ms
+
+### Screen-to-screen navigation (phase swaps)
+
+The top-level phase screens (`start`, `online`, `playing`) swap via early
+`return`s keyed on `state.phase`. They are orchestrated by `navTo(apply)` +
+the `navExiting` state so the swap is animated instead of an instant cut:
+
+- Rule (directional): the OUTGOING screen exits left-to-right (`driftOutRight`);
+  the INCOMING screen mounts fresh and enters right-to-left (`driftIn`).
+- `navTo(apply)`: sets `navExiting=true` (outgoing screen picks up
+  `driftOutRight` + `pointerEvents:none`), waits `NAV_EXIT_MS`=150ms, then runs
+  `apply()` (the actual `setState` phase change) and clears `navExiting`. The new
+  screen mounts with `navExiting=false` so its root's `driftIn` plays once.
+- Screen roots:
+  - `start` roots (both tabs): `navExiting ? driftOutRight : {}` (enter is the
+    child `di()` stagger, not a container animation).
+  - `online` + `playing` roots: `navExiting ? driftOutRight : driftIn`.
+- Wired call sites: `selectSide` (start->playing), `handleMenu`
+  (playing->start), `connectToRoom` + join-with-code (start->online), online
+  BACK + opponent-disconnect MENU (online/playing->start).
+- On any full-screen RETURN to start, `setStartKey(0)` is called inside `navTo`
+  so the start content uses `driftIn` (with fade), NOT the Settings-return
+  `slideInLeft`. `startKey>0` (`slideInLeft`) is reserved for the Settings
+  overlay close, where the content was already visible underneath.
+- Dead `startExiting` state was removed; `navExiting` replaced it.
+- NOT animated: the network-driven online->playing auto-start (fires on the
+  WebSocket `ready` event, `buildFreshOnline`), and mid-game resets that stay in
+  `playing` (rematch / play-again). Game-over + pause are overlays inside the
+  playing root, so they ride the root's `driftOutRight` on quit.
