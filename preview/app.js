@@ -1122,7 +1122,7 @@ const sfx = {
     try {
       this._ctx = new (window.AudioContext || window.webkitAudioContext)();
       this._bgmGain = this._ctx.createGain();
-      this._bgmGain.gain.value = 0.375; // +50% base BGM gain
+      this._bgmGain.gain.value = 0.5625; // base BGM gain (+50% x2 from 0.25)
       this._bgmGain.connect(this._ctx.destination);
     } catch (e) {
       console.error("[sfx] AudioContext creation failed:", e);
@@ -1163,7 +1163,7 @@ const sfx = {
     if (this._ctx.state === "suspended") {
       this._ctx.resume().catch(function () {});
     }
-    var vol = Math.max(0.05, this._s.volume / 10 * 1.5); // +50%
+    var vol = Math.max(0.05, this._s.volume / 10 * 2.25); // +50% x2 (2.25x of base)
     try {
       var gain = this._ctx.createGain();
       gain.gain.value = vol;
@@ -1218,7 +1218,7 @@ const sfx = {
     src.connect(this._bgmGain);
     // Honor the Volume slider (Music folded into Sound Fx). volume arg is
     // settings.volume/5 in [0.2,1.0]; mirror bgmVolume()'s mapping.
-    this._bgmGain.gain.value = Math.max(0.05, (volume || 1) * 0.375); // +50%
+    this._bgmGain.gain.value = Math.max(0.05, (volume || 1) * 0.5625); // +50% x2
     src.start(0);
     this._bgmSrc = src;
   },
@@ -1240,7 +1240,7 @@ const sfx = {
     }
   },
   bgmVolume(v) {
-    if (this._bgmGain) this._bgmGain.gain.value = Math.max(0.05, v * 0.375); // +50%
+    if (this._bgmGain) this._bgmGain.gain.value = Math.max(0.05, v * 0.5625); // +50% x2
   }
 };
 
