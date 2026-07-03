@@ -857,12 +857,22 @@ const sfx = {
       "| Capacitor:", !!window.Capacitor, "| Haptics plugin:", !!H);
   },
 
-  // Resume the AudioContext on first user gesture (iOS autoplay policy).
-  // Web Audio context starts in "suspended" state; resume() unblocks it.
+  // Unlock Web Audio on the first user gesture (iOS autoplay policy).
+  // On iOS/WKWebView a context created outside a gesture stays "suspended"
+  // and resume() ALONE is unreliable -- you must also play a (silent) buffer
+  // synchronously inside the gesture to actually start the audio hardware.
+  // MUST be called from a real user-gesture handler (e.g. selectSide tap).
   _unlock() {
-    if (this._ctx && this._ctx.state === "suspended") {
-      this._ctx.resume().catch(function() {});
-    }
+    if (!this._ctx) return;
+    try { this._ctx.resume(); } catch (e) {}
+    try {
+      // 1-sample silent buffer -- the canonical iOS Web Audio unlock kick.
+      var buf = this._ctx.createBuffer(1, 1, 22050);
+      var src = this._ctx.createBufferSource();
+      src.buffer = buf;
+      src.connect(this._ctx.destination);
+      src.start(0);
+    } catch (e) {}
   },
 
   preload() {
@@ -910,6 +920,7 @@ const sfx = {
   _play(key) {
     if (!this._s.soundFX) return;
     if (!this._ctx || !this._bufs[key]) return;
+    if (this._ctx.state === "suspended") { this._ctx.resume().catch(function() {}); }
     var vol = Math.max(0.05, this._s.volume / 10);
     try {
       var gain = this._ctx.createGain();

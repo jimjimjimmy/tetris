@@ -745,6 +745,18 @@ setting -- it is folded into the `soundFX` toggle:
   code already uses these, so removing Music required NO repositioning. Visual
   diff of both screens vs the frames: DIFF none.
 
+## iOS Web Audio unlock (do NOT weaken)
+
+On device the AudioContext starts `suspended` and `resume()` ALONE does not
+start it (verified: device console showed `Web Audio ctx: suspended` + no
+sound, while buffers loaded fine). The fix in `sfx._unlock()`: inside the
+user gesture, call `resume()` AND play a 1-sample silent buffer
+(`createBuffer(1,1,22050)` -> bufferSource -> start) - the canonical iOS Web
+Audio unlock kick. `_unlock()` MUST run from a real gesture handler
+(`selectSide` tap). `_play()` and `bgmPlay()` also `resume()` defensively if
+still suspended. Symptom if this regresses: works in desktop Chrome (resume()
+suffices there) but silent on the iPhone.
+
 ## BGM Now Playing suppression
 
 iOS WKWebView shows a Now Playing widget on the lock screen when any audio plays. `disableRemotePlayback = true` alone does NOT suppress it. Use `suppressMediaSession()`:
