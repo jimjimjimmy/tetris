@@ -34,7 +34,8 @@ Non-negotiables:
 
 **Tetris** (working title) -- a two-player mobile web game, eventually wrapped in Capacitor for iOS App Store.
 
-No bundler, no build step. Single HTML file rendered by Babel CDN in the browser.
+No bundler, no build step. Single HTML file rendered by Babel (vendored locally
+in `preview/vendor/`, no CDN) in the browser.
 
 ## Key file
 
@@ -183,10 +184,23 @@ The "3h ago" footer display is driven by APP_BUILD_DATE. If it shows a negative 
 ## Architecture
 
 ### Stack
-- React 18 (UMD CDN)
-- Babel Standalone 7.23.9 (in-browser JSX transform)
-- Inter font (Google Fonts)
+- React 18 (UMD, **production** build) - VENDORED LOCALLY in `preview/vendor/`
+  (`react.production.min.js`, `react-dom.production.min.js`)
+- Babel Standalone 7.23.9 (in-browser JSX transform) - VENDORED in
+  `preview/vendor/babel.min.js`
+- Inter font - VENDORED (`preview/vendor/inter.css` + `inter-latin.woff2`, a
+  variable font, weight 100-900, latin subset)
 - `<script type="text/babel">` - all code is JSX inside this single tag
+
+**Startup perf / offline (vendored, do NOT revert to CDN):** the app used to
+fetch React (dev, 1MB), Babel (2.7MB), and the Google font over the NETWORK on
+every launch - ~3.9MB, which made cold start slow and broke the app offline.
+All are now local, referenced by relative paths (`vendor/...`) that resolve in
+Capacitor (`capacitor://localhost`), the browser preview, and GitHub Pages. No
+network at launch. Babel still transpiles the inline JSX at runtime (~1-2s on
+device) - eliminating that would need a pre-compile/build step (deliberately
+not done, to keep the single-file no-build workflow). To update a vendored lib:
+re-download into `preview/vendor/` (production React builds only).
 
 ### Design tokens - T object
 ```js
