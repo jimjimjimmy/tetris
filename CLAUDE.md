@@ -879,6 +879,28 @@ On return, swap `driftIn` for `slideInLeft 0.15s` (no opacity, avoids flash).
 - Exit: container plays `driftOutRight 0.15s ease both`; `di()` returns `{}` when exiting
 - `closeSettings`: sets `settingsExiting=true`, increments `startKey` immediately (t=0), unmounts Settings after 150ms
 
+### Instructions / How-to-Play screen
+
+- `InstructionsScreen` component (Figma `358:6362`) - a full overlay with the
+  same chrome as `SettingsScreen` (grid + vignette, zIndex 100, `driftIn`
+  stagger in / `driftOutRight` out). Title "Instr." at top:106; content at
+  left:44 top:165 w:314, flex column gap 24. Six label+body sections (label =
+  `secLabel` Inter 600/12/3.6px uppercase; body = Inter 400/12 lineHeight 1.3
+  opacity 0.5); "Pick Your Side", "Controls", "Modes" use disc bullets
+  (`<ul>` listStyle disc, paddingLeft 18). Centered "Done" closes it.
+- State/handlers mirror Settings: `showInstructions` / `instructionsExiting`,
+  `openInstructions()` / `closeInstructions()` (150ms exit + `setStartKey`).
+- Wired to the ⓘ Info button on BOTH the start screen and in-game (parity with
+  the gear -> Settings). Rendered in both the start and playing branches.
+- Copy is authoritative for the actual build: no wind (not implemented), swipe
+  = HARD drop (not "drop faster"), online is room-code only (no random
+  matchmaking), side is chosen via UP/DN in Solo. Keep the copy accurate if
+  mechanics change.
+- Settings title moved top:82 -> top:106 to align with the Instructions title
+  (both Figma y:106). Settings content still at top:160 (pre-existing drift
+  from Figma's 221 - not corrected here; a full Settings re-align is a separate
+  task if wanted).
+
 ### Screen-to-screen navigation (phase swaps)
 
 The top-level phase screens (`start`, `online`, `playing`) swap via early

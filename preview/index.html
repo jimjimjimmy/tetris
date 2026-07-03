@@ -1110,9 +1110,9 @@ function SettingsScreen({ settings, onUpdate, onClose, initialSection, exiting }
       }} />
       <BgVignette />
 
-      {/* Title */}
+      {/* Title -- Figma 324:6587, y:106 (aligned with Instructions title) */}
       <div style={{
-        position: "absolute", left: 44, top: 82,
+        position: "absolute", left: 44, top: 106,
         fontFamily: inter, fontSize: 16, fontWeight: 500,
         letterSpacing: "8px", textTransform: "uppercase",
         opacity: 0.5, color: "#fff",
@@ -1256,6 +1256,112 @@ function SettingsScreen({ settings, onUpdate, onClose, initialSection, exiting }
   );
 }
 
+// Instructions / How-to-Play overlay (Figma 358:6362). Same overlay chrome as
+// SettingsScreen (grid + vignette, driftIn stagger in, driftOutRight out).
+function InstructionsScreen({ onClose, exiting }) {
+  const inter = "'Inter', sans-serif";
+  const secLabel = {
+    fontFamily: inter, fontSize: 12, fontWeight: 600,
+    letterSpacing: "3.6px", color: "#fff", textTransform: "uppercase",
+  };
+  const body = {
+    fontFamily: inter, fontSize: 12, fontWeight: 400,
+    lineHeight: 1.3, color: "#fff", opacity: 0.5, margin: 0,
+  };
+  const bulletUl = { ...body, listStyle: "disc", paddingLeft: 18 };
+  const section = (n) => ({ display: "flex", flexDirection: "column", gap: 8, ...di(n) });
+  const di = (n) => exiting ? {} : { animation: `driftIn 0.18s ease ${n * 50}ms both` };
+
+  return (
+    <div style={{
+      position: "absolute", inset: 0,
+      width: FRAME_W, height: GAME_2P_H,
+      background: "#212223",
+      zIndex: 100,
+      userSelect: "none", WebkitUserSelect: "none",
+      animation: exiting ? "driftOutRight 0.15s ease both" : undefined,
+    }}>
+      {/* Grid -- same as start screen driftGrid */}
+      <div style={{
+        position: "absolute", inset: 0, pointerEvents: "none",
+        backgroundImage:
+          "linear-gradient(rgba(49,50,51,0.3) 1px,transparent 1px)," +
+          "linear-gradient(90deg,rgba(49,50,51,0.3) 1px,transparent 1px)",
+        backgroundSize: "20px 20px",
+      }} />
+      <BgVignette />
+
+      {/* Title -- Figma 358:6532, y:106 (aligned with Settings title) */}
+      <div style={{
+        position: "absolute", left: 44, top: 106,
+        fontFamily: inter, fontSize: 16, fontWeight: 500,
+        letterSpacing: "8px", textTransform: "uppercase",
+        opacity: 0.5, color: "#fff",
+        ...di(0),
+      }}>Instr.</div>
+
+      {/* Content -- Figma 358:6484, x:44 y:165 w:314, column gap 24 */}
+      <div style={{
+        position: "absolute", left: 44, top: 165, width: 314,
+        display: "flex", flexDirection: "column", gap: 24,
+      }}>
+        <div style={section(1)}>
+          <div style={secLabel}>The Board</div>
+          <p style={body}>Two players share one board, divided by a boundary line in the middle. You play one side, your opponent the other. Your pieces travel toward the boundary - if you're on the bottom they float up, if you're on top they fall down.</p>
+        </div>
+
+        <div style={section(2)}>
+          <div style={secLabel}>Pick Your Side (Solo)</div>
+          <ul style={bulletUl}>
+            <li>UP - play from the bottom, pieces float up.</li>
+            <li>DN - play from the top, pieces fall down.<br />The AI takes the opposite side. (In 2-player, sides are assigned when you connect.)</li>
+          </ul>
+        </div>
+
+        <div style={section(3)}>
+          <div style={secLabel}>Controls</div>
+          <ul style={bulletUl}>
+            <li>Swipe left / right to move.</li>
+            <li>Tap to rotate.</li>
+            <li>Swipe the way your pieces travel to hard-drop - up if they float up, down if they fall down.</li>
+          </ul>
+        </div>
+
+        <div style={section(4)}>
+          <div style={secLabel}>Claim Territory</div>
+          <p style={body}>Clear a row to push the boundary into your opponent's half. Let rows pile up and they'll push it back into yours.</p>
+        </div>
+
+        <div style={section(5)}>
+          <div style={secLabel}>Winning</div>
+          <p style={body}>Two ways to win: push the boundary all the way into their half to claim their whole territory, or force them out when their side fills to the edge. If your side fills up first, you lose.</p>
+        </div>
+
+        <div style={section(6)}>
+          <div style={secLabel}>Modes</div>
+          <ul style={bulletUl}>
+            <li>Solo - play an AI opponent; pick your difficulty (1-5).</li>
+            <li>2 Players - share your room code with a friend, or join theirs with a code.</li>
+          </ul>
+        </div>
+
+        {/* Done -- Figma 362:6575, centered */}
+        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", ...di(7) }}>
+          <div
+            onPointerDown={onClose}
+            onTouchStart={e => e.stopPropagation()}
+            style={{
+              fontFamily: inter, fontSize: 12, fontWeight: 800,
+              letterSpacing: "6px", color: "#fff", textTransform: "uppercase",
+              cursor: "pointer", userSelect: "none", padding: "17px 0",
+            }}
+          >Done</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ============================================================
 
 // ============================================================
@@ -1306,6 +1412,8 @@ function TetrisGame2P() {
   const [navExiting, setNavExiting] = React.useState(false);
   const [startKey, setStartKey] = React.useState(0);
   const [settingsExiting, setSettingsExiting] = React.useState(false);
+  const [showInstructions, setShowInstructions] = React.useState(false);
+  const [instructionsExiting, setInstructionsExiting] = React.useState(false);
   const [state, setState]   = React.useState(makeInitState2P);
   // Session win counts -- persist across rematches, reset on MENU or PLAY AGAIN.
   const [p1Wins, setP1Wins] = React.useState(0);
@@ -1375,6 +1483,16 @@ function TetrisGame2P() {
       setShowSettings(false);
       setSettingsSection(null);
       setSettingsExiting(false);
+    }, 150);
+  };
+
+  const openInstructions = () => { setShowInstructions(true); };
+  const closeInstructions = () => {
+    setInstructionsExiting(true);
+    setStartKey(k => k + 1);
+    setTimeout(() => {
+      setShowInstructions(false);
+      setInstructionsExiting(false);
     }, 150);
   };
 
@@ -2710,7 +2828,11 @@ function TetrisGame2P() {
           display:"flex", gap:24, alignItems:"center", justifyContent:"center",
           opacity:0.5,
         }}>
-          <div style={{color:"#fff",opacity:0.3,cursor:"pointer"}}>
+          <div
+            onPointerDown={()=>openInstructions()}
+            onTouchStart={e=>e.stopPropagation()}
+            style={{color:"#fff",opacity:0.3,cursor:"pointer"}}
+          >
             <InfoIcon />
           </div>
           <div
@@ -2746,6 +2868,10 @@ function TetrisGame2P() {
             }}
             onClose={closeSettings}
           />
+        )}
+        {/* Instructions overlay */}
+        {showInstructions && (
+          <InstructionsScreen exiting={instructionsExiting} onClose={closeInstructions} />
         )}
         {/* TEST PROBE */}
         {TEST_PROBE && (
@@ -3201,11 +3327,15 @@ function TetrisGame2P() {
           gradients underneath still extend behind the status bar. On
           devices without an inset (desktop, Android, mobile Safari with
           URL bar) env() resolves to 0 and the icon sits at its base 32. */}
-      <div style={{
+      <div
+        onPointerDown={() => openInstructions()}
+        onTouchStart={e => e.stopPropagation()}
+        style={{
         position: "absolute",
         left: ICON_INFO_X, top: `calc(${ICON_INFO_Y}px + env(safe-area-inset-top))`,
         width: ICON_SIZE, height: ICON_SIZE,
         color: "#fff", opacity: CHROME_OPACITY,
+        cursor: "pointer",
       }}>
         <InfoIcon />
       </div>
@@ -3620,6 +3750,9 @@ function TetrisGame2P() {
           }}
           onClose={closeSettings}
         />
+      )}
+      {showInstructions && (
+        <InstructionsScreen exiting={instructionsExiting} onClose={closeInstructions} />
       )}
     </div>
   );
