@@ -984,6 +984,15 @@ The top-level phase screens (`start`, `online`, `playing`) swap via early
   fadeIn (not "bg then game"). Verified via getAnimations: start->game =
   fadeOut then fadeIn; game->start = fadeOut then fadeIn+content driftIn.
 - Do NOT reintroduce `screenAnim` (removed). Use slide/fade/start/game anim.
+- SLIDE nav (start<->online) UPDATED (13eea6f, 2026-07-02): the background now
+  stays STATIC and only content animates (was: whole root slid via
+  pageInRight/Out, bg included). Both the online root AND the start root drop
+  their root animation in slide mode (`...(navMode==="slide" ? {} : startAnim)`)
+  and instead animate content via `di()`: `driftIn` on enter, `driftOutRight`
+  on back (`navExiting && navMode==="slide"`). FADE nav (start<->game) is
+  UNCHANGED - the whole root still fades (bgs differ, so bg fade is wanted).
+  Verified via rAF sampling: exit frame shows start content=driftOutRight with
+  rootAnim=none; online mount shows content=driftIn, rootAnim=none.
 - Start-screen tab switch (Single <-> 2 Players): the root has NO `key={startTab}`
   so it persists across tab switches (no `pageInRight` replay). The background
   (`driftGrid` + `BgVignette`) sits directly under the root, OUTSIDE the keyed
