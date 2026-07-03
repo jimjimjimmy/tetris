@@ -3321,6 +3321,12 @@ function TetrisGame2P() {
       backgroundImage: "linear-gradient(rgba(49,50,51,0.3) 1px,transparent 1px)," + "linear-gradient(90deg,rgba(49,50,51,0.3) 1px,transparent 1px)",
       backgroundSize: "20px 20px"
     };
+    // Content slides/fades in over a STATIC background (the established slide
+    // pattern): the bg stays put, elements drift in from the right; on back-nav
+    // (navExiting) they drift back out to the right.
+    const di = n => ({
+      animation: navExiting ? "driftOutRight 0.18s ease both" : `driftIn 0.18s ease ${n * 45}ms both`
+    });
     return /*#__PURE__*/React.createElement("div", {
       style: {
         width: FRAME_W,
@@ -3331,8 +3337,7 @@ function TetrisGame2P() {
         fontFamily: "'Inter', sans-serif",
         userSelect: "none",
         WebkitUserSelect: "none",
-        color: "#fff",
-        ...slideAnim
+        color: "#fff"
       }
     }, /*#__PURE__*/React.createElement("div", {
       style: driftGrid
@@ -3354,15 +3359,22 @@ function TetrisGame2P() {
         position: "absolute",
         left: 29,
         top: 82,
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        opacity: 0.3,
+        cursor: "pointer",
+        ...di(0)
+      }
+    }, /*#__PURE__*/React.createElement(ArrowL, null), /*#__PURE__*/React.createElement("span", {
+      style: {
         fontSize: 12,
         fontWeight: 800,
         letterSpacing: "6px",
         color: "#fff",
-        textTransform: "uppercase",
-        opacity: 0.3,
-        cursor: "pointer"
+        textTransform: "uppercase"
       }
-    }, "←", "Back"), /*#__PURE__*/React.createElement("div", {
+    }, "Back")), /*#__PURE__*/React.createElement("div", {
       style: {
         position: "absolute",
         left: 0,
@@ -3371,7 +3383,8 @@ function TetrisGame2P() {
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
-        gap: 16
+        gap: 16,
+        ...di(1)
       }
     }, /*#__PURE__*/React.createElement("div", {
       style: {
@@ -3404,24 +3417,7 @@ function TetrisGame2P() {
         width: "100%",
         textAlign: "center"
       }
-    }, ch.trim())))), /*#__PURE__*/React.createElement("input", {
-      type: "text",
-      maxLength: 4,
-      autoCapitalize: "characters",
-      value: joinCode,
-      onChange: ev => setJoinCode(ev.target.value.toUpperCase().replace(/[^A-Z]/g, "")),
-      onTouchStart: e => e.stopPropagation(),
-      style: {
-        position: "absolute",
-        opacity: 0,
-        width: 1,
-        height: 1,
-        top: 0,
-        left: 0,
-        pointerEvents: "none"
-      },
-      id: "join-code-input"
-    }), /*#__PURE__*/React.createElement("span", {
+    }, ch.trim())))), /*#__PURE__*/React.createElement("span", {
       style: {
         fontSize: 10,
         letterSpacing: "5px",
@@ -3430,22 +3426,38 @@ function TetrisGame2P() {
         textTransform: "uppercase",
         color: "#fff"
       }
-    }, "Join with Code")), /*#__PURE__*/React.createElement("div", {
-      onPointerDown: () => {
-        document.getElementById("join-code-input") && document.getElementById("join-code-input").focus();
-      },
-      onTouchStart: e => {
-        e.stopPropagation();
-        document.getElementById("join-code-input") && document.getElementById("join-code-input").focus();
-      },
+    }, "Join with Code")), /*#__PURE__*/React.createElement("input", {
+      type: "text",
+      inputMode: "text",
+      maxLength: 4,
+      autoCapitalize: "characters",
+      autoCorrect: "off",
+      autoComplete: "off",
+      spellCheck: false,
+      value: joinCode,
+      onChange: ev => setJoinCode(ev.target.value.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 4)),
+      onTouchStart: e => e.stopPropagation(),
       style: {
         position: "absolute",
         left: 0,
         right: 0,
         top: 200,
         height: 220,
-        cursor: "text"
-      }
+        width: "100%",
+        margin: 0,
+        padding: 0,
+        border: "none",
+        outline: "none",
+        background: "transparent",
+        color: "transparent",
+        caretColor: "transparent",
+        fontSize: 16,
+        textAlign: "center",
+        zIndex: 6,
+        cursor: "text",
+        WebkitAppearance: "none"
+      },
+      id: "join-code-input"
     }), joinCode.length === 4 && /*#__PURE__*/React.createElement("div", {
       onPointerDown: () => connectToRoom(joinCode),
       onTouchStart: e => e.stopPropagation(),
@@ -3461,7 +3473,9 @@ function TetrisGame2P() {
         letterSpacing: "6px",
         color: "#fff",
         textTransform: "uppercase",
-        cursor: "pointer"
+        cursor: "pointer",
+        zIndex: 7,
+        ...di(2)
       }
     }, "Connect"), isWaiting && /*#__PURE__*/React.createElement("div", {
       style: {
@@ -3507,13 +3521,11 @@ function TetrisGame2P() {
       key: "dl" + i,
       style: {
         fontSize: 12,
-        letterSpacing: "2.4px",
         opacity: 0.2
       }
     }, "-")), /*#__PURE__*/React.createElement("span", {
       style: {
         fontSize: 16,
-        letterSpacing: "3.2px",
         opacity: 0.2
       }
     }, "|"), /*#__PURE__*/React.createElement("span", {
@@ -3525,12 +3537,11 @@ function TetrisGame2P() {
         fontWeight: startTab === "single" ? 600 : 400,
         opacity: startTab === "single" ? 1 : 0.3,
         cursor: "pointer",
-        padding: "17px 8px"
+        padding: "17px 0"
       }
     }, "Single"), /*#__PURE__*/React.createElement("span", {
       style: {
         fontSize: 16,
-        letterSpacing: "3.2px",
         opacity: 0.2
       }
     }, "|"), /*#__PURE__*/React.createElement("span", {
@@ -3542,20 +3553,18 @@ function TetrisGame2P() {
         fontWeight: startTab === "2players" ? 800 : 400,
         opacity: startTab === "2players" ? 1 : 0.3,
         cursor: "pointer",
-        padding: "17px 8px",
+        padding: "17px 0",
         whiteSpace: "nowrap"
       }
     }, "2 Players"), /*#__PURE__*/React.createElement("span", {
       style: {
         fontSize: 16,
-        letterSpacing: "3.2px",
         opacity: 0.2
       }
     }, "|"), [0, 1].map(i => /*#__PURE__*/React.createElement("span", {
       key: "dr" + i,
       style: {
         fontSize: 12,
-        letterSpacing: "2.4px",
         opacity: 0.2
       }
     }, "-")));
@@ -3563,8 +3572,11 @@ function TetrisGame2P() {
       // 2 PLAYERS TAB - show room code + join link
       // Design: Figma 269:7487
       const myCode = generatedCodeRef.current;
+      // SLIDE nav (start<->online) keeps the bg static and animates only the
+      // content: drift in on enter, drift out right on back. FADE nav
+      // (start<->game) still animates the whole root (see root style below).
       const di = n => ({
-        animation: `${startKey > 0 ? "slideInLeft 0.15s" : "driftIn 0.18s"} ease ${n * 45}ms both`
+        animation: navExiting && navMode === "slide" ? "driftOutRight 0.18s ease both" : `${startKey > 0 ? "slideInLeft 0.15s" : "driftIn 0.18s"} ease ${n * 45}ms both`
       });
       return /*#__PURE__*/React.createElement("div", {
         style: {
@@ -3577,7 +3589,7 @@ function TetrisGame2P() {
           userSelect: "none",
           WebkitUserSelect: "none",
           color: "#fff",
-          ...startAnim
+          ...(navMode === "slide" ? {} : startAnim)
         }
       }, /*#__PURE__*/React.createElement("div", {
         style: driftGrid
@@ -3676,6 +3688,35 @@ function TetrisGame2P() {
           position: "absolute",
           left: 0,
           right: 0,
+          top: 754,
+          display: "flex",
+          gap: 24,
+          alignItems: "center",
+          justifyContent: "center",
+          opacity: 0.5,
+          ...di(3)
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        onPointerDown: () => openInstructions(),
+        onTouchStart: e => e.stopPropagation(),
+        style: {
+          color: "#fff",
+          opacity: 0.3,
+          cursor: "pointer"
+        }
+      }, /*#__PURE__*/React.createElement(InfoIcon, null)), /*#__PURE__*/React.createElement("div", {
+        onPointerDown: () => openSettings(),
+        onTouchStart: e => e.stopPropagation(),
+        style: {
+          color: "#fff",
+          opacity: 0.3,
+          cursor: "pointer"
+        }
+      }, /*#__PURE__*/React.createElement(GearIcon, null))), /*#__PURE__*/React.createElement("div", {
+        style: {
+          position: "absolute",
+          left: 0,
+          right: 0,
           bottom: "max(20px,env(safe-area-inset-bottom))",
           display: "flex",
           justifyContent: "space-between",
@@ -3690,8 +3731,10 @@ function TetrisGame2P() {
     }
 
     // SINGLE TAB (default) - Design: Figma 247:5857
+    // SLIDE nav (start<->online) keeps the bg static, animates only content;
+    // FADE nav (start<->game) animates the whole root (see root style below).
     const di = n => ({
-      animation: `${startKey > 0 ? "slideInLeft 0.15s" : "driftIn 0.18s"} ease ${n * 45}ms both`
+      animation: navExiting && navMode === "slide" ? "driftOutRight 0.18s ease both" : `${startKey > 0 ? "slideInLeft 0.15s" : "driftIn 0.18s"} ease ${n * 45}ms both`
     });
     return /*#__PURE__*/React.createElement("div", {
       style: {
@@ -3704,7 +3747,7 @@ function TetrisGame2P() {
         userSelect: "none",
         WebkitUserSelect: "none",
         color: "#fff",
-        ...startAnim
+        ...(navMode === "slide" ? {} : startAnim)
       }
     }, /*#__PURE__*/React.createElement("div", {
       style: driftGrid

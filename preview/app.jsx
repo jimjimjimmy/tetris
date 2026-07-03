@@ -2457,6 +2457,10 @@ function TetrisGame2P() {
         "linear-gradient(90deg,rgba(49,50,51,0.3) 1px,transparent 1px)",
       backgroundSize:"20px 20px",
     };
+    // Content slides/fades in over a STATIC background (the established slide
+    // pattern): the bg stays put, elements drift in from the right; on back-nav
+    // (navExiting) they drift back out to the right.
+    const di = (n) => ({ animation: navExiting ? "driftOutRight 0.18s ease both" : `driftIn 0.18s ease ${n*45}ms both` });
     return (
       <div style={{
         width: FRAME_W, height: GAME_2P_H,
@@ -2465,27 +2469,35 @@ function TetrisGame2P() {
         fontFamily: "'Inter', sans-serif",
         userSelect: "none", WebkitUserSelect: "none",
         color: "#fff",
-        ...slideAnim,
       }}>
+        {/* Background stays STATIC (no slide) -- only the content animates. */}
         <div style={driftGrid} />
         <BgVignette/>
 
-        {/* BACK button top-left per Figma 269:7678 */}
+        {/* BACK button top-left per Figma 269:7678. Chevron reuses the
+            Win/Lose result-row arrow (ArrowL) instead of a unicode arrow. */}
         <div
           onPointerDown={() => { disconnectRoom(); setJoinCode(""); setStartTab("2players"); navTo(() => { setStartKey(0); setState(s => ({...s, phase:"start"})); }, "slide"); }}
           onTouchStart={e => e.stopPropagation()}
           style={{
             position:"absolute", left:29, top:82,
+            display:"flex", alignItems:"center", gap:8,
+            opacity:0.3, cursor:"pointer",
+            ...di(0),
+          }}
+        >
+          <ArrowL/>
+          <span style={{
             fontSize:12, fontWeight:800, letterSpacing:"6px",
             color:"#fff", textTransform:"uppercase",
-            opacity:0.3, cursor:"pointer",
-          }}
-        >{"←"}Back</div>
+          }}>Back</span>
+        </div>
 
         {/* 4-letter code display + label, top 294px */}
         <div style={{
           position:"absolute", left:0, right:0, top:294,
           display:"flex", flexDirection:"column", alignItems:"center", gap:16,
+          ...di(1),
         }}>
           {/* Letter slots */}
           <div style={{display:"flex", gap:8, alignItems:"center", justifyContent:"center"}}>
@@ -2505,20 +2517,6 @@ function TetrisGame2P() {
               </div>
             ))}
           </div>
-          {/* Hidden input to capture keyboard */}
-          <input
-            type="text"
-            maxLength={4}
-            autoCapitalize="characters"
-            value={joinCode}
-            onChange={ev => setJoinCode(ev.target.value.toUpperCase().replace(/[^A-Z]/g,""))}
-            onTouchStart={e => e.stopPropagation()}
-            style={{
-              position:"absolute", opacity:0, width:1, height:1, top:0, left:0,
-              pointerEvents:"none",
-            }}
-            id="join-code-input"
-          />
           {/* "Join with Code" label */}
           <span style={{
             fontSize:10, letterSpacing:"5px", fontWeight:400,
@@ -2526,11 +2524,33 @@ function TetrisGame2P() {
           }}>Join with Code</span>
         </div>
 
-        {/* Tap area to focus input */}
-        <div
-          onPointerDown={() => { document.getElementById("join-code-input") && document.getElementById("join-code-input").focus(); }}
-          onTouchStart={e => { e.stopPropagation(); document.getElementById("join-code-input") && document.getElementById("join-code-input").focus(); }}
-          style={{position:"absolute", left:0, right:0, top:200, height:220, cursor:"text"}}
+        {/* Real transparent input laid over the code region. The user taps
+            THIS directly, so iOS opens the keyboard from a genuine gesture and
+            keeps it up. The previous 1x1 opacity:0 pointerEvents:none input
+            focused programmatically made the keyboard flash open then dismiss.
+            fontSize 16 avoids iOS focus-zoom; text + caret are transparent (the
+            big letter slots are the visible value). Kept OUTSIDE the animated
+            groups so typing never restarts an animation or remounts the field
+            (either would drop focus). */}
+        <input
+          type="text"
+          inputMode="text"
+          maxLength={4}
+          autoCapitalize="characters"
+          autoCorrect="off"
+          autoComplete="off"
+          spellCheck={false}
+          value={joinCode}
+          onChange={ev => setJoinCode(ev.target.value.toUpperCase().replace(/[^A-Z]/g,"").slice(0,4))}
+          onTouchStart={e => e.stopPropagation()}
+          style={{
+            position:"absolute", left:0, right:0, top:200, height:220,
+            width:"100%", margin:0, padding:0, border:"none", outline:"none",
+            background:"transparent", color:"transparent", caretColor:"transparent",
+            fontSize:16, textAlign:"center", zIndex:6, cursor:"text",
+            WebkitAppearance:"none",
+          }}
+          id="join-code-input"
         />
 
         {/* CONNECT button at 435px -- only when code is full */}
@@ -2543,6 +2563,8 @@ function TetrisGame2P() {
               display:"flex", justifyContent:"center",
               fontSize:12, fontWeight:800, letterSpacing:"6px",
               color:"#fff", textTransform:"uppercase", cursor:"pointer",
+              zIndex:7,
+              ...di(2),
             }}
           >Connect</div>
         )}
@@ -2580,8 +2602,8 @@ function TetrisGame2P() {
         display:"flex", gap:16, alignItems:"center", justifyContent:"center",
         color:"#fff", textTransform:"uppercase",
       }}>
-        {[0,1].map(i=><span key={"dl"+i} style={{fontSize:12,letterSpacing:"2.4px",opacity:0.2}}>-</span>)}
-        <span style={{fontSize:16,letterSpacing:"3.2px",opacity:0.2}}>|</span>
+        {[0,1].map(i=><span key={"dl"+i} style={{fontSize:12,opacity:0.2}}>-</span>)}
+        <span style={{fontSize:16,opacity:0.2}}>|</span>
         <span
           onPointerDown={()=>setStartTab("single")}
           onTouchStart={e=>e.stopPropagation()}
@@ -2589,10 +2611,10 @@ function TetrisGame2P() {
             fontSize:12, letterSpacing:"6px",
             fontWeight: startTab==="single" ? 600 : 400,
             opacity: startTab==="single" ? 1 : 0.3,
-            cursor:"pointer", padding:"17px 8px",
+            cursor:"pointer", padding:"17px 0",
           }}
         >Single</span>
-        <span style={{fontSize:16,letterSpacing:"3.2px",opacity:0.2}}>|</span>
+        <span style={{fontSize:16,opacity:0.2}}>|</span>
         <span
           onPointerDown={()=>setStartTab("2players")}
           onTouchStart={e=>e.stopPropagation()}
@@ -2600,11 +2622,11 @@ function TetrisGame2P() {
             fontSize:12, letterSpacing:"6px",
             fontWeight: startTab==="2players" ? 800 : 400,
             opacity: startTab==="2players" ? 1 : 0.3,
-            cursor:"pointer", padding:"17px 8px", whiteSpace:"nowrap",
+            cursor:"pointer", padding:"17px 0", whiteSpace:"nowrap",
           }}
         >2 Players</span>
-        <span style={{fontSize:16,letterSpacing:"3.2px",opacity:0.2}}>|</span>
-        {[0,1].map(i=><span key={"dr"+i} style={{fontSize:12,letterSpacing:"2.4px",opacity:0.2}}>-</span>)}
+        <span style={{fontSize:16,opacity:0.2}}>|</span>
+        {[0,1].map(i=><span key={"dr"+i} style={{fontSize:12,opacity:0.2}}>-</span>)}
       </div>
     );
 
@@ -2612,7 +2634,10 @@ function TetrisGame2P() {
       // 2 PLAYERS TAB - show room code + join link
       // Design: Figma 269:7487
       const myCode = generatedCodeRef.current;
-      const di = (n) => ({animation:`${startKey>0?"slideInLeft 0.15s":"driftIn 0.18s"} ease ${n*45}ms both`});
+      // SLIDE nav (start<->online) keeps the bg static and animates only the
+      // content: drift in on enter, drift out right on back. FADE nav
+      // (start<->game) still animates the whole root (see root style below).
+      const di = (n) => ({animation: (navExiting && navMode === "slide") ? "driftOutRight 0.18s ease both" : `${startKey>0?"slideInLeft 0.15s":"driftIn 0.18s"} ease ${n*45}ms both`});
       return (
         <div style={{
           width: FRAME_W, height: GAME_2P_H,
@@ -2621,7 +2646,7 @@ function TetrisGame2P() {
           fontFamily: "'Inter', sans-serif",
           userSelect: "none", WebkitUserSelect: "none",
           color: "#fff",
-          ...startAnim,
+          ...(navMode === "slide" ? {} : startAnim),
         }}>
           {/* Background stays static across tab switches (outside the keyed
               content Fragment) so only the content animates, not the grid. */}
@@ -2677,6 +2702,27 @@ function TetrisGame2P() {
               }}
             >Join with Code</span>
           </div>
+          {/* Info + Gear icons at 754px -- parity with the Single tab. */}
+          <div style={{
+            position:"absolute", left:0, right:0, top:754,
+            display:"flex", gap:24, alignItems:"center", justifyContent:"center",
+            opacity:0.5, ...di(3),
+          }}>
+            <div
+              onPointerDown={()=>openInstructions()}
+              onTouchStart={e=>e.stopPropagation()}
+              style={{color:"#fff",opacity:0.3,cursor:"pointer"}}
+            >
+              <InfoIcon />
+            </div>
+            <div
+              onPointerDown={()=>openSettings()}
+              onTouchStart={e=>e.stopPropagation()}
+              style={{color:"#fff",opacity:0.3,cursor:"pointer"}}
+            >
+              <GearIcon />
+            </div>
+          </div>
           {/* Version stamp */}
           <div style={{
             position:"absolute", left:0, right:0,
@@ -2695,7 +2741,9 @@ function TetrisGame2P() {
     }
 
     // SINGLE TAB (default) - Design: Figma 247:5857
-    const di = (n) => ({animation:`${startKey>0?"slideInLeft 0.15s":"driftIn 0.18s"} ease ${n*45}ms both`});
+    // SLIDE nav (start<->online) keeps the bg static, animates only content;
+    // FADE nav (start<->game) animates the whole root (see root style below).
+    const di = (n) => ({animation: (navExiting && navMode === "slide") ? "driftOutRight 0.18s ease both" : `${startKey>0?"slideInLeft 0.15s":"driftIn 0.18s"} ease ${n*45}ms both`});
     return (
       <div style={{
         width: FRAME_W, height: GAME_2P_H,
@@ -2704,7 +2752,7 @@ function TetrisGame2P() {
         fontFamily: "'Inter', sans-serif",
         userSelect: "none", WebkitUserSelect: "none",
         color: "#fff",
-        ...startAnim,
+        ...(navMode === "slide" ? {} : startAnim),
       }}>
         {/* Background stays static across tab switches (outside the keyed
             content Fragment) so only the content animates, not the grid. */}
