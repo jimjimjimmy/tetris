@@ -69,6 +69,7 @@
        incoming enters from the right moving left; outgoing exits to the right. */
     @keyframes pageInRight  { from { opacity: 0; transform: translateX(100%); } to { opacity: 1; transform: translateX(0); } }
     @keyframes pageOutRight { from { opacity: 1; transform: translateX(0); }    to { opacity: 0; transform: translateX(100%); } }
+    @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
   </style>
 </head>
 <body>
@@ -1410,6 +1411,7 @@ function TetrisGame2P() {
   const [showSettings, setShowSettings] = React.useState(false);
   const [settingsSection, setSettingsSection] = React.useState(null);
   const [navExiting, setNavExiting] = React.useState(false);
+  const [navMode, setNavMode] = React.useState("fade"); // 'fade' (diff bg) | 'slide' (same bg)
   const [startKey, setStartKey] = React.useState(0);
   const [settingsExiting, setSettingsExiting] = React.useState(false);
   const [showInstructions, setShowInstructions] = React.useState(false);
@@ -1504,17 +1506,32 @@ function TetrisGame2P() {
   // NAV_MS MUST match the animation duration so the exit finishes
   // exactly as the swap happens (no truncation, no dead frames).
   const NAV_MS = 300;
-  const navTo = (apply) => {
+  const navTo = (apply, mode = "fade") => {
+    setNavMode(mode);
     setNavExiting(true);
     setTimeout(() => {
       apply();
       setNavExiting(false);
     }, NAV_MS);
   };
-  // Root-level animation for any top-level screen (start/online/playing).
-  const screenAnim = navExiting
-    ? { animation: `pageOutRight ${NAV_MS}ms cubic-bezier(0.4,0,0.2,1) both`, pointerEvents: "none" }
-    : { animation: `pageInRight ${NAV_MS}ms cubic-bezier(0.4,0,0.2,1) both` };
+  const EASE = "cubic-bezier(0.4,0,0.2,1)";
+  // Screen transition animations. Rule: SAME background -> SLIDE (content
+  // moves, bg reads as static); DIFFERENT background -> FADE. start<->game is
+  // a fade (game bg #0a0a0a differs from start #212223); start<->online is a
+  // slide (both #212223). navMode carries the chosen style into the entering
+  // screen too (it is only cleared implicitly by the next navTo).
+  //   slideAnim - online root (always slide)
+  //   gameAnim  - playing root (always fade)
+  //   startAnim - start roots (fade or slide, by navMode); its content still
+  //               staggers in via di() on top of the bg fade/slide.
+  const slideAnim = navExiting
+    ? { animation: `pageOutRight ${NAV_MS}ms ${EASE} both`, pointerEvents: "none" }
+    : { animation: `pageInRight ${NAV_MS}ms ${EASE} both` };
+  const fadeAnim = navExiting
+    ? { animation: `fadeOut 0.24s ease both`, pointerEvents: "none" }
+    : { animation: `fadeIn 0.3s ease both` };
+  const startAnim = navMode === "slide" ? slideAnim : fadeAnim;
+  const gameAnim = fadeAnim;
 
   React.useEffect(() => {
     const id = setInterval(() => {
@@ -2395,7 +2412,7 @@ function TetrisGame2P() {
     const url = "wss://" + PARTYKIT_HOST + "/parties/main/" + code.toUpperCase();
     const ws = new WebSocket(url);
     wsRef.current = ws;
-    navTo(() => setState(s => ({ ...s, onlineStatus: "waiting", phase: "online" })));
+    navTo(() => setState(s => ({ ...s, onlineStatus: "waiting", phase: "online" })), "slide");
 
     ws.onmessage = (e) => {
       const msg = JSON.parse(e.data);
@@ -2514,14 +2531,14 @@ function TetrisGame2P() {
         fontFamily: "'Inter', sans-serif",
         userSelect: "none", WebkitUserSelect: "none",
         color: "#fff",
-        ...screenAnim,
+        ...slideAnim,
       }}>
         <div style={driftGrid} />
         <BgVignette/>
 
         {/* BACK button top-left per Figma 269:7678 */}
         <div
-          onPointerDown={() => { disconnectRoom(); setJoinCode(""); setStartTab("2players"); navTo(() => { setStartKey(0); setState(s => ({...s, phase:"start"})); }); }}
+          onPointerDown={() => { disconnectRoom(); setJoinCode(""); setStartTab("2players"); navTo(() => { setStartKey(0); setState(s => ({...s, phase:"start"})); }, "slide"); }}
           onTouchStart={e => e.stopPropagation()}
           style={{
             position:"absolute", left:29, top:82,
@@ -2670,7 +2687,7 @@ function TetrisGame2P() {
           fontFamily: "'Inter', sans-serif",
           userSelect: "none", WebkitUserSelect: "none",
           color: "#fff",
-          ...screenAnim,
+          ...startAnim,
         }}>
           {/* Background stays static across tab switches (outside the keyed
               content Fragment) so only the content animates, not the grid. */}
@@ -2718,7 +2735,7 @@ function TetrisGame2P() {
           }}>
             <span style={{fontSize:10,letterSpacing:"5px",fontWeight:600,opacity:0.3,textTransform:"uppercase"}}>or</span>
             <span
-              onPointerDown={()=>{ setJoinCode(""); navTo(()=>setState(s=>({...s,phase:"online"}))); }}
+              onPointerDown={()=>{ setJoinCode(""); navTo(()=>setState(s=>({...s,phase:"online"})), "slide"); }}
               onTouchStart={e=>e.stopPropagation()}
               style={{
                 fontSize:12, letterSpacing:"3.6px", fontWeight:400,
@@ -2753,7 +2770,7 @@ function TetrisGame2P() {
         fontFamily: "'Inter', sans-serif",
         userSelect: "none", WebkitUserSelect: "none",
         color: "#fff",
-        ...screenAnim,
+        ...startAnim,
       }}>
         {/* Background stays static across tab switches (outside the keyed
             content Fragment) so only the content animates, not the grid. */}
@@ -3034,7 +3051,7 @@ function TetrisGame2P() {
       fontFamily: "monospace",
       userSelect: "none",
       WebkitUserSelect: "none",
-      ...screenAnim,
+      ...gameAnim,
     }}>
 
       {/* Background-layer stack (Figma 145-3068, exact match, BOTTOM->TOP):

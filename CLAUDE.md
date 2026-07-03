@@ -904,33 +904,38 @@ On return, swap `driftIn` for `slideInLeft 0.15s` (no opacity, avoids flash).
 ### Screen-to-screen navigation (phase swaps)
 
 The top-level phase screens (`start`, `online`, `playing`) swap via early
-`return`s keyed on `state.phase`. They are orchestrated by `navTo(apply)` +
-the `navExiting` state so the swap is a full-page directional SLIDE instead of
-an instant cut.
+`return`s keyed on `state.phase`, orchestrated by `navTo(apply, mode)` +
+`navExiting` + `navMode`.
 
-- Keyframes (dedicated, NOT the 20px Settings drift): `pageInRight`
-  (translateX 100% -> 0, opacity 0 -> 1) and `pageOutRight` (translateX 0 ->
-  100%, opacity 1 -> 0). These move the WHOLE page a full frame width so the
-  transition is clearly visible. The old 20px `driftOutRight`/`driftIn` was
-  imperceptible for a page transition and was replaced here (those keyframes
-  are still used by the Settings overlay + start-screen child stagger).
-- Rule (directional): INCOMING screen enters from the right moving left
-  (`pageInRight`); OUTGOING screen exits to the right (`pageOutRight`).
-- `NAV_MS` = 300 is the single source of truth for BOTH the CSS animation
-  duration AND the `navTo` swap timer -- they MUST stay equal so the exit
-  finishes exactly as the phase swaps (no truncation, no dead frames). Easing
-  cubic-bezier(0.4,0,0.2,1).
-- `screenAnim` (computed once per render from `navExiting`) is spread into all
-  three screen roots: `navExiting ? pageOutRight(+pointerEvents:none)
-  : pageInRight`. So every screen slides in on mount and slides out on exit,
-  uniformly. Do NOT re-add per-root animation literals -- use `screenAnim`.
-- `navTo(apply)`: sets `navExiting=true` (current screen slides out), waits
-  `NAV_MS`, then runs `apply()` (the `setState` phase change) and clears
-  `navExiting`. The new screen mounts with `navExiting=false` -> `pageInRight`
-  plays once.
-- Wired call sites: `selectSide` (start->playing), `handleMenu`
-  (playing->start), `connectToRoom` + join-with-code (start->online), online
-  BACK + opponent-disconnect MENU (online/playing->start).
+- CORE RULE (per design): SAME background between the two screens -> SLIDE
+  (content moves, bg reads as static); DIFFERENT background -> FADE.
+  - `start` bg = `online` bg = `#212223`; `playing` (game) bg = `#0a0a0a`.
+  - So `start <-> game` = FADE; `start <-> online` = SLIDE.
+- `navTo(apply, mode)`: `mode` is `"fade"` (default) or `"slide"`. Sets
+  `navMode`, `navExiting=true`, waits `NAV_MS`=300, then runs `apply()` (the
+  phase change) and clears `navExiting`. `navMode` persists so the ENTERING
+  screen picks the matching in-animation.
+- Three anim objects (computed per render), spread into the roots:
+  - `slideAnim` = `navExiting ? pageOutRight : pageInRight` -> ONLINE root.
+  - `fadeAnim`  = `navExiting ? fadeOut(0.24s) : fadeIn(0.3s)` -> PLAYING root
+    (`gameAnim`), and START root when `navMode==='fade'`.
+  - `startAnim` = `navMode==='slide' ? slideAnim : fadeAnim` -> both START roots.
+    So the start screen FADES its bg on start<->game and SLIDES on
+    start<->online. Its CONTENT always staggers in via `di()` on top (so on
+    entrance the bg fades in and the content slides in).
+- Keyframes: `fadeIn`, `fadeOut`, `pageInRight`, `pageOutRight`. `NAV_MS`=300
+  matches the slide duration; fades are 0.24/0.3s (finish before the 300ms swap).
+- Wired modes: `selectSide` (start->game) + `handleMenu` +
+  opponent-disconnect MENU (game->start) use the default FADE. `connectToRoom`
+  + join-with-code (start->online) + online BACK (online->start) pass `"slide"`.
+- Initial LOAD: `navMode` defaults to `"fade"`, so the start screen mounts with
+  `fadeIn` (bg) while its content staggers in (matches "fade in bg, then slide
+  content").
+- SIMPLIFIED vs the full spec: start->game does a whole-screen fadeOut (not a
+  staged "content fades first, then bg"); game entrance is a whole-screen
+  fadeIn (not "bg then game"). Verified via getAnimations: start->game =
+  fadeOut then fadeIn; game->start = fadeOut then fadeIn+content driftIn.
+- Do NOT reintroduce `screenAnim` (removed). Use slide/fade/start/game anim.
 - Start-screen tab switch (Single <-> 2 Players): the root has NO `key={startTab}`
   so it persists across tab switches (no `pageInRight` replay). The background
   (`driftGrid` + `BgVignette`) sits directly under the root, OUTSIDE the keyed
