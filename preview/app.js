@@ -1,0 +1,5153 @@
+// Global error handler -- surfaces uncaught JS exceptions in Xcode console
+// with file + line info. Remove before App Store submission.
+window.addEventListener("error", ev => {
+  console.error("[JS ERROR]", ev.message, "at", ev.filename + ":" + ev.lineno + ":" + ev.colno, ev.error);
+});
+window.addEventListener("unhandledrejection", ev => {
+  console.error("[JS PROMISE]", ev.reason);
+});
+const {
+  useState,
+  useEffect,
+  useRef
+} = React;
+
+// ============================================================
+// CONSTANTS  (extracted subset used by TetrisGame2P)
+// ============================================================
+
+const TEST_SPEED = false; // set true for 5x speed during development -- ALWAYS false before push
+
+// Debug smoke-test mode: when true, randPiece() always returns "BAR",
+// a full-width 10x1 horizontal piece. One BAR drop = one filled row =
+// exactly one row clear, so boundary-shift transitions can be tested
+// deterministically without playing through a full game. Permanent
+// smoke-test tool. Always false before push.
+const DEBUG_PIECES = false;
+// TEST_PROBE: when true, renders a hidden DOM element whose text content
+// mirrors live game state (phase, piece x/rot, boundary, line counts,
+// settings) plus cumulative gesture-action counters. WKWebView exposes it
+// to the iOS accessibility tree so the XCUITest suite (AppUITests) can read
+// game state it otherwise cannot see through the opaque web view. The probe
+// is inert: 1x1px, off-screen, pointerEvents none -- zero gameplay impact.
+// Set false for App Store builds to drop the element entirely.
+const TEST_PROBE = true;
+// Cumulative gesture-action counters, incremented at applyP1/applyP2 entry.
+// XCUITest reads deltas (before/after N gestures) to compute success rates.
+const driftActs = {
+  tap: 0,
+  left: 0,
+  right: 0,
+  up: 0,
+  down: 0,
+  soft: 0
+};
+const AI_LEVEL_DEFAULT = 3;
+// tickMs = fall interval per level. L3 = moderate/average pace (standard
+// Tetris reference). L1->L5: 900->700->500->320->140ms. L5 unchanged.
+// TEST_SPEED overrides this to 110ms for dev playback.
+const AI_LEVEL_CONFIG = {
+  // aiPeriod=1 on all levels so the AI steers every tick (no passive drift).
+  // Difficulty comes from randomRatio (random vs optimal target) and penalty weights.
+  // L1: frequent random placements, low penalties -> basic logic, visible mistakes
+  // L2: occasional random moves, moderate penalties -> decent play with errors
+  // L3: rare random, balanced weights -> average player, fills gaps, avoids tall stacks
+  // L4: near-optimal, heavy penalties -> clears rows actively, minimizes holes
+  // L5: always optimal, max penalties -> expert play, maximizes clears, plays flat
+  // maxHPenalty penalizes the TALLEST column (discourages spikes); coverageBonus
+  // rewards each distinct column used (pushes pieces to spread wide across the
+  // 10-col board). These replace the old aggHPenalty, which penalized the SUM of
+  // column heights and therefore gave a flat 10-wide layer the same penalty as a
+  // 2-wide tower of equal cell count -- i.e. zero incentive to spread.
+  1: {
+    randomRatio: 0.70,
+    aiPeriod: 1,
+    holePenalty: 8,
+    bumpPenalty: 0.5,
+    maxHPenalty: 1.5,
+    coverageBonus: 10,
+    linePts: 100,
+    tickMs: 900
+  },
+  2: {
+    randomRatio: 0.40,
+    aiPeriod: 1,
+    holePenalty: 20,
+    bumpPenalty: 1.5,
+    maxHPenalty: 3,
+    coverageBonus: 16,
+    linePts: 300,
+    tickMs: 700
+  },
+  3: {
+    randomRatio: 0.10,
+    aiPeriod: 1,
+    holePenalty: 40,
+    bumpPenalty: 2.5,
+    maxHPenalty: 5,
+    coverageBonus: 24,
+    linePts: 500,
+    tickMs: 500
+  },
+  4: {
+    randomRatio: 0.02,
+    aiPeriod: 1,
+    holePenalty: 70,
+    bumpPenalty: 4,
+    maxHPenalty: 7,
+    coverageBonus: 32,
+    linePts: 800,
+    tickMs: 320
+  },
+  5: {
+    randomRatio: 0.00,
+    aiPeriod: 1,
+    holePenalty: 100,
+    bumpPenalty: 6,
+    maxHPenalty: 10,
+    coverageBonus: 42,
+    linePts: 1200,
+    tickMs: 140
+  }
+};
+
+// Build identity shown at the bottom of the start screen so any device
+// can confirm which version it is running. Bump APP_VERSION manually at
+// milestones. APP_COMMIT is the short hash of the commit that introduced
+// THIS file state (one behind HEAD after the commit lands); update it
+// just before each commit.
+const APP_VERSION = "v0.1";
+const APP_COMMIT = "e41a3ac";
+const APP_BUILD_DATE = "2026-07-02T17:51:26";
+
+// Default fall interval (used as a fallback when state.aiLevel is invalid).
+// Real tick rate comes from AI_LEVEL_CONFIG[aiLevel].tickMs, looked up at
+// effect-create time. TEST_SPEED globally overrides for fast dev playback.
+const TICK_MS_DEFAULT = 320;
+
+// ONLINE matches use a FIXED tick rate on BOTH phones (not each player's local
+// level), so gravity speed is identical and the match is symmetric: if both
+// players make the same moves with the same (seeded) pieces, the boundary never
+// moves and the game can end in a true tie. Level only affects the SOLO AI.
+const ONLINE_TICK_MS = 500;
+
+// Online game-over grace window (ms). When a player tops out we do NOT instantly
+// award the win to the opponent; we wait this long for the opponent's own
+// top-out to arrive. If it does -> DRAW. This makes a tie genuinely reachable
+// on symmetric play (both top out on the same tick), where otherwise the first
+// "go" packet would beat the second player's top-out and force a win/lose.
+const GAMEOVER_GRACE_MS = 700;
+
+// Figma 124-1377 layout, adjusted so the FRAME height matches the play
+// area height exactly. No rows clipped at the frame edge -- every cell
+// in the 200x880 play area is visible.
+const CELL = 20;
+const COLS = 10;
+const FRAME_W = 402;
+
+// 2P shared board. ROWS_2P must be EVEN so BDY_2P = ROWS_2P/2 is the exact
+// midpoint and both players own ROWS_2P/2 rows each.
+const ROWS_2P = 44;
+const BDY_2P = ROWS_2P / 2; // = 22  -- exact midpoint
+const PLAY_X = 61; // play-area left edge
+const PLAY_W = COLS * CELL; // 200
+const PLAY_Y = 0; // play area starts at frame top
+const GAME_2P_H = ROWS_2P * CELL; // = 880  -- frame matches play exactly
+const P2_COLOR_2P = "#4a4a4a";
+const DEMO_DURATION_S = 300;
+const WINS_TO_WIN = 2; // best-of-3: first player to reach this wins the set
+
+// Right sidebar (Figma absolute coords inside the 402x874 frame)
+const SIDEBAR_X = 320;
+const SIDEBAR_W = 82;
+const ICON_SIZE = 24;
+const ICON_INFO_X = 349;
+const ICON_INFO_Y = 32;
+const ICON_GEAR_X = 349;
+const ICON_GEAR_Y = 80;
+const SETTINGS_KEY = "drift_settings";
+const PAUSE_X = 353; // first bar left edge
+const PAUSE_BAR_W = 4;
+const PAUSE_BAR_H = 16;
+const PAUSE_BAR_GAP = 8; // gap between the two bars
+// Pause icon vertical center is locked to the STARTING boundary line
+// (the dashed line drawn at y = PLAY_Y + BDY_2P * CELL = 440 on a fresh
+// game). The boundary may shift during play; the pause icon stays
+// anchored to its starting reference so it always reads as the
+// horizontal midpoint of the playing field. With PAUSE_BAR_H = 16 the
+// top edge sits at 440 - 8 = 432.
+const PAUSE_Y = PLAY_Y + BDY_2P * CELL - PAUSE_BAR_H / 2; // = 432
+const NEXT_X = 331;
+const NEXT_Y = 764;
+const NEXT_W = 60;
+const NEXT_LABEL_H = 12;
+const NEXT_PIECE_CELL = 10;
+const NEXT_PIECE_Y1 = NEXT_Y + 28; // top of upper piece
+const NEXT_PIECE_Y2 = NEXT_Y + 64; // top of lower piece (newer-on-top is at Y2)
+
+// Foreground chrome colors (matched to Figma): icons + NEXT label use
+// white at opacity 0.3; pause bars use the exact Figma fill #d9d9d9.
+const CHROME_OPACITY = 0.3;
+const PAUSE_COLOR = "#d9d9d9";
+const NEXT_PIECE_COLOR = "#b1b2b3"; // matches PIECE_COLOR exactly
+// Subtle grid line color for the background.
+const GRID_LINE_COLOR = "rgba(255,255,255,0.04)";
+
+// Figma 128-3004 new decorative overlays (stack brackets, +N gain indicator,
+// dashed boundary line). All in the same translucent-white family that the
+// chrome icons use, slightly more visible than the grid lines.
+const BRACKET_COLOR = "rgba(255,255,255,0.5)"; // stack brackets
+const DASH_COLOR = "rgba(255,255,255,0.4)"; // dashed boundary line (neutral)
+// Figma 152-1747 / 152-2247: when the boundary is displaced, the live
+// dash line + indicator bracket + +N/-N text all switch to a status
+// color. Gain (local player ahead) = #2fff00, loss = #ff0000.
+// _RGBA values are alpha-baked for the live-dash linear-gradient (CSS
+// can't transition gradient stops, so we pre-mix the alpha).
+const GAIN_HEX = "#2fff00";
+const LOSS_HEX = "#ff0000";
+const GAIN_DASH_RGBA = "rgba(47, 255, 0, 0.5)";
+const LOSS_DASH_RGBA = "rgba(255, 0, 0, 0.5)";
+const BRACKET_X = 53; // left-side bracket left edge (8px left of PLAY_X=61)
+const BRACKET_W = 4; // bracket bounding-box width
+const BRACKET_STEM_X = 1; // stem within bracket box (Figma "V line" at x=1.5, we use 1 for integer pixel)
+const BRACKET_CAP_W = 4; // horizontal cap width
+const DASH_SEG = 4; // dash on, dash off (Figma 4/4 pattern)
+const DASH_LEFT_X = -3; // left dashed segment left edge (Figma -3)
+const DASH_LEFT_W = 60; // Figma 60 -- dashes flow right-to-left so the partial dash bleeds off the frame's LEFT edge (clipped by frame overflow:hidden), and the last full dash lands flush at x=57, 4px before PLAY_X=61
+const DASH_RIGHT_X = 265; // starts 4px right of play edge (261)
+const DASH_RIGHT_W = 0; // boundary stub removed; boundary dashed line clips at play area right edge
+const ORIGIN_RIGHT_W = 52; // origin solid line extends into right gutter (original width before bug fix zeroed DASH_RIGHT_W)
+// ORIGIN line -- the fixed neutral reference at ROWS_2P / 2 that never
+// moves. Always rendered alongside the live boundary so the gap between
+// the two lines tells the game's territory story at a glance. Brighter
+// alpha + shorter dashes distinguish it from the live boundary's softer
+// 4/4 pattern.
+const ORIGIN_DASH_COLOR = "rgba(255,255,255,0.7)";
+const ORIGIN_DASH_SEG = 2; // shorter than live's 4 -- tighter rhythm
+const GAIN_BRACKET_X = 265; // right-side gain bracket left edge
+const GAIN_TEXT_X = 273; // "+N" text left edge
+const GAIN_TEXT_OFFSET = 6; // gap between text and bracket cap
+const GAIN_FADE_MS = 1500;
+
+// Lock delay: how long a piece sits at its "can't move further"
+// position before locking. Successful human input (left/right/rotate
+// during the delay) resets the timer up to MAX_LOCK_RESETS times so
+// players can slide along the floor / boundary edge. AI moves do NOT
+// reset (the AI doesn't need this feel; humans do). Hard drop bypasses
+// the delay only in the sense that it sets y and lets the next tick
+// lock without the human getting another reset.
+const LOCK_DELAY_MS = 250;
+const MAX_LOCK_RESETS = 5;
+
+// Line clear flash: how long a white overlay sits on each just-cleared
+// row's OLD pixel position. Adds visual weight to clears that would
+// otherwise be instant. Stack-follows-boundary already moves the cells
+// out from under it, so the flash reads as "this is what just vanished".
+const CLEAR_FLASH_MS = 100;
+// Easing for stack-bracket length, gain-bracket position, and dashed-line
+// reposition. Same curve the existing animateBoundary uses inside
+// BoardViewport, applied consistently so all boundary-tracking overlays
+// glide together when the boundary shifts.
+const BRACKET_EASE = "260ms cubic-bezier(0.22, 1, 0.36, 1)";
+const PIECE_TYPES = ["I", "O", "T", "S", "Z", "J", "L"];
+const SHAPES = {
+  I: [[[0, 1], [1, 1], [2, 1], [3, 1]], [[2, 0], [2, 1], [2, 2], [2, 3]], [[0, 2], [1, 2], [2, 2], [3, 2]], [[1, 0], [1, 1], [1, 2], [1, 3]]],
+  O: [[[0, 0], [1, 0], [0, 1], [1, 1]], [[0, 0], [1, 0], [0, 1], [1, 1]], [[0, 0], [1, 0], [0, 1], [1, 1]], [[0, 0], [1, 0], [0, 1], [1, 1]]],
+  T: [[[1, 0], [0, 1], [1, 1], [2, 1]], [[1, 0], [1, 1], [2, 1], [1, 2]], [[0, 1], [1, 1], [2, 1], [1, 2]], [[1, 0], [0, 1], [1, 1], [1, 2]]],
+  S: [[[1, 0], [2, 0], [0, 1], [1, 1]], [[1, 0], [1, 1], [2, 1], [2, 2]], [[1, 1], [2, 1], [0, 2], [1, 2]], [[0, 0], [0, 1], [1, 1], [1, 2]]],
+  Z: [[[0, 0], [1, 0], [1, 1], [2, 1]], [[2, 0], [1, 1], [2, 1], [1, 2]], [[0, 1], [1, 1], [1, 2], [2, 2]], [[1, 0], [0, 1], [1, 1], [0, 2]]],
+  J: [[[0, 0], [0, 1], [1, 1], [2, 1]], [[1, 0], [2, 0], [1, 1], [1, 2]], [[0, 1], [1, 1], [2, 1], [2, 2]], [[1, 0], [1, 1], [0, 2], [1, 2]]],
+  L: [[[2, 0], [0, 1], [1, 1], [2, 1]], [[1, 0], [1, 1], [1, 2], [2, 2]], [[0, 1], [1, 1], [2, 1], [0, 2]], [[0, 0], [1, 0], [1, 1], [1, 2]]],
+  // DEBUG_PIECES smoke-test piece: 10x1 horizontal full-width bar. All
+  // four "rotations" are identical (rotation is a no-op) so the piece
+  // can be dropped straight into any row to trigger exactly one clear.
+  BAR: [[[0, 0], [1, 0], [2, 0], [3, 0], [4, 0], [5, 0], [6, 0], [7, 0], [8, 0], [9, 0]], [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0], [5, 0], [6, 0], [7, 0], [8, 0], [9, 0]], [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0], [5, 0], [6, 0], [7, 0], [8, 0], [9, 0]], [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0], [5, 0], [6, 0], [7, 0], [8, 0], [9, 0]]]
+};
+
+// Rotation wall-kick offsets [dx, dy], tried in order until one lands valid.
+// Horizontal kicks come first so the existing feel for 2-3 wide pieces is
+// unchanged. Vertical kicks (and diagonals) follow so a 4-tall I-piece near
+// the floor / ceiling / boundary -- where a centered rotation would push it
+// out of bounds and NO horizontal kick can help -- still rotates instead of
+// silently doing nothing. dy is symmetric so it works for both P1 (floats up,
+// spawns on the floor) and P2 (falls down, spawns on the ceiling).
+const ROT_KICKS = [[0, 0], [1, 0], [-1, 0], [2, 0], [-2, 0], [0, -1], [0, 1], [0, -2], [0, 2], [1, -1], [-1, -1], [1, 1], [-1, 1]];
+const PIECE_COLOR = "#B1B2B3";
+const CELL_EMPTY = 0;
+const CELL_P1 = 1;
+const CELL_P2 = 2;
+const P1_LOCKED_COLOR = "#b1b2b3"; // = PIECE_COLOR full
+const P2_LOCKED_COLOR = "#606060"; // dark stack
+const ACTIVE_COLOR = "rgba(177, 178, 179, 0.5)"; // active piece
+const GHOST_COLOR = "rgba(177, 178, 179, 0.075)"; // landing-position preview (human only)
+const LANE_COLOR = "rgba(255,255,255,0.10)"; // column lane indicators
+const CELL_TO_COLOR_2P = {
+  [CELL_EMPTY]: null,
+  [CELL_P1]: P1_LOCKED_COLOR,
+  [CELL_P2]: P2_LOCKED_COLOR
+};
+
+// ============================================================
+// PURE HELPERS
+// ============================================================
+
+function randPiece() {
+  if (DEBUG_PIECES) return "BAR";
+  return PIECE_TYPES[Math.floor(Math.random() * PIECE_TYPES.length)];
+}
+// Spawn x for a piece type. Default x=3 centers the 4-wide
+// standard pieces; BAR is 10 wide and must spawn at x=0 so its cells
+// land in cols 0..9 (full row width) instead of 3..12 (out of bounds).
+function spawnX(type) {
+  return type === "BAR" ? 0 : 3;
+}
+function getCells(type, rot, px, py) {
+  return SHAPES[type][rot].map(([dc, dr]) => [px + dc, py + dr]);
+}
+function pieceMaxDr(type, rot) {
+  let m = 0;
+  for (const [, dr] of SHAPES[type][rot]) if (dr > m) m = dr;
+  return m;
+}
+function p1SpawnY2P(type) {
+  return ROWS_2P - 1 - pieceMaxDr(type, 0);
+}
+
+// ── Online deterministic piece generator ──────────────────────────────
+// In ONLINE multiplayer both phones must produce the SAME piece sequence.
+// A seeded PRNG (mulberry32) with two independent streams -- one for the
+// P1 piece order, one for the P2 piece order -- guarantees this: seeded
+// from the single master seed the server broadcasts, both phones generate
+// identical P1 and P2 sequences in the same order.
+//
+// netPieces.online gates everything: when false (SOLO play) nextPiece()
+// falls straight back to randPiece() (Math.random) so single-player is
+// byte-for-byte unchanged.
+const netPieces = {
+  online: false,
+  _r1: null,
+  _r2: null
+};
+function mulberry32(a) {
+  return function () {
+    a |= 0;
+    a = a + 0x6d2b79f5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function seedNetPieces(seed) {
+  // Seed BOTH streams from the SAME master seed so P1 and P2 draw the IDENTICAL
+  // piece sequence (each side keeps its own independent cursor). This is what
+  // makes the match symmetric: same pieces + same moves -> same board -> the
+  // boundary never moves and the game can end in a true tie.
+  netPieces.online = true;
+  netPieces._r1 = mulberry32(seed >>> 0);
+  netPieces._r2 = mulberry32(seed >>> 0);
+}
+function clearNetPieces() {
+  netPieces.online = false;
+  netPieces._r1 = null;
+  netPieces._r2 = null;
+}
+// side: 1 -> P1 stream, 2 -> P2 stream. Falls back to randPiece() in solo.
+function nextPiece(side) {
+  if (!netPieces.online) return randPiece();
+  if (DEBUG_PIECES) return "BAR";
+  const r = side === 2 ? netPieces._r2 : netPieces._r1;
+  if (!r) return randPiece();
+  return PIECE_TYPES[Math.floor(r() * PIECE_TYPES.length)];
+}
+
+// ============================================================
+// TETRISGAME2P HELPERS
+// ============================================================
+
+function initBoard2P() {
+  return Array.from({
+    length: ROWS_2P
+  }, () => Array(COLS).fill(CELL_EMPTY));
+}
+
+// Asymmetric rule: P1 owns boundary row.
+//   P1 valid: r >= boundary,  P2 valid: r < boundary
+function isValid2P(cells, board, boundary, player) {
+  for (const [c, r] of cells) {
+    if (c < 0 || c >= COLS || r < 0 || r >= ROWS_2P) return false;
+    if (board[r][c] !== CELL_EMPTY) return false;
+    if (player === 1 && r < boundary) return false;
+    if (player === 2 && r >= boundary) return false;
+  }
+  return true;
+}
+function lockPiece2P(board, cells, value) {
+  const next = board.map(row => [...row]);
+  for (const [c, r] of cells) {
+    if (r >= 0 && r < ROWS_2P && c >= 0 && c < COLS) next[r][c] = value;
+  }
+  return next;
+}
+function clearP1_2P(board, bdy) {
+  const terr = board.slice(bdy);
+  const kept = terr.filter(row => row.includes(CELL_EMPTY));
+  const n = terr.length - kept.length;
+  if (n === 0) return [board, 0];
+  const fill = Array.from({
+    length: n
+  }, () => Array(COLS).fill(CELL_EMPTY));
+  return [[...board.slice(0, bdy), ...kept, ...fill], n];
+}
+function clearP2_2P(board, bdy) {
+  const terr = board.slice(0, bdy);
+  const kept = terr.filter(row => row.includes(CELL_EMPTY));
+  const n = terr.length - kept.length;
+  if (n === 0) return [board, 0];
+  const fill = Array.from({
+    length: n
+  }, () => Array(COLS).fill(CELL_EMPTY));
+  return [[...fill, ...kept, ...board.slice(bdy)], n];
+}
+
+// Apply a territory-boundary shift produced by n1 P1-clears and n2 P2-clears.
+// PURE: takes a game slice + clear counts, returns the updated slice (board,
+// boundary, both active pieces + NEXT queues, winner, phase, lastGain).
+// Extracted verbatim from the tick so the online network handler can reuse
+// the exact same boundary math for REMOTE line-clears. Eviction respawns draw
+// from nextPiece() (seeded in online, Math.random in solo).
+function shiftBoundary2P(g, n1, n2) {
+  let {
+    board,
+    boundary,
+    p1,
+    p1Next,
+    p1NextNext,
+    p2,
+    p2Next,
+    p2NextNext,
+    lastGain
+  } = g;
+  let newBdy = boundary - n1 + n2;
+  let winner = null,
+    phase = "playing";
+  if (newBdy <= 0) {
+    newBdy = 0;
+    winner = 1;
+    phase = "over";
+  } else if (newBdy >= ROWS_2P) {
+    newBdy = ROWS_2P;
+    winner = 2;
+    phase = "over";
+  }
+
+  // Stack follows boundary: the gainer's locked stack translates with the
+  // boundary; loser cells in the swept range are dropped; active pieces that
+  // end up in the wrong territory are evicted (respawned from NEXT).
+  if (newBdy !== boundary) {
+    const delta = boundary - newBdy; // + = P1 gained, - = P2 gained
+    const next = Array.from({
+      length: ROWS_2P
+    }, () => Array(COLS).fill(CELL_EMPTY));
+    if (delta > 0) {
+      for (let r = 0; r < newBdy; r++) for (let c = 0; c < COLS; c++) {
+        if (board[r][c] === CELL_P2) next[r][c] = CELL_P2;
+      }
+      for (let r = boundary; r < ROWS_2P; r++) for (let c = 0; c < COLS; c++) {
+        if (board[r][c] === CELL_P1) {
+          const nr = r - delta;
+          if (nr >= 0 && nr < ROWS_2P) next[nr][c] = CELL_P1;
+        }
+      }
+    } else {
+      const shift = -delta;
+      for (let r = newBdy; r < ROWS_2P; r++) for (let c = 0; c < COLS; c++) {
+        if (board[r][c] === CELL_P1) next[r][c] = CELL_P1;
+      }
+      for (let r = 0; r < boundary; r++) for (let c = 0; c < COLS; c++) {
+        if (board[r][c] === CELL_P2) {
+          const nr = r + shift;
+          if (nr >= 0 && nr < ROWS_2P) next[nr][c] = CELL_P2;
+        }
+      }
+    }
+    board = next;
+    if (!isValid2P(getCells(p1.type, p1.rot, p1.x, p1.y), board, newBdy, 1)) {
+      p1 = {
+        type: p1Next,
+        rot: 0,
+        x: spawnX(p1Next),
+        y: p1SpawnY2P(p1Next),
+        lockPendingTs: null,
+        lockResets: 0
+      };
+      p1Next = p1NextNext;
+      p1NextNext = nextPiece(1);
+    }
+    if (!isValid2P(getCells(p2.type, p2.rot, p2.x, p2.y), board, newBdy, 2)) {
+      p2 = {
+        type: p2Next,
+        rot: 0,
+        x: spawnX(p2Next),
+        y: 0,
+        lockPendingTs: null,
+        lockResets: 0
+      };
+      p2Next = p2NextNext;
+      p2NextNext = nextPiece(2);
+    }
+  }
+  const realShift = boundary - newBdy; // +N => P1 gained, -N => P2 gained
+  if (realShift > 0) lastGain = {
+    player: 1,
+    rows: realShift,
+    ts: Date.now()
+  };else if (realShift < 0) lastGain = {
+    player: 2,
+    rows: -realShift,
+    ts: Date.now()
+  };
+  return {
+    board,
+    boundary: newBdy,
+    p1,
+    p1Next,
+    p1NextNext,
+    p2,
+    p2Next,
+    p2NextNext,
+    winner,
+    phase,
+    lastGain
+  };
+}
+function makeInitState2P() {
+  const p1Type = nextPiece(1);
+  const p2Type = nextPiece(2);
+  return {
+    board: initBoard2P(),
+    aiTick: 0,
+    p1: {
+      type: p1Type,
+      rot: 0,
+      x: spawnX(p1Type),
+      y: p1SpawnY2P(p1Type),
+      lockPendingTs: null,
+      lockResets: 0
+    },
+    // Two-deep NEXT queue for P1: p1Next is the next-to-spawn piece
+    // (rendered in the BOTTOM slot of the NEXT block), p1NextNext is
+    // the one after that (TOP slot -- newest entry).
+    p1Next: nextPiece(1),
+    p1NextNext: nextPiece(1),
+    p2: {
+      type: p2Type,
+      rot: 0,
+      x: spawnX(p2Type),
+      y: 0,
+      lockPendingTs: null,
+      lockResets: 0
+    },
+    // Two-deep NEXT queue for P2, mirror of P1's queue. p2Next is the
+    // next-to-spawn piece (BOTTOM slot when player picked P2); p2NextNext
+    // is the piece after that (TOP slot).
+    p2Next: nextPiece(2),
+    p2NextNext: nextPiece(2),
+    p1Lines: 0,
+    p2Lines: 0,
+    boundary: BDY_2P,
+    winner: null,
+    // phase: "start" -> start screen with side select (placeholder UI);
+    //        "playing" -> active game; "over" -> game-over overlay.
+    phase: "start",
+    // playerSide is set when the user taps a side button on the start
+    // screen. Stored for future use (when AI swaps to the other side).
+    // 1 = user plays P1 (floats up). 2 = user plays P2 (falls down).
+    playerSide: null,
+    aiLevel: loadSettings().level,
+    paused: false,
+    // game starts playing immediately
+    demoLeft: DEMO_DURATION_S,
+    summary: null,
+    // Most-recent territory gain for the "+N" right-side indicator
+    // (Figma 128-3004). Shape: { player: 1 | 2, rows: number, ts: ms } or null.
+    // Set when a row-clear shifts the boundary; cleared after GAIN_FADE_MS.
+    lastGain: null,
+    // Just-cleared row indices for the line-clear flash. Shape:
+    // { rows: number[], ts: ms } or null. Rows are in OLD board
+    // coordinates (pre-shift). Cleared after CLEAR_FLASH_MS.
+    clearAnim: null,
+    // Online multiplayer state.
+    online: false,
+    // true when this is a networked match (no AI)
+    onlineStatus: "idle",
+    // "idle" | "waiting" | "ready" | "disconnected"
+    onlineRole: null,
+    // "p1" | "p2" | null (assigned by server)
+    opponentLeft: false,
+    // true mid-game when opponent disconnects
+    netResult: null,
+    // "win" | "lose" | null -- online game-over outcome
+    // Sync stamps: counters the tick bumps so broadcast effects fire.
+    lockStamp: 0,
+    // ++ when LOCAL player locks (triggers "lk" send)
+    lockLines: 0,
+    // line count from the most recent local lock
+    lockBoard: null,
+    // pre-shift (post-clear) board snapshot at local lock
+    goStamp: 0,
+    // ++ when LOCAL player tops out (triggers "go" send)
+    // Online game-over resolution (grace window for ties):
+    iDied: false,
+    // local player topped out
+    oppDied: false,
+    // opponent reported top-out (their "go")
+    resolveAt: null // ms when the first death occurred (grace anchor)
+  };
+}
+
+// Generate a random 4-letter room code (no I/O to avoid ambiguity).
+function makeRoomCode() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+  let code = "";
+  for (let i = 0; i < 4; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  return code;
+}
+const PARTYKIT_HOST = "drift-game.jimjimjimmy.partykit.dev";
+
+// ============================================================
+// BOARD VIEWPORT  (subset: ROWS_2P bound check, not legacy ROWS=33)
+// ============================================================
+
+function BoardViewport({
+  grid,
+  boundary,
+  startRow,
+  endRow,
+  animateBoundary,
+  showBoundary = true
+}) {
+  const visRows = endRow - startRow;
+  // Cell content (the filled box) is 16x16 inside the 20x20 grid slot --
+  // 2px gap on each side, matching Figma's `p-[2px]` on every Box. The
+  // play area background is transparent so the global grid lines show through.
+  const INSET = 2;
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "relative",
+      width: PLAY_W,
+      height: visRows * CELL,
+      overflow: "hidden"
+    }
+  }, Array.from({
+    length: visRows
+  }, (_, ri) => {
+    const r = startRow + ri;
+    return Array.from({
+      length: COLS
+    }, (_, c) => {
+      const color = r >= 0 && r < ROWS_2P ? grid[r][c] : null;
+      if (!color) return null;
+      return /*#__PURE__*/React.createElement("div", {
+        key: ri * COLS + c,
+        style: {
+          position: "absolute",
+          left: c * CELL + INSET,
+          top: ri * CELL + INSET,
+          width: CELL - 2 * INSET,
+          height: CELL - 2 * INSET,
+          background: color
+        }
+      });
+    });
+  }), showBoundary && boundary >= startRow && boundary <= endRow && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      left: 0,
+      right: 0,
+      top: (boundary - startRow) * CELL - 1,
+      height: 2,
+      background: animateBoundary ? "rgba(255,255,255,0.55)" : "rgba(255,255,255,0.18)",
+      boxShadow: animateBoundary ? "0 0 8px rgba(255,255,255,0.35)" : "none",
+      transition: animateBoundary ? "top 260ms cubic-bezier(0.22, 1, 0.36, 1)" : "none",
+      pointerEvents: "none"
+    }
+  }));
+}
+
+// ============================================================
+// COMPACT NEXT DISPLAY
+// ============================================================
+
+// NEXT-piece preview. Each cell is a 10x10 slot with 1px padding on every
+// side, leaving an 8x8 visible color block (matches Figma 124:1463 spec:
+// the `p-px` inner padding on each Box). Container is sized to the
+// piece's bounding box.
+function CompactNext({
+  type,
+  color = NEXT_PIECE_COLOR
+}) {
+  const cells = SHAPES[type][0];
+  const cs = cells.map(([c]) => c);
+  const rs = cells.map(([, r]) => r);
+  const minC = Math.min(...cs),
+    maxC = Math.max(...cs);
+  const minR = Math.min(...rs),
+    maxR = Math.max(...rs);
+  const S = NEXT_PIECE_CELL; // 10
+  const PAD = 1; // p-px on each side -> 8x8 visible
+  const w = (maxC - minC + 1) * S;
+  const h = (maxR - minR + 1) * S;
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "relative",
+      width: w,
+      height: h
+    }
+  }, cells.map(([c, r], i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      position: "absolute",
+      left: (c - minC) * S + PAD,
+      top: (r - minR) * S + PAD,
+      width: S - 2 * PAD,
+      height: S - 2 * PAD,
+      background: color
+    }
+  })));
+}
+
+// ============================================================
+// CHROME ICONS  (Figma node IDs 124:2266 info, 124:2251 settings)
+// SVG paths copied verbatim from the Figma export so the rendering is
+// pixel-identical to the design. Color = currentColor; opacity is set
+// on the wrapper to honor the design system's "opacity-30" pattern.
+// ============================================================
+
+function BgVignette() {
+  return /*#__PURE__*/React.createElement("svg", {
+    width: "402",
+    height: "874",
+    viewBox: "0 0 402 874",
+    fill: "none",
+    xmlns: "http://www.w3.org/2000/svg",
+    style: {
+      position: "absolute",
+      inset: 0,
+      pointerEvents: "none",
+      width: "100%",
+      height: "100%"
+    }
+  }, /*#__PURE__*/React.createElement("rect", {
+    opacity: "0.5",
+    y: "0.5",
+    width: "402",
+    height: "874",
+    fill: "url(#bv_g0)"
+  }), /*#__PURE__*/React.createElement("rect", {
+    opacity: "0.5",
+    y: "0.5",
+    width: "402",
+    height: "874",
+    fill: "url(#bv_g1)"
+  }), /*#__PURE__*/React.createElement("rect", {
+    opacity: "0.3",
+    y: "0.5",
+    width: "401",
+    height: "874",
+    fill: "black"
+  }), /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("radialGradient", {
+    id: "bv_g0",
+    cx: "0",
+    cy: "0",
+    r: "1",
+    gradientUnits: "userSpaceOnUse",
+    gradientTransform: "translate(201 211.391) rotate(90) scale(663.109 663.109)"
+  }, /*#__PURE__*/React.createElement("stop", {
+    stopColor: "#111213"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: "1",
+    stopColor: "#111213",
+    stopOpacity: "0"
+  })), /*#__PURE__*/React.createElement("radialGradient", {
+    id: "bv_g1",
+    cx: "0",
+    cy: "0",
+    r: "1",
+    gradientUnits: "userSpaceOnUse",
+    gradientTransform: "translate(201 437.5) rotate(90) scale(496 496)"
+  }, /*#__PURE__*/React.createElement("stop", {
+    stopColor: "#111213"
+  }), /*#__PURE__*/React.createElement("stop", {
+    offset: "1",
+    stopColor: "#111213",
+    stopOpacity: "0"
+  }))));
+}
+const ArrowR = ({
+  opacity = 1
+}) => /*#__PURE__*/React.createElement("svg", {
+  width: "11.693",
+  height: "10.182",
+  viewBox: "0 0 11.6932 10.182",
+  fill: "none",
+  style: {
+    display: "block",
+    flexShrink: 0,
+    opacity
+  },
+  xmlns: "http://www.w3.org/2000/svg"
+}, /*#__PURE__*/React.createElement("path", {
+  d: "M6.60227 10.1818L5.72727 9.31818L9.32955 5.71591H0V4.46591H9.32955L5.72727 0.875L6.60227 0L11.6932 5.09091L6.60227 10.1818Z",
+  fill: "white"
+}));
+const ArrowL = ({
+  opacity = 1
+}) => /*#__PURE__*/React.createElement("svg", {
+  width: "11.693",
+  height: "10.182",
+  viewBox: "0 0 11.6932 10.182",
+  fill: "none",
+  style: {
+    display: "block",
+    flexShrink: 0,
+    opacity
+  },
+  xmlns: "http://www.w3.org/2000/svg"
+}, /*#__PURE__*/React.createElement("path", {
+  d: "M5.09091 10.1818L0 5.09091L5.09091 0L5.96591 0.863636L2.36364 4.46591H11.6932V5.71591H2.36364L5.96591 9.30682L5.09091 10.1818Z",
+  fill: "white"
+}));
+// RIVAL wordmark logo (Figma 352:6358 / 352:6375). Replaces the old "drift"
+// text on any screen that showed the game name. 220 x 31.95, #FF6600.
+const RivalLogo = () => /*#__PURE__*/React.createElement("svg", {
+  width: "220",
+  height: "31.9463",
+  viewBox: "0 0 220 31.9463",
+  fill: "none",
+  style: {
+    display: "block"
+  },
+  xmlns: "http://www.w3.org/2000/svg"
+}, /*#__PURE__*/React.createElement("path", {
+  d: "M97.7393 21.3555L114.466 0.152344H122.785L97.7393 31.9463L72.6709 0.152344H81.0127L97.7393 21.3555ZM33.8457 6.70312H6.55078V31.8154H0V0.152344H33.8457V6.70312ZM56.8613 0.152344V31.8154H50.3105V0.152344H56.8613ZM172.594 31.8154H164.252L147.548 10.5908L130.821 31.8154H122.479L147.548 0L172.594 31.8154ZM192.705 25.2646H220V31.8154H186.154V0.152344H192.705V25.2646Z",
+  fill: "#FF6600"
+}));
+function InfoIcon({
+  size = ICON_SIZE
+}) {
+  return /*#__PURE__*/React.createElement("svg", {
+    width: size,
+    height: size,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    xmlns: "http://www.w3.org/2000/svg"
+  }, /*#__PURE__*/React.createElement("path", {
+    d: "M11.25 16.75H12.75V11H11.25V16.75ZM12.573 9.05625C12.7295 8.90142 12.8077 8.70958 12.8077 8.48075C12.8077 8.25192 12.7303 8.06008 12.5755 7.90525C12.4207 7.75058 12.2288 7.67325 12 7.67325C11.7712 7.67325 11.5793 7.75058 11.4245 7.90525C11.2697 8.06008 11.1923 8.25192 11.1923 8.48075C11.1923 8.70958 11.2705 8.90142 11.427 9.05625C11.5833 9.21108 11.7743 9.2885 12 9.2885C12.2257 9.2885 12.4167 9.21108 12.573 9.05625ZM12.0017 21.5C10.6877 21.5 9.45267 21.2507 8.2965 20.752C7.14033 20.2533 6.13467 19.5766 5.2795 18.7218C4.42433 17.8669 3.74725 16.8617 3.24825 15.706C2.74942 14.5503 2.5 13.3156 2.5 12.0017C2.5 10.6877 2.74933 9.45267 3.248 8.2965C3.74667 7.14033 4.42342 6.13467 5.27825 5.2795C6.13308 4.42433 7.13833 3.74725 8.294 3.24825C9.44967 2.74942 10.6844 2.5 11.9982 2.5C13.3122 2.5 14.5473 2.74933 15.7035 3.248C16.8597 3.74667 17.8653 4.42342 18.7205 5.27825C19.5757 6.13308 20.2528 7.13833 20.7518 8.294C21.2506 9.44967 21.5 10.6844 21.5 11.9982C21.5 13.3122 21.2507 14.5473 20.752 15.7035C20.2533 16.8597 19.5766 17.8653 18.7218 18.7205C17.8669 19.5757 16.8617 20.2528 15.706 20.7518C14.5503 21.2506 13.3156 21.5 12.0017 21.5ZM12 20C14.2333 20 16.125 19.225 17.675 17.675C19.225 16.125 20 14.2333 20 12C20 9.76667 19.225 7.875 17.675 6.325C16.125 4.775 14.2333 4 12 4C9.76667 4 7.875 4.775 6.325 6.325C4.775 7.875 4 9.76667 4 12C4 14.2333 4.775 16.125 6.325 17.675C7.875 19.225 9.76667 20 12 20Z",
+    fill: "currentColor"
+  }));
+}
+function GearIcon({
+  size = ICON_SIZE
+}) {
+  return /*#__PURE__*/React.createElement("svg", {
+    width: size,
+    height: size,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    xmlns: "http://www.w3.org/2000/svg"
+  }, /*#__PURE__*/React.createElement("path", {
+    d: "M9.69225 21.5L9.3115 18.4538C9.04367 18.3641 8.769 18.2385 8.4875 18.077C8.20617 17.9153 7.95458 17.7422 7.73275 17.5577L4.9115 18.75L2.604 14.75L5.04425 12.9058C5.02125 12.7571 5.00492 12.6078 4.99525 12.4578C4.98558 12.3078 4.98075 12.1583 4.98075 12.0095C4.98075 11.8673 4.98558 11.7228 4.99525 11.576C5.00492 11.4292 5.02125 11.2686 5.04425 11.0943L2.604 9.25L4.9115 5.26925L7.723 6.452C7.96417 6.261 8.22158 6.08633 8.49525 5.928C8.76892 5.76967 9.03783 5.64242 9.302 5.54625L9.69225 2.5H14.3077L14.6885 5.55575C14.9885 5.66475 15.2599 5.792 15.5027 5.9375C15.7457 6.083 15.991 6.2545 16.2385 6.452L19.0885 5.26925L21.396 9.25L18.9173 11.123C18.9531 11.2845 18.9727 11.4355 18.976 11.576C18.9792 11.7163 18.9807 11.8577 18.9807 12C18.9807 12.1358 18.9775 12.274 18.971 12.4145C18.9647 12.5548 18.9417 12.7154 18.902 12.8963L21.3615 14.75L19.0538 18.75L16.2385 17.548C15.991 17.7455 15.7384 17.9202 15.4807 18.072C15.2231 18.224 14.959 18.3481 14.6885 18.4443L14.3077 21.5H9.69225ZM11 20H12.9655L13.325 17.3212C13.8353 17.1879 14.3017 16.9985 14.724 16.753C15.1465 16.5073 15.5539 16.1916 15.9462 15.8057L18.4307 16.85L19.4155 15.15L17.2462 13.5155C17.3296 13.2565 17.3862 13.0026 17.4162 12.7537C17.4464 12.5051 17.4615 12.2538 17.4615 12C17.4615 11.7397 17.4464 11.4884 17.4162 11.2462C17.3862 11.0039 17.3296 10.7564 17.2462 10.5038L19.4345 8.85L18.45 7.15L15.9365 8.2095C15.6018 7.85183 15.2009 7.53583 14.7337 7.2615C14.2664 6.98717 13.7937 6.79292 13.3155 6.67875L13 4H11.0155L10.6845 6.66925C10.1743 6.78975 9.70325 6.97433 9.27125 7.223C8.83908 7.47183 8.42683 7.79233 8.0345 8.1845L5.55 7.15L4.5655 8.85L6.725 10.4595C6.64167 10.6968 6.58333 10.9437 6.55 11.2C6.51667 11.4563 6.5 11.7262 6.5 12.0095C6.5 12.2698 6.51667 12.525 6.55 12.775C6.58333 13.025 6.6385 13.2718 6.7155 13.5155L4.5655 15.15L5.55 16.85L8.025 15.8C8.4045 16.1897 8.81025 16.5089 9.24225 16.7578C9.67442 17.0064 10.152 17.1974 10.675 17.3307L11 20ZM12.0115 15C12.8435 15 13.5515 14.708 14.1355 14.124C14.7195 13.54 15.0115 12.832 15.0115 12C15.0115 11.168 14.7195 10.46 14.1355 9.876C13.5515 9.292 12.8435 9 12.0115 9C11.1692 9 10.4586 9.292 9.87975 9.876C9.30092 10.46 9.0115 11.168 9.0115 12C9.0115 12.832 9.30092 13.54 9.87975 14.124C10.4586 14.708 11.1692 15 12.0115 15Z",
+    fill: "currentColor"
+  }));
+}
+
+// ============================================================
+// TETRIS GAME 2P
+// Shared board: P1 floats UP, P2 falls DOWN. Both AI-controlled.
+// ============================================================
+
+function relTime(dateStr) {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const s = Math.floor(diff / 1000);
+  const m = Math.floor(diff / 60000);
+  const h = Math.floor(diff / 3600000);
+  const d = Math.floor(diff / 86400000);
+  if (s < 60) return s + 's ago';
+  if (m < 60) return m + 'm ago';
+  if (h < 24) return h + 'h ago';
+  if (d < 7) return d + 'd ago';
+  const dt = new Date(dateStr);
+  const mo = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][dt.getMonth()];
+  const yr = dt.getFullYear() !== new Date().getFullYear() ? ', ' + dt.getFullYear() : '';
+  return mo + ' ' + dt.getDate() + yr;
+}
+
+// Haptic helper. The Web Vibration API works on Android Chrome but is
+// NOT supported on iOS Safari -- iOS exposes no public haptic API to
+// web pages. Every call here is wrapped in a feature check + try/catch
+// so it fails silently on unsupported devices. When v3 ships under
+// Capacitor, swap each branch's body for @capacitor/haptics calls
+// (ImpactStyle.Light/Medium/Heavy + notification patterns) -- the
+// call sites in this file do not need to change.
+const haptic = {
+  // Synced on every render via haptic.configure(settings).
+  _s: {
+    haptics: true,
+    hapticIntensity: "medium"
+  },
+  configure(s) {
+    this._s = s;
+  },
+  // Scale a base ImpactStyle by the intensity setting.
+  // "light" shifts one step softer; "strong" shifts one step harder.
+  _scale(base) {
+    const styles = ["LIGHT", "MEDIUM", "HEAVY"];
+    let idx = styles.indexOf(base);
+    const d = this._s.hapticIntensity;
+    if (d === "light" && idx > 0) idx--;
+    if (d === "strong" && idx < 2) idx++;
+    return styles[idx];
+  },
+  // Fire one Capacitor impact (native) or a navigator.vibrate fallback.
+  // vibrateMs is the web/Android fallback duration only.
+  _impact(baseStyle, vibrateMs) {
+    if (!this._s.haptics) {
+      console.log("[haptic] skip -- haptics off");
+      return;
+    }
+    const H = window.Capacitor?.Plugins?.Haptics;
+    const scaled = this._scale(baseStyle);
+    console.log("[haptic] impact", scaled, "| H:", !!H, "| intensity:", this._s.hapticIntensity);
+    if (H) {
+      try {
+        H.impact({
+          style: scaled
+        });
+      } catch (e) {
+        console.error("[haptic] impact failed:", e);
+      }
+      return;
+    }
+    if (typeof navigator?.vibrate === "function") {
+      try {
+        navigator.vibrate(vibrateMs);
+      } catch (_) {}
+    }
+  },
+  // Fire a timed sequence of impacts.
+  // steps: [{ style, vibrateMs, delay }] -- delay=0 fires immediately.
+  _pattern(steps) {
+    steps.forEach(({
+      style,
+      vibrateMs,
+      delay
+    }) => {
+      if (!delay) {
+        this._impact(style, vibrateMs);
+      } else {
+        setTimeout(() => this._impact(style, vibrateMs), delay);
+      }
+    });
+  },
+  // Rotate / move -- subtle selection tick (selectionChanged on native,
+  // short buzz on web).
+  light() {
+    if (!this._s.haptics) return;
+    const H = window.Capacitor?.Plugins?.Haptics;
+    if (H) {
+      // impact() is reliable on iOS; selectionChanged() is effectively a no-op
+      // unless paired with selectionStart/End, so rotate/move felt dead. Fire a
+      // scaled LIGHT impact instead so every successful input gives a real tap.
+      try {
+        H.impact({
+          style: this._scale("LIGHT")
+        });
+      } catch (e) {
+        console.error("[haptic] light failed:", e);
+      }
+      return;
+    }
+    const d = this._s.hapticIntensity;
+    if (typeof navigator?.vibrate === "function") {
+      try {
+        navigator.vibrate(d === "light" ? 8 : d === "strong" ? 18 : 12);
+      } catch (_) {}
+    }
+  },
+  // 1. Piece lock -- short tap (LIGHT)
+  pieceLock() {
+    this._pattern([{
+      style: "LIGHT",
+      vibrateMs: 15,
+      delay: 0
+    }]);
+  },
+  // 2/3. Line clear -- x1: MEDIUM pulse | x2+: HEAVY pulse
+  lineClear(n) {
+    this._pattern([{
+      style: n > 1 ? "HEAVY" : "MEDIUM",
+      vibrateMs: n > 1 ? 80 : 50,
+      delay: 0
+    }]);
+  },
+  // 4. Boundary shift gain -- double tap (MEDIUM, 50ms gap, MEDIUM)
+  boundaryGain() {
+    this._pattern([{
+      style: "MEDIUM",
+      vibrateMs: 20,
+      delay: 0
+    }, {
+      style: "MEDIUM",
+      vibrateMs: 20,
+      delay: 50
+    }]);
+  },
+  // 5. Boundary shift loss -- single long pulse (HEAVY)
+  boundaryLoss() {
+    this._pattern([{
+      style: "HEAVY",
+      vibrateMs: 100,
+      delay: 0
+    }]);
+  },
+  // 6. Game over -- long rumble (HEAVY, 100ms gap, HEAVY)
+  gameOver() {
+    this._pattern([{
+      style: "HEAVY",
+      vibrateMs: 200,
+      delay: 0
+    }, {
+      style: "HEAVY",
+      vibrateMs: 200,
+      delay: 100
+    }]);
+  }
+};
+
+// ============================================================
+// Overwrite the Now Playing / Media Session entry with blank data so iOS
+// lock screen and Control Center do not show a player card for DRIFT.
+// Must be called on page load, on every bgmPlay(), and on foreground resume.
+function suppressMediaSession() {
+  try {
+    if (!("mediaSession" in navigator)) return;
+    navigator.mediaSession.playbackState = "none";
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: "",
+      artist: "",
+      album: ""
+    });
+    ["play", "pause", "stop", "seekto", "seekforward", "seekbackward", "previoustrack", "nexttrack"].forEach(function (action) {
+      try {
+        navigator.mediaSession.setActionHandler(action, null);
+      } catch (e) {}
+    });
+  } catch (_) {}
+}
+suppressMediaSession(); // run immediately on page load
+
+// SOUND FX  (Web Audio API -- preloaded on game start)
+// ============================================================
+//
+// Mirrors the haptic object: same event sites, same configure() pattern.
+// Files live in assets/Sound fx/ and assets/Sound fx/Picked/.
+//
+// Preload is triggered by the user's side-selection tap (first user
+// gesture), satisfying the browser autoplay policy. AudioContext is
+// created lazily in _getCtx() for the same reason.
+//
+// Volume: settings.volume 1-10 mapped linearly to GainNode 0.1-1.0.
+// Overlap: each _play() creates a fresh BufferSourceNode so rapid
+// sequential calls (e.g. two piece locks) stack naturally.
+// Line clear: n==1 uses the CLEAR file; n>1 uses the heavier DROP file.
+// ============================================================
+const sfx = {
+  // Sound FX engine -- Audio element approach.
+  //
+  // Web Audio API (fetch/XHR + decodeAudioData) does NOT work in Capacitor
+  // WKWebView because the capacitor:// custom URL scheme is served by
+  // WKURLSchemeHandler, which only handles page navigation -- it returns
+  // HTTP 0 for all programmatic XHR/fetch requests.
+  // All audio goes through Web Audio API (AudioContext + AudioBufferSourceNode).
+  // Zero <audio> / HTMLMediaElement on the page. This is the ONLY way to
+  // prevent WKWebView from switching AVAudioSession to .playback, which is
+  // what causes the Now Playing widget to appear on the iOS lock screen.
+  _s: {
+    soundFX: true,
+    volume: 4
+  },
+  _attempted: false,
+  _ctx: null,
+  // shared AudioContext (SFX + BGM)
+  _bufs: {},
+  // key -> AudioBuffer
+  _bgmGain: null,
+  // GainNode for BGM (volume control + looping)
+  _bgmSrc: null,
+  // AudioBufferSourceNode currently playing BGM
+
+  configure(settings) {
+    this._s = settings;
+  },
+  // Diagnostic: call to log sfx + haptic health into Xcode console.
+  diagnose() {
+    const H = window.Capacitor?.Plugins?.Haptics;
+    console.log("[diag] soundFX:", this._s.soundFX, "| volume:", this._s.volume, "| Web Audio ctx:", this._ctx ? this._ctx.state : "none", "| bufs loaded:", Object.keys(this._bufs).length, "| Capacitor:", !!window.Capacitor, "| Haptics plugin:", !!H);
+  },
+  // Resume the AudioContext on first user gesture (iOS autoplay policy).
+  // Web Audio context starts in "suspended" state; resume() unblocks it.
+  _unlock() {
+    if (this._ctx && this._ctx.state === "suspended") {
+      this._ctx.resume().catch(function () {});
+    }
+  },
+  preload() {
+    if (this._attempted) return;
+    this._attempted = true;
+    // Create a single shared AudioContext for all audio.
+    // Web Audio API does NOT trigger WKWebView's media pipeline, so the
+    // AVAudioSession category stays .ambient and Now Playing never appears.
+    try {
+      this._ctx = new (window.AudioContext || window.webkitAudioContext)();
+      this._bgmGain = this._ctx.createGain();
+      this._bgmGain.gain.value = 0.25;
+      this._bgmGain.connect(this._ctx.destination);
+    } catch (e) {
+      console.error("[sfx] AudioContext creation failed:", e);
+      return;
+    }
+    var ctx = this._ctx;
+    var B = "assets/Sound%20fx/";
+    var P = B + "Picked/";
+    var files = {
+      pieceLock: B + "102130__noirpantalon__hard_subby_kick.mp3",
+      lineClearSingle: B + "Clear/59539__uzerx__sub-bass-3-secondsssss.wav",
+      lineClearMulti: P + "DROP%2022500__johnnypanic__ultimatequickkick.wav",
+      boundaryGain: P + "MORE%20SPACE%20531730__magnuswaker__elasto-bass.wav",
+      boundaryLoss: P + "LESS%20850133__cat-fox_alex__sub-pitch-down-sub-3.wav",
+      gameOver: P + "GAME%20OVER%20567208__sergequadrado__announcement-sound.wav",
+      bgm: "assets/Sound%20fx/Music/bgm.m4a"
+    };
+    Object.entries(files).forEach(function (entry) {
+      var key = entry[0],
+        url = entry[1];
+      fetch(url).then(function (r) {
+        return r.arrayBuffer();
+      }).then(function (buf) {
+        return ctx.decodeAudioData(buf);
+      }).then(function (decoded) {
+        sfx._bufs[key] = decoded;
+        console.log("[sfx] loaded:", key);
+      }).catch(function (e) {
+        console.warn("[sfx] load failed:", key, e.message || e);
+      });
+    });
+    console.log("[sfx] preload -- 7 files queued via Web Audio (no <audio> elements)");
+    this.diagnose();
+  },
+  _play(key) {
+    if (!this._s.soundFX) return;
+    if (!this._ctx || !this._bufs[key]) return;
+    var vol = Math.max(0.05, this._s.volume / 10);
+    try {
+      var gain = this._ctx.createGain();
+      gain.gain.value = vol;
+      gain.connect(this._ctx.destination);
+      var src = this._ctx.createBufferSource();
+      src.buffer = this._bufs[key];
+      src.connect(gain);
+      src.start(0);
+      // Disconnect gain after playback to free resources
+      src.onended = function () {
+        gain.disconnect();
+      };
+    } catch (e) {
+      console.warn("[sfx] play error:", key, e);
+    }
+  },
+  pieceLock() {
+    this._play("pieceLock");
+  },
+  lineClear(n) {
+    this._play(n > 1 ? "lineClearMulti" : "lineClearSingle");
+  },
+  boundaryGain() {
+    this._play("boundaryGain");
+  },
+  boundaryLoss() {
+    this._play("boundaryLoss");
+  },
+  gameOver() {
+    this._play("gameOver");
+  },
+  // BGM via Web Audio API. The native AppDelegate stops the audio session on
+  // lock (applicationWillResignActive) so the Now Playing widget never shows.
+  bgmPlay(volume) {
+    if (!this._ctx || !this._bufs["bgm"]) {
+      console.warn("[sfx] bgm not ready");
+      return;
+    }
+    if (this._ctx.state === "suspended") {
+      this._ctx.resume().catch(function () {});
+    }
+    if (this._bgmSrc) {
+      try {
+        this._bgmSrc.stop();
+      } catch (_) {}
+      this._bgmSrc.disconnect();
+      this._bgmSrc = null;
+    }
+    var src = this._ctx.createBufferSource();
+    src.buffer = this._bufs["bgm"];
+    src.loop = true;
+    src.connect(this._bgmGain);
+    // Honor the Volume slider (Music folded into Sound Fx). volume arg is
+    // settings.volume/5 in [0.2,1.0]; mirror bgmVolume()'s mapping.
+    this._bgmGain.gain.value = Math.max(0.05, (volume || 1) * 0.25);
+    src.start(0);
+    this._bgmSrc = src;
+  },
+  bgmPause() {
+    if (this._ctx && this._ctx.state === "running") {
+      this._ctx.suspend().catch(function () {});
+    }
+  },
+  bgmStop() {
+    if (this._bgmSrc) {
+      try {
+        this._bgmSrc.stop();
+      } catch (_) {}
+      this._bgmSrc.disconnect();
+      this._bgmSrc = null;
+    }
+    if (this._ctx && this._ctx.state === "running") {
+      this._ctx.suspend().catch(function () {});
+    }
+  },
+  bgmVolume(v) {
+    if (this._bgmGain) this._bgmGain.gain.value = Math.max(0.05, v * 0.25);
+  }
+};
+
+// music object removed -- BGM is handled entirely by sfx.bgmPlay/bgmPause/bgmStop
+// (Web Audio API via sfx._ctx, no HTMLMediaElement, no Now Playing widget)
+
+// ============================================================
+// SETTINGS  (localStorage-backed, no asset calls yet)
+// ============================================================
+
+function loadSettings() {
+  const defaults = {
+    soundFX: true,
+    volume: 4,
+    haptics: true,
+    hapticIntensity: "medium",
+    level: AI_LEVEL_DEFAULT,
+    direction: 1
+  };
+  try {
+    return {
+      ...defaults,
+      ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}")
+    };
+  } catch {
+    return {
+      ...defaults
+    };
+  }
+}
+function useSettings() {
+  const [s, setS] = React.useState(loadSettings);
+  const update = (key, val) => setS(prev => {
+    const next = {
+      ...prev,
+      [key]: val
+    };
+    try {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
+    } catch {}
+    return next;
+  });
+  return [s, update];
+}
+function SettingsScreen({
+  settings,
+  onUpdate,
+  onClose,
+  initialSection,
+  exiting
+}) {
+  const inter = "'Inter', sans-serif";
+  const secLabel = {
+    fontFamily: inter,
+    fontSize: 12,
+    fontWeight: 600,
+    letterSpacing: "3.6px",
+    color: "#fff",
+    textTransform: "uppercase"
+  };
+  const rowLbl = {
+    fontFamily: inter,
+    fontSize: 10,
+    fontWeight: 400,
+    letterSpacing: "3px",
+    color: "#fff",
+    opacity: 0.5,
+    textTransform: "uppercase",
+    flex: "1 0 0",
+    minWidth: 0
+  };
+  const opt = active => ({
+    fontFamily: inter,
+    fontSize: 10,
+    fontWeight: 600,
+    letterSpacing: "5px",
+    color: "#fff",
+    textTransform: "uppercase",
+    opacity: active ? 1 : 0.3,
+    cursor: "pointer",
+    userSelect: "none"
+  });
+  const di = n => exiting ? {} : {
+    animation: `driftIn 0.18s ease ${n * 50}ms both`
+  };
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      inset: 0,
+      width: FRAME_W,
+      height: GAME_2P_H,
+      background: "#212223",
+      zIndex: 100,
+      userSelect: "none",
+      WebkitUserSelect: "none",
+      animation: exiting ? "driftOutRight 0.15s ease both" : undefined
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      inset: 0,
+      pointerEvents: "none",
+      backgroundImage: "linear-gradient(rgba(49,50,51,0.3) 1px,transparent 1px)," + "linear-gradient(90deg,rgba(49,50,51,0.3) 1px,transparent 1px)",
+      backgroundSize: "20px 20px"
+    }
+  }), /*#__PURE__*/React.createElement(BgVignette, null), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      left: 44,
+      top: 106,
+      fontFamily: inter,
+      fontSize: 16,
+      fontWeight: 500,
+      letterSpacing: "8px",
+      textTransform: "uppercase",
+      opacity: 0.5,
+      color: "#fff",
+      ...di(0)
+    }
+  }, "Settings"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      left: 44,
+      top: 160,
+      width: 314,
+      display: "flex",
+      flexDirection: "column",
+      gap: 40
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      ...di(1)
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      ...secLabel,
+      marginBottom: 8
+    }
+  }, "Sound"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      minHeight: 44,
+      gap: 16
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: rowLbl
+  }, "Sound Fx"), [false, true].map(v => /*#__PURE__*/React.createElement("div", {
+    key: String(v),
+    onPointerDown: () => onUpdate("soundFX", v),
+    onTouchStart: e => e.stopPropagation(),
+    style: {
+      ...opt(settings.soundFX === v),
+      padding: "17px 0"
+    }
+  }, v ? "ON" : "Off"))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      minHeight: 44,
+      gap: 40,
+      opacity: settings.soundFX ? 1 : 0.3
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: rowLbl
+  }, "Volume"), [1, 2, 3, 4, 5].map(n => /*#__PURE__*/React.createElement("div", {
+    key: n,
+    onPointerDown: () => onUpdate("volume", n),
+    onTouchStart: e => e.stopPropagation(),
+    style: {
+      ...opt(settings.volume === n),
+      padding: "17px 0"
+    }
+  }, n)))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      ...di(2)
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      ...secLabel,
+      marginBottom: 8
+    }
+  }, "Haptics"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      minHeight: 44,
+      gap: 16
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: rowLbl
+  }, "Haptics"), [false, true].map(v => /*#__PURE__*/React.createElement("div", {
+    key: String(v),
+    onPointerDown: () => onUpdate("haptics", v),
+    onTouchStart: e => e.stopPropagation(),
+    style: {
+      ...opt(settings.haptics === v),
+      padding: "17px 0"
+    }
+  }, v ? "ON" : "Off"))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "stretch",
+      minHeight: 44,
+      gap: 32,
+      opacity: settings.haptics ? 1 : 0.3
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      ...rowLbl,
+      display: "flex",
+      alignItems: "center"
+    }
+  }, "Intensity"), [["light", "Low"], ["medium", "Mid"], ["strong", "High"]].map(([val, label]) => /*#__PURE__*/React.createElement("div", {
+    key: val,
+    onPointerDown: () => settings.haptics && onUpdate("hapticIntensity", val),
+    onTouchStart: e => e.stopPropagation(),
+    style: {
+      fontFamily: inter,
+      fontSize: 10,
+      fontWeight: 600,
+      letterSpacing: "3px",
+      color: "#fff",
+      textTransform: "uppercase",
+      opacity: settings.hapticIntensity === val ? 1 : 0.3,
+      cursor: "pointer",
+      userSelect: "none",
+      display: "flex",
+      alignItems: "center"
+    }
+  }, label)))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      ...di(3)
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      ...secLabel,
+      marginBottom: 8
+    }
+  }, "Game"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      minHeight: 44,
+      gap: 40
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: rowLbl
+  }, "Level"), [1, 2, 3, 4, 5].map(n => /*#__PURE__*/React.createElement("div", {
+    key: n,
+    onPointerDown: () => onUpdate("level", n),
+    onTouchStart: e => e.stopPropagation(),
+    style: {
+      ...opt(settings.level === n),
+      padding: "17px 0"
+    }
+  }, n))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      minHeight: 44,
+      gap: 32
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: rowLbl
+  }, "Direction"), [{
+    s: 1,
+    label: "↑ Up"
+  }, {
+    s: 2,
+    label: "↓Dn"
+  }].map(({
+    s,
+    label
+  }) => /*#__PURE__*/React.createElement("div", {
+    key: s,
+    onPointerDown: () => onUpdate("direction", s),
+    onTouchStart: e => e.stopPropagation(),
+    style: {
+      fontFamily: inter,
+      fontSize: 10,
+      fontWeight: 600,
+      letterSpacing: "2px",
+      color: "#fff",
+      textTransform: "uppercase",
+      opacity: settings.direction === s ? 1 : 0.3,
+      cursor: "pointer",
+      userSelect: "none",
+      padding: "17px 0"
+    }
+  }, label))))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      left: 0,
+      right: 0,
+      top: 709,
+      display: "flex",
+      justifyContent: "center",
+      alignItems: "center",
+      gap: 40,
+      ...di(4)
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    onPointerDown: onClose,
+    onTouchStart: e => e.stopPropagation(),
+    style: {
+      fontFamily: inter,
+      fontSize: 12,
+      fontWeight: 400,
+      letterSpacing: "6px",
+      color: "#fff",
+      textTransform: "uppercase",
+      opacity: 0.3,
+      cursor: "pointer",
+      userSelect: "none",
+      padding: "17px 0"
+    }
+  }, "Cancel"), /*#__PURE__*/React.createElement("div", {
+    onPointerDown: onClose,
+    onTouchStart: e => e.stopPropagation(),
+    style: {
+      fontFamily: inter,
+      fontSize: 12,
+      fontWeight: 800,
+      letterSpacing: "6px",
+      color: "#fff",
+      textTransform: "uppercase",
+      cursor: "pointer",
+      userSelect: "none",
+      padding: "17px 0"
+    }
+  }, "Done")));
+}
+
+// Instructions / How-to-Play overlay (Figma 358:6362). Same overlay chrome as
+// SettingsScreen (grid + vignette, driftIn stagger in, driftOutRight out).
+function InstructionsScreen({
+  onClose,
+  exiting
+}) {
+  const inter = "'Inter', sans-serif";
+  const secLabel = {
+    fontFamily: inter,
+    fontSize: 12,
+    fontWeight: 600,
+    letterSpacing: "3.6px",
+    color: "#fff",
+    textTransform: "uppercase"
+  };
+  const body = {
+    fontFamily: inter,
+    fontSize: 12,
+    fontWeight: 400,
+    lineHeight: 1.3,
+    color: "#fff",
+    opacity: 0.5,
+    margin: 0
+  };
+  const bulletUl = {
+    ...body,
+    listStyle: "disc",
+    paddingLeft: 18
+  };
+  const section = n => ({
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+    ...di(n)
+  });
+  const di = n => exiting ? {} : {
+    animation: `driftIn 0.18s ease ${n * 50}ms both`
+  };
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      inset: 0,
+      width: FRAME_W,
+      height: GAME_2P_H,
+      background: "#212223",
+      zIndex: 100,
+      userSelect: "none",
+      WebkitUserSelect: "none",
+      animation: exiting ? "driftOutRight 0.15s ease both" : undefined
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      inset: 0,
+      pointerEvents: "none",
+      backgroundImage: "linear-gradient(rgba(49,50,51,0.3) 1px,transparent 1px)," + "linear-gradient(90deg,rgba(49,50,51,0.3) 1px,transparent 1px)",
+      backgroundSize: "20px 20px"
+    }
+  }), /*#__PURE__*/React.createElement(BgVignette, null), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      left: 44,
+      top: 106,
+      fontFamily: inter,
+      fontSize: 16,
+      fontWeight: 500,
+      letterSpacing: "8px",
+      textTransform: "uppercase",
+      opacity: 0.5,
+      color: "#fff",
+      ...di(0)
+    }
+  }, "Instr."), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      left: 44,
+      top: 165,
+      width: 314,
+      display: "flex",
+      flexDirection: "column",
+      gap: 24
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: section(1)
+  }, /*#__PURE__*/React.createElement("div", {
+    style: secLabel
+  }, "The Board"), /*#__PURE__*/React.createElement("p", {
+    style: body
+  }, "Two players share one board, divided by a boundary line in the middle. You play one side, your opponent the other. Your pieces travel toward the boundary - if you're on the bottom they float up, if you're on top they fall down.")), /*#__PURE__*/React.createElement("div", {
+    style: section(2)
+  }, /*#__PURE__*/React.createElement("div", {
+    style: secLabel
+  }, "Pick Your Side (Solo)"), /*#__PURE__*/React.createElement("ul", {
+    style: bulletUl
+  }, /*#__PURE__*/React.createElement("li", null, "UP - play from the bottom, pieces float up."), /*#__PURE__*/React.createElement("li", null, "DN - play from the top, pieces fall down.", /*#__PURE__*/React.createElement("br", null), "The AI takes the opposite side. (In 2-player, sides are assigned when you connect.)"))), /*#__PURE__*/React.createElement("div", {
+    style: section(3)
+  }, /*#__PURE__*/React.createElement("div", {
+    style: secLabel
+  }, "Controls"), /*#__PURE__*/React.createElement("ul", {
+    style: bulletUl
+  }, /*#__PURE__*/React.createElement("li", null, "Swipe left / right to move."), /*#__PURE__*/React.createElement("li", null, "Tap to rotate."), /*#__PURE__*/React.createElement("li", null, "Swipe the way your pieces travel to hard-drop - up if they float up, down if they fall down."))), /*#__PURE__*/React.createElement("div", {
+    style: section(4)
+  }, /*#__PURE__*/React.createElement("div", {
+    style: secLabel
+  }, "Claim Territory"), /*#__PURE__*/React.createElement("p", {
+    style: body
+  }, "Clear a row to push the boundary into your opponent's half. Let rows pile up and they'll push it back into yours.")), /*#__PURE__*/React.createElement("div", {
+    style: section(5)
+  }, /*#__PURE__*/React.createElement("div", {
+    style: secLabel
+  }, "Winning"), /*#__PURE__*/React.createElement("p", {
+    style: body
+  }, "Two ways to win: push the boundary all the way into their half to claim their whole territory, or force them out when their side fills to the edge. If your side fills up first, you lose.")), /*#__PURE__*/React.createElement("div", {
+    style: section(6)
+  }, /*#__PURE__*/React.createElement("div", {
+    style: secLabel
+  }, "Modes"), /*#__PURE__*/React.createElement("ul", {
+    style: bulletUl
+  }, /*#__PURE__*/React.createElement("li", null, "Solo - play an AI opponent; pick your difficulty (1-5)."), /*#__PURE__*/React.createElement("li", null, "2 Players - share your room code with a friend, or join theirs with a code."))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "center",
+      alignItems: "center",
+      ...di(7)
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    onPointerDown: onClose,
+    onTouchStart: e => e.stopPropagation(),
+    style: {
+      fontFamily: inter,
+      fontSize: 12,
+      fontWeight: 800,
+      letterSpacing: "6px",
+      color: "#fff",
+      textTransform: "uppercase",
+      cursor: "pointer",
+      userSelect: "none",
+      padding: "17px 0"
+    }
+  }, "Done"))));
+}
+
+// ============================================================
+
+// ============================================================
+// TEST PROBE  (a11y bridge for XCUITest -- see TEST_PROBE flag)
+// ============================================================
+// driftProbeEl is set once the probe <div> mounts. writeDriftProbe()
+// serializes a compact key=value;... string into its text content, which
+// WKWebView surfaces to the iOS accessibility tree as a static-text element
+// whose label BEGINS WITH "DRIFT;". XCUITest finds that element and parses
+// the fields. Counters come from the module-level driftActs object.
+let driftProbeEl = null;
+let driftLastSnap = null; // most-recent state snapshot, for immediate counter flush
+function writeDriftProbe(snap) {
+  if (!TEST_PROBE || !driftProbeEl) return;
+  const a = driftActs;
+  const s = snap || {};
+  driftProbeEl.textContent = "DRIFT;phase=" + (s.phase || "") + ";side=" + (s.playerSide == null ? "0" : s.playerSide) + ";p1x=" + (s.p1x != null ? s.p1x : "-") + ";p1rot=" + (s.p1rot != null ? s.p1rot : "-") + ";p2x=" + (s.p2x != null ? s.p2x : "-") + ";p2rot=" + (s.p2rot != null ? s.p2rot : "-") + ";p1t=" + (s.p1type || "-") + ";p2t=" + (s.p2type || "-") + ";p1n=" + (s.p1n || "-") + ";p2n=" + (s.p2n || "-") + ";p1c=" + (s.p1c != null ? s.p1c : "-") + ";p2c=" + (s.p2c != null ? s.p2c : "-") + ";bdy=" + (s.boundary != null ? s.boundary : "-") + ";l1=" + (s.p1Lines != null ? s.p1Lines : "-") + ";l2=" + (s.p2Lines != null ? s.p2Lines : "-") + ";set=" + (s.showSettings ? "1" : "0") + ";lvl=" + (s.level != null ? s.level : "-") + ";sfx=" + (s.sfxOn ? "1" : "0") + ";hap=" + (s.hapOn ? "1" : "0") + ";vol=" + (s.vol != null ? s.vol : "-") + ";paused=" + (s.paused ? "1" : "0") + ";over=" + (s.phase === "over" ? "1" : "0") + ";tap=" + a.tap + ";left=" + a.left + ";right=" + a.right + ";up=" + a.up + ";down=" + a.down + ";soft=" + a.soft;
+}
+function TetrisGame2P() {
+  const [settings, updateSetting] = useSettings();
+  const [showSettings, setShowSettings] = React.useState(false);
+  const [settingsSection, setSettingsSection] = React.useState(null);
+  const [navExiting, setNavExiting] = React.useState(false);
+  const [navMode, setNavMode] = React.useState("fade"); // 'fade' (diff bg) | 'slide' (same bg)
+  const [startKey, setStartKey] = React.useState(0);
+  const [settingsExiting, setSettingsExiting] = React.useState(false);
+  const [showInstructions, setShowInstructions] = React.useState(false);
+  const [instructionsExiting, setInstructionsExiting] = React.useState(false);
+  const [state, setState] = React.useState(makeInitState2P);
+  // Session win counts -- persist across rematches, reset on MENU or PLAY AGAIN.
+  const [p1Wins, setP1Wins] = React.useState(0);
+  const [p2Wins, setP2Wins] = React.useState(0);
+  // Online: stable generated room code for this session (doesn't change on re-render).
+  const generatedCodeRef = React.useRef(makeRoomCode());
+  // Online: text the user typed into the "join with code" input.
+  const [joinCode, setJoinCode] = React.useState("");
+  const [startTab, setStartTab] = React.useState("single"); // "single" | "2players"
+  // Online: live WebSocket connection (not state -- no re-renders on ws events).
+  const wsRef = React.useRef(null);
+  // Online: synchronous mirror of the assigned role for use inside ws handlers.
+  const onlineRoleRef = React.useRef(null);
+
+  // Keep the module-level haptic and sfx objects in sync with React
+  // settings state. Called synchronously every render so callbacks always
+  // read the current toggles without stale-closure issues.
+  haptic.configure(settings);
+  sfx.configure(settings);
+
+  // Kick off sfx preload (includes bgm) on first mount.
+  React.useEffect(() => {
+    sfx.preload();
+  }, []);
+
+  // BGM playback control via sfx object.
+  React.useEffect(() => {
+    const ph = state.phase,
+      pa = state.paused,
+      su = state.summary;
+    if (!settings.soundFX) {
+      sfx.bgmStop();
+      return;
+    }
+    const vol = settings.volume / 5;
+    if (ph === "playing" && !pa && !su) {
+      sfx.bgmVolume(vol);
+      sfx.bgmPlay(vol);
+    } else if (ph === "playing" && (pa || su)) {
+      sfx.bgmPause();
+    } else {
+      sfx.bgmStop();
+    }
+  }, [state.phase, state.paused, state.summary, settings.soundFX, settings.volume]);
+
+  // Pause BGM when the app is backgrounded / screen locked; resume when
+  // it returns to foreground -- but only if music was on before hiding.
+  // Also clears the mediaSession so iOS does not keep a stale Now Playing
+  // card after the element is paused.
+  React.useEffect(() => {
+    const onVisibility = () => {
+      if (document.hidden) {
+        sfx.bgmPause();
+      } else {
+        // Only resume if the game logic wants music playing right now.
+        const ph = state.phase,
+          pa = state.paused,
+          su = state.summary;
+        if (settings.soundFX && ph === "playing" && !pa && !su) {
+          sfx.bgmPlay(settings.volume / 5);
+        }
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [state.phase, state.paused, state.summary, settings.soundFX]);
+  const openSettings = section => {
+    setSettingsSection(section || null);
+    setShowSettings(true);
+  };
+  const closeSettings = () => {
+    setSettingsExiting(true);
+    setStartKey(k => k + 1);
+    setTimeout(() => {
+      setShowSettings(false);
+      setSettingsSection(null);
+      setSettingsExiting(false);
+    }, 150);
+  };
+  const openInstructions = () => {
+    setShowInstructions(true);
+  };
+  const closeInstructions = () => {
+    setInstructionsExiting(true);
+    setStartKey(k => k + 1);
+    setTimeout(() => {
+      setShowInstructions(false);
+      setInstructionsExiting(false);
+    }, 150);
+  };
+
+  // Screen-to-screen navigation with a full-page directional slide.
+  // The outgoing screen slides out to the right (pageOutRight) while
+  // navExiting is true; after NAV_MS the phase swaps and the incoming
+  // screen mounts fresh, sliding in from the right (pageInRight) via
+  // its own root. `apply` performs the actual phase change.
+  // NAV_MS MUST match the animation duration so the exit finishes
+  // exactly as the swap happens (no truncation, no dead frames).
+  const NAV_MS = 300;
+  const navTo = (apply, mode = "fade") => {
+    setNavMode(mode);
+    setNavExiting(true);
+    setTimeout(() => {
+      apply();
+      setNavExiting(false);
+    }, NAV_MS);
+  };
+  const EASE = "cubic-bezier(0.4,0,0.2,1)";
+  // Screen transition animations. Rule: SAME background -> SLIDE (content
+  // moves, bg reads as static); DIFFERENT background -> FADE. start<->game is
+  // a fade (game bg #0a0a0a differs from start #212223); start<->online is a
+  // slide (both #212223). navMode carries the chosen style into the entering
+  // screen too (it is only cleared implicitly by the next navTo).
+  //   slideAnim - online root (always slide)
+  //   gameAnim  - playing root (always fade)
+  //   startAnim - start roots (fade or slide, by navMode); its content still
+  //               staggers in via di() on top of the bg fade/slide.
+  const slideAnim = navExiting ? {
+    animation: `pageOutRight ${NAV_MS}ms ${EASE} both`,
+    pointerEvents: "none"
+  } : {
+    animation: `pageInRight ${NAV_MS}ms ${EASE} both`
+  };
+  const fadeAnim = navExiting ? {
+    animation: `fadeOut 0.24s ease both`,
+    pointerEvents: "none"
+  } : {
+    animation: `fadeIn 0.3s ease both`
+  };
+  const startAnim = navMode === "slide" ? slideAnim : fadeAnim;
+  const gameAnim = fadeAnim;
+  React.useEffect(() => {
+    const id = setInterval(() => {
+      setState(s => {
+        if (s.phase !== "playing") return s;
+        if (s.paused || s.summary) return s;
+        let {
+          board,
+          aiTick,
+          p1,
+          p1Next,
+          p1NextNext,
+          p2,
+          p2Next,
+          p2NextNext,
+          p1Lines,
+          p2Lines,
+          boundary
+        } = s;
+        const aiCfg = AI_LEVEL_CONFIG[s.aiLevel] || AI_LEVEL_CONFIG[3];
+        let n1 = 0,
+          n2 = 0;
+        // True when the LOCAL player's piece committed a lock this tick
+        // (online only) -- used to broadcast the lk snapshot to the opponent.
+        let lockedThisTick = false;
+        // ONLINE: which sides run local physics. The local player's side runs
+        // gravity/lock as normal; the REMOTE side is driven by network events
+        // (handled in the ws onmessage), so its physics is skipped here. Once
+        // the local player has topped out (iDied) its physics freezes while the
+        // game-over grace window resolves.
+        const runP1 = !s.online ? true : s.playerSide === 1 && !s.iDied;
+        const runP2 = !s.online ? true : s.playerSide === 2 && !s.iDied;
+        // Track which rows were full at lock time so we can flash them
+        // briefly after they're cleared. Filled per-side just before
+        // clearP*_2P runs (board still has the full rows at that moment).
+        const clearedRowsThisTick = [];
+        aiTick += 1;
+
+        // P1 AI block: only active when the user picked P2 on the start
+        // screen (SOLO only). When the user is P1, or in ONLINE mode, this
+        // block is skipped and P1 is driven by applyP1 / network events.
+        if (!s.online && s.playerSide === 2 && aiTick % aiCfg.aiPeriod === 0) {
+          const getLandingY1 = (type, rot, x) => {
+            const startY = Math.max(0, boundary - 4);
+            for (let y = startY; y < ROWS_2P; y++) {
+              if (!isValid2P(getCells(type, rot, x, y), board, boundary, 1)) continue;
+              if (!isValid2P(getCells(type, rot, x, y - 1), board, boundary, 1)) return y;
+            }
+            return -1;
+          };
+          const SCORE_MIN_1 = boundary;
+          const SCORE_MAX_1 = ROWS_2P - 1;
+          const scoreP1 = (type, rot, x) => {
+            const ly = getLandingY1(type, rot, x);
+            if (ly < 0) return -Infinity;
+            const sim = board.map(row => [...row]);
+            for (const [c, r] of getCells(type, rot, x, ly)) {
+              if (r >= 0 && r < ROWS_2P && c >= 0 && c < COLS) sim[r][c] = CELL_P1;
+            }
+            const [simAfter, cleared] = clearP1_2P(sim, boundary);
+            let score = cleared * aiCfg.linePts;
+
+            // Near-complete row bonus: 8 or 9 cells = close to clearing next piece
+            for (let r = SCORE_MIN_1; r <= SCORE_MAX_1; r++) {
+              const filled = simAfter[r].filter(v => v !== CELL_EMPTY).length;
+              if (filled >= 8 && filled < COLS) score += (filled - 7) * 20;
+            }
+
+            // Holes: P1 floats UP from the floor (row ROWS_2P-1), so a hole is
+            // an empty cell with a filled cell BELOW it (toward the floor) --
+            // a rising piece cannot reach under a covered cell. Scan from the
+            // floor up: once a filled cell is seen, any empty above it is a hole.
+            let holes = 0;
+            for (let c = 0; c < COLS; c++) {
+              let seen = false;
+              for (let r = ROWS_2P - 1; r >= boundary; r--) {
+                if (simAfter[r][c] !== CELL_EMPTY) seen = true;else if (seen) holes++;
+              }
+            }
+            score -= holes * aiCfg.holePenalty;
+
+            // Column heights (from floor upward). colH[c] = filled rows from
+            // the floor (ROWS_2P-1) upward within P1 territory.
+            const colH = Array(COLS).fill(0);
+            for (let c = 0; c < COLS; c++) {
+              for (let r = boundary; r < ROWS_2P; r++) {
+                if (simAfter[r][c] !== CELL_EMPTY) {
+                  colH[c] = ROWS_2P - r; // height counted from floor
+                  break;
+                }
+              }
+            }
+            // Bumpiness (jaggedness), max-column-height (spike) penalty, and
+            // coverage (distinct columns used) reward -- the last two push the
+            // stack to spread wide and flat rather than piling into a tower.
+            let bumpiness = 0,
+              maxH = 0,
+              coverage = 0;
+            for (let c = 0; c < COLS; c++) {
+              if (colH[c] > 0) {
+                coverage++;
+                if (colH[c] > maxH) maxH = colH[c];
+              }
+              if (c > 0) bumpiness += Math.abs(colH[c] - colH[c - 1]);
+            }
+            score -= bumpiness * aiCfg.bumpPenalty;
+            score -= maxH * aiCfg.maxHPenalty;
+            score += coverage * aiCfg.coverageBonus;
+            return score;
+          };
+          let bestRot1 = p1.rot,
+            bestX1 = p1.x;
+          if (Math.random() < aiCfg.randomRatio) {
+            const opts = [];
+            for (let rot = 0; rot < 4; rot++) {
+              for (let x = 0; x < COLS; x++) {
+                if (isValid2P(getCells(p1.type, rot, x, p1.y), board, boundary, 1)) opts.push({
+                  rot,
+                  x
+                });
+              }
+            }
+            if (opts.length) {
+              const o = opts[Math.floor(Math.random() * opts.length)];
+              bestRot1 = o.rot;
+              bestX1 = o.x;
+            }
+          } else {
+            let best1 = -Infinity;
+            for (let rot = 0; rot < 4; rot++) {
+              for (let x = -1; x < COLS + 1; x++) {
+                const sc = scoreP1(p1.type, rot, x);
+                if (sc > best1) {
+                  best1 = sc;
+                  bestRot1 = rot;
+                  bestX1 = x;
+                }
+              }
+            }
+          }
+          if (p1.rot !== bestRot1) {
+            const nr = (p1.rot + 1) % 4;
+            if (isValid2P(getCells(p1.type, nr, p1.x, p1.y), board, boundary, 1)) p1 = {
+              ...p1,
+              rot: nr
+            };
+          } else if (p1.x < bestX1) {
+            if (isValid2P(getCells(p1.type, p1.rot, p1.x + 1, p1.y), board, boundary, 1)) p1 = {
+              ...p1,
+              x: p1.x + 1
+            };
+          } else if (p1.x > bestX1) {
+            if (isValid2P(getCells(p1.type, p1.rot, p1.x - 1, p1.y), board, boundary, 1)) p1 = {
+              ...p1,
+              x: p1.x - 1
+            };
+          }
+        }
+
+        // P2 AI block: only active when the user picked P1 on the start
+        // screen (SOLO only). Skipped when the user is P2 or in ONLINE mode;
+        // P2 is then driven by applyP2 / network events.
+        if (!s.online && s.playerSide === 1 && aiTick % aiCfg.aiPeriod === 0) {
+          const getLandingY2 = (type, rot, x) => {
+            for (let y = 0; y <= boundary + 4; y++) {
+              if (!isValid2P(getCells(type, rot, x, y), board, boundary, 2)) continue;
+              if (!isValid2P(getCells(type, rot, x, y + 1), board, boundary, 2)) return y;
+            }
+            return -1;
+          };
+          const SCORE_MIN_2 = 0,
+            SCORE_MAX_2 = boundary - 1;
+          const scoreP2 = (type, rot, x) => {
+            const ly = getLandingY2(type, rot, x);
+            if (ly < 0) return -Infinity;
+            const sim = board.map(row => [...row]);
+            for (const [c, r] of getCells(type, rot, x, ly)) {
+              if (r >= 0 && r < ROWS_2P && c >= 0 && c < COLS) sim[r][c] = CELL_P2;
+            }
+            const [simAfter, cleared] = clearP2_2P(sim, boundary);
+            let score = cleared * aiCfg.linePts;
+
+            // Near-complete row bonus
+            for (let r = SCORE_MIN_2; r <= SCORE_MAX_2; r++) {
+              const filled = simAfter[r].filter(v => v !== CELL_EMPTY).length;
+              if (filled >= 8 && filled < COLS) score += (filled - 7) * 20;
+            }
+
+            // Holes: P2 falls DOWN from the ceiling (row 0), so a hole is an
+            // empty cell with a filled cell ABOVE it -- a falling piece cannot
+            // reach below a covered cell. Scan from the ceiling down: once a
+            // filled cell is seen, any empty below it is a hole.
+            let holes = 0;
+            for (let c = 0; c < COLS; c++) {
+              let seen = false;
+              for (let r = SCORE_MIN_2; r <= SCORE_MAX_2; r++) {
+                if (simAfter[r][c] !== CELL_EMPTY) seen = true;else if (seen) holes++;
+              }
+            }
+            score -= holes * aiCfg.holePenalty;
+
+            // Column heights (from ceiling downward). colH[c] = filled rows from
+            // the ceiling (row 0) downward within P2 territory.
+            const colH = Array(COLS).fill(0);
+            for (let c = 0; c < COLS; c++) {
+              for (let r = SCORE_MAX_2; r >= SCORE_MIN_2; r--) {
+                if (simAfter[r][c] !== CELL_EMPTY) {
+                  colH[c] = r + 1; // height counted from ceiling (row 0)
+                  break;
+                }
+              }
+            }
+            // Bumpiness, max-column-height (spike) penalty, and coverage
+            // (distinct columns used) reward -- spread wide and flat.
+            let bumpiness = 0,
+              maxH = 0,
+              coverage = 0;
+            for (let c = 0; c < COLS; c++) {
+              if (colH[c] > 0) {
+                coverage++;
+                if (colH[c] > maxH) maxH = colH[c];
+              }
+              if (c > 0) bumpiness += Math.abs(colH[c] - colH[c - 1]);
+            }
+            score -= bumpiness * aiCfg.bumpPenalty;
+            score -= maxH * aiCfg.maxHPenalty;
+            score += coverage * aiCfg.coverageBonus;
+            return score;
+          };
+          let bestRot2 = p2.rot,
+            bestX2 = p2.x;
+          if (Math.random() < aiCfg.randomRatio) {
+            const opts = [];
+            for (let rot = 0; rot < 4; rot++) {
+              for (let x = 0; x < COLS; x++) {
+                if (isValid2P(getCells(p2.type, rot, x, p2.y), board, boundary, 2)) opts.push({
+                  rot,
+                  x
+                });
+              }
+            }
+            if (opts.length) {
+              const o = opts[Math.floor(Math.random() * opts.length)];
+              bestRot2 = o.rot;
+              bestX2 = o.x;
+            }
+          } else {
+            let best2 = -Infinity;
+            for (let rot = 0; rot < 4; rot++) {
+              for (let x = -1; x < COLS + 1; x++) {
+                const sc = scoreP2(p2.type, rot, x);
+                if (sc > best2) {
+                  best2 = sc;
+                  bestRot2 = rot;
+                  bestX2 = x;
+                }
+              }
+            }
+          }
+          if (p2.rot !== bestRot2) {
+            const nr = (p2.rot + 1) % 4;
+            if (isValid2P(getCells(p2.type, nr, p2.x, p2.y), board, boundary, 2)) p2 = {
+              ...p2,
+              rot: nr
+            };
+          } else if (p2.x < bestX2) {
+            if (isValid2P(getCells(p2.type, p2.rot, p2.x + 1, p2.y), board, boundary, 2)) p2 = {
+              ...p2,
+              x: p2.x + 1
+            };
+          } else if (p2.x > bestX2) {
+            if (isValid2P(getCells(p2.type, p2.rot, p2.x - 1, p2.y), board, boundary, 2)) p2 = {
+              ...p2,
+              x: p2.x - 1
+            };
+          }
+        }
+
+        // P1 physics with lock delay. Skipped when P1 is the REMOTE player
+        // (online): the remote piece is positioned by network events instead.
+        // If the piece can move up, it does, and the lock-pending timer
+        // clears (the piece is no longer stuck). If it can't move, the
+        // timer starts; the piece doesn't lock until LOCK_DELAY_MS has
+        // elapsed. Successful human input during this window resets the
+        // timer (handled inside applyP1), up to MAX_LOCK_RESETS.
+        if (runP1) {
+          if (isValid2P(getCells(p1.type, p1.rot, p1.x, p1.y - 1), board, boundary, 1)) {
+            p1 = {
+              ...p1,
+              y: p1.y - 1,
+              lockPendingTs: null,
+              lockResets: 0
+            };
+          } else {
+            const nowMs = Date.now();
+            if (p1.lockPendingTs == null) {
+              // Start the timer this tick. Piece stays put, no lock yet.
+              p1 = {
+                ...p1,
+                lockPendingTs: nowMs
+              };
+            } else if (nowMs - p1.lockPendingTs >= LOCK_DELAY_MS) {
+              // Grace period elapsed -- commit the lock.
+              board = lockPiece2P(board, getCells(p1.type, p1.rot, p1.x, p1.y), CELL_P1);
+              // Snapshot the full rows in P1 territory BEFORE the clear
+              // mutates the board, for the line-clear flash overlay.
+              for (let r = boundary; r < ROWS_2P; r++) {
+                if (board[r].every(v => v !== CELL_EMPTY)) clearedRowsThisTick.push(r);
+              }
+              const [b1, c1] = clearP1_2P(board, boundary);
+              n1 = c1;
+              board = b1;
+              lockedThisTick = true;
+              p1 = {
+                type: p1Next,
+                rot: 0,
+                x: spawnX(p1Next),
+                y: p1SpawnY2P(p1Next),
+                lockPendingTs: null,
+                lockResets: 0
+              };
+              // Shift the 2-deep NEXT queue: p1NextNext becomes the new
+              // next-to-spawn, and a fresh piece enters the queue.
+              p1Next = p1NextNext;
+              p1NextNext = nextPiece(1);
+              if (!isValid2P(getCells(p1.type, p1.rot, p1.x, p1.y), board, boundary, 1)) {
+                // P1 top-out. In online, local player is P1 -> enter grace resolve
+                // (send go, freeze local physics; DRAW if opponent also tops out).
+                if (s.online) return {
+                  ...s,
+                  board,
+                  p1,
+                  p1Next,
+                  p1NextNext,
+                  p2,
+                  p2Next,
+                  p2NextNext,
+                  iDied: true,
+                  resolveAt: s.resolveAt || Date.now(),
+                  goStamp: (s.goStamp || 0) + 1
+                };
+                return {
+                  ...s,
+                  board,
+                  p1,
+                  p1Next,
+                  p1NextNext,
+                  p2,
+                  p2Next,
+                  p2NextNext,
+                  phase: "over",
+                  winner: 2
+                };
+              }
+            }
+            // else: still within grace -- piece stays put for this tick.
+          }
+        }
+
+        // P2 physics (mirror of P1, falling DOWN toward boundary).
+        if (runP2) {
+          if (isValid2P(getCells(p2.type, p2.rot, p2.x, p2.y + 1), board, boundary, 2)) {
+            p2 = {
+              ...p2,
+              y: p2.y + 1,
+              lockPendingTs: null,
+              lockResets: 0
+            };
+          } else {
+            const nowMs = Date.now();
+            if (p2.lockPendingTs == null) {
+              p2 = {
+                ...p2,
+                lockPendingTs: nowMs
+              };
+            } else if (nowMs - p2.lockPendingTs >= LOCK_DELAY_MS) {
+              board = lockPiece2P(board, getCells(p2.type, p2.rot, p2.x, p2.y), CELL_P2);
+              for (let r = 0; r < boundary; r++) {
+                if (board[r].every(v => v !== CELL_EMPTY)) clearedRowsThisTick.push(r);
+              }
+              const [b2, c2] = clearP2_2P(board, boundary);
+              n2 = c2;
+              board = b2;
+              lockedThisTick = true;
+              p2 = {
+                type: p2Next,
+                rot: 0,
+                x: spawnX(p2Next),
+                y: 0,
+                lockPendingTs: null,
+                lockResets: 0
+              };
+              // Shift the 2-deep P2 NEXT queue.
+              p2Next = p2NextNext;
+              p2NextNext = nextPiece(2);
+              if (!isValid2P(getCells(p2.type, p2.rot, p2.x, p2.y), board, boundary, 2)) {
+                // P2 top-out. In online, local player is P2 -> enter grace resolve
+                // (send go, freeze local physics; DRAW if opponent also tops out).
+                if (s.online) return {
+                  ...s,
+                  board,
+                  p1,
+                  p1Next,
+                  p1NextNext,
+                  p2,
+                  p2Next,
+                  p2NextNext,
+                  iDied: true,
+                  resolveAt: s.resolveAt || Date.now(),
+                  goStamp: (s.goStamp || 0) + 1
+                };
+                return {
+                  ...s,
+                  board,
+                  p1,
+                  p1Next,
+                  p1NextNext,
+                  p2,
+                  p2Next,
+                  p2NextNext,
+                  phase: "over",
+                  winner: 1
+                };
+              }
+            }
+          }
+        }
+
+        // Territory shift: 1:1 mapping. Each row cleared on a side moves the
+        // boundary 1 row toward the opponent. Stack-follow + eviction + the
+        // +N/-N indicator all live in shiftBoundary2P (shared with the online
+        // network handler so REMOTE line-clears use the identical math).
+        const sh = shiftBoundary2P({
+          board,
+          boundary,
+          p1,
+          p1Next,
+          p1NextNext,
+          p2,
+          p2Next,
+          p2NextNext,
+          lastGain: s.lastGain
+        }, n1, n2);
+
+        // In ONLINE mode, when the LOCAL player locks a piece, bump lockStamp
+        // and record the line count + post-shift board side. A dedicated
+        // effect (see below) watches lockStamp and broadcasts the "lk" message
+        // (territory snapshot + line-clear count + freshly-spawned piece).
+        const localLocked = s.online && lockedThisTick;
+        return {
+          ...s,
+          board: sh.board,
+          aiTick,
+          p1: sh.p1,
+          p1Next: sh.p1Next,
+          p1NextNext: sh.p1NextNext,
+          p2: sh.p2,
+          p2Next: sh.p2Next,
+          p2NextNext: sh.p2NextNext,
+          phase: sh.phase,
+          p1Lines: p1Lines + n1,
+          p2Lines: p2Lines + n2,
+          boundary: sh.boundary,
+          winner: sh.winner,
+          lastGain: sh.lastGain,
+          clearAnim: clearedRowsThisTick.length > 0 ? {
+            rows: clearedRowsThisTick,
+            ts: Date.now()
+          } : s.clearAnim,
+          lockStamp: localLocked ? (s.lockStamp || 0) + 1 : s.lockStamp,
+          lockLines: localLocked ? s.playerSide === 1 ? n1 : n2 : s.lockLines,
+          lockBoard: localLocked ? board : s.lockBoard
+        };
+      });
+    }, TEST_SPEED ? 110 : state.online ? ONLINE_TICK_MS : AI_LEVEL_CONFIG[state.aiLevel]?.tickMs || TICK_MS_DEFAULT);
+    return () => clearInterval(id);
+  }, [state.aiLevel, state.online]);
+
+  // ── Online networking: broadcast local events ─────────────────────────
+  // netSend: JSON-encode + push over the live socket (no-op if not open).
+  const netSend = React.useCallback(obj => {
+    const ws = wsRef.current;
+    if (ws && ws.readyState === 1) {
+      try {
+        ws.send(JSON.stringify(obj));
+      } catch (_) {}
+    }
+  }, []);
+
+  // Broadcast the LOCAL player's active piece whenever it moves (gravity OR
+  // input). The opponent's phone renders this directly as the remote piece.
+  // Keyed on the local piece so every x/rot/y/type change emits one "mv".
+  const localPiece = state.playerSide === 2 ? state.p2 : state.p1;
+  React.useEffect(() => {
+    if (!state.online || state.phase !== "playing") return;
+    netSend({
+      k: "mv",
+      side: state.playerSide,
+      type: localPiece.type,
+      x: localPiece.x,
+      rot: localPiece.rot,
+      y: localPiece.y
+    });
+  }, [state.online, state.phase, localPiece.type, localPiece.x, localPiece.rot, localPiece.y]);
+
+  // Broadcast a lock snapshot: pre-shift (post-clear) board + line count +
+  // the freshly-spawned local piece and its NEXT queue. The opponent merges
+  // this into their board, applies the boundary shift, and adopts the piece.
+  React.useEffect(() => {
+    if (!state.online || !state.lockStamp || !state.lockBoard) return;
+    const isP1 = state.playerSide === 1;
+    netSend({
+      k: "lk",
+      side: state.playerSide,
+      board: state.lockBoard,
+      lines: state.lockLines,
+      piece: isP1 ? state.p1 : state.p2,
+      next: isP1 ? state.p1Next : state.p2Next,
+      nextNext: isP1 ? state.p1NextNext : state.p2NextNext
+    });
+  }, [state.lockStamp]);
+
+  // Broadcast game-over (local top-out). Opponent receives "go".
+  React.useEffect(() => {
+    if (!state.online || !state.goStamp) return;
+    netSend({
+      k: "go"
+    });
+  }, [state.goStamp]);
+
+  // Online game-over resolver. Once either player has topped out (iDied or
+  // oppDied), wait GAMEOVER_GRACE_MS for the other side. Both dead -> DRAW;
+  // only I died -> LOSE; only opponent died -> WIN. Both top out on the same
+  // tick under symmetric play, so the grace window lets a true tie register.
+  React.useEffect(() => {
+    if (!state.online || state.phase !== "playing" || state.resolveAt == null) return;
+    const finalize = () => setState(s => {
+      if (!s.online || s.phase !== "playing") return s;
+      if (s.iDied && s.oppDied) return {
+        ...s,
+        phase: "over",
+        netResult: "draw"
+      };
+      if (s.iDied) return {
+        ...s,
+        phase: "over",
+        netResult: "lose",
+        winner: s.playerSide === 1 ? 2 : 1
+      };
+      return {
+        ...s,
+        phase: "over",
+        netResult: "win",
+        winner: s.playerSide
+      };
+    });
+    // Both already dead -> resolve immediately (draw). Otherwise wait out grace.
+    if (state.iDied && state.oppDied) {
+      finalize();
+      return;
+    }
+    const ms = Math.max(0, GAMEOVER_GRACE_MS - (Date.now() - state.resolveAt));
+    const t = setTimeout(finalize, ms);
+    return () => clearTimeout(t);
+  }, [state.online, state.phase, state.iDied, state.oppDied, state.resolveAt]);
+
+  // applyP1: human-input dispatcher for the P1 piece. Used by both the
+  // touch-gesture handler (iOS) and the keyboard handler (laptop testing).
+  // Each action mutates only p1.{x,rot,y} after isValid2P passes; if the
+  // game is not in the playing state, the dispatcher is a no-op.
+  //   tap   -> rotate CW
+  //   left  -> p1.x - 1
+  //   right -> p1.x + 1
+  //   up    -> hard drop UP (buoyancy boost: slide to highest valid y)
+  // NOTE: a "down" / move-backward action is intentionally NOT supported.
+  // P1 floats UP toward the boundary; moving down would push the piece
+  // away from its goal and felt confusing. Pieces only go up, sideways,
+  // or rotate -- never backward.
+  const applyP1 = React.useCallback(action => {
+    if (TEST_PROBE && driftActs[action] != null) {
+      driftActs[action]++;
+      writeDriftProbe(driftLastSnap);
+    }
+    setState(s => {
+      if (s.phase !== "playing" || s.paused || s.summary) return s;
+      const {
+        p1,
+        board,
+        boundary
+      } = s;
+      // Lock-delay reset: if the piece is currently in the lock-pending
+      // window AND we haven't blown the reset cap, a successful input
+      // resets the timer so the player can slide along the edge.
+      const lockReset = piece => {
+        if (piece.lockPendingTs == null) return {};
+        if ((piece.lockResets || 0) >= MAX_LOCK_RESETS) return {};
+        return {
+          lockPendingTs: Date.now(),
+          lockResets: (piece.lockResets || 0) + 1
+        };
+      };
+      if (action === "tap") {
+        const nr = (p1.rot + 1) % 4;
+        // Wall kick: try the ROT_KICKS offsets (horizontal first, then
+        // vertical/diagonal) until one lands valid. The vertical kicks let a
+        // 4-tall I-piece rotate near the floor/boundary where a centered
+        // rotation would clip out of bounds. First-valid wins.
+        for (const [dx, dy] of ROT_KICKS) {
+          if (isValid2P(getCells(p1.type, nr, p1.x + dx, p1.y + dy), board, boundary, 1)) {
+            haptic.light();
+            return {
+              ...s,
+              p1: {
+                ...p1,
+                rot: nr,
+                x: p1.x + dx,
+                y: p1.y + dy,
+                ...lockReset(p1)
+              }
+            };
+          }
+        }
+      } else if (action === "left") {
+        if (isValid2P(getCells(p1.type, p1.rot, p1.x - 1, p1.y), board, boundary, 1)) {
+          haptic.light();
+          return {
+            ...s,
+            p1: {
+              ...p1,
+              x: p1.x - 1,
+              ...lockReset(p1)
+            }
+          };
+        }
+      } else if (action === "right") {
+        if (isValid2P(getCells(p1.type, p1.rot, p1.x + 1, p1.y), board, boundary, 1)) {
+          haptic.light();
+          return {
+            ...s,
+            p1: {
+              ...p1,
+              x: p1.x + 1,
+              ...lockReset(p1)
+            }
+          };
+        }
+      } else if (action === "up") {
+        // Hard drop UP: keep moving until invalid. P1 floats UP so smallest
+        // valid y is the lock position. Tick physics will lock on next
+        // frame. Hard drop bypasses lock-delay extension -- the timer is
+        // set to a past instant so the next tick locks immediately.
+        let y = p1.y;
+        while (isValid2P(getCells(p1.type, p1.rot, p1.x, y - 1), board, boundary, 1)) {
+          y--;
+        }
+        if (y !== p1.y) {
+          // Fire pieceLock sound + haptic immediately -- don't wait for the
+          // next tick (up to TICK_MS ms delay). hardDropFiredRef prevents
+          // the tick-based useEffect from double-firing the same event.
+          haptic.pieceLock();
+          sfx.pieceLock();
+          hardDropFiredRef.current = true;
+          return {
+            ...s,
+            p1: {
+              ...p1,
+              y,
+              lockPendingTs: Date.now() - LOCK_DELAY_MS,
+              lockResets: MAX_LOCK_RESETS
+            }
+          };
+        }
+      } else if (action === "soft") {
+        // Soft drop for P1: one row UP (y-1), with natural travel toward boundary.
+        // Refreshes the lock-delay timer like any other successful input.
+        if (isValid2P(getCells(p1.type, p1.rot, p1.x, p1.y - 1), board, boundary, 1)) {
+          haptic.light();
+          return {
+            ...s,
+            p1: {
+              ...p1,
+              y: p1.y - 1,
+              ...lockReset(p1)
+            }
+          };
+        }
+      }
+      return s;
+    });
+  }, []);
+
+  // applyP2: mirror of applyP1 for the P2 piece (falls DOWN). The
+  // "boost-toward-boundary" gesture for P2 is DOWN; the unsupported
+  // "backward" gesture is UP.
+  const applyP2 = React.useCallback(action => {
+    if (TEST_PROBE && driftActs[action] != null) {
+      driftActs[action]++;
+      writeDriftProbe(driftLastSnap);
+    }
+    setState(s => {
+      if (s.phase !== "playing" || s.paused || s.summary) return s;
+      const {
+        p2,
+        board,
+        boundary
+      } = s;
+      const lockReset = piece => {
+        if (piece.lockPendingTs == null) return {};
+        if ((piece.lockResets || 0) >= MAX_LOCK_RESETS) return {};
+        return {
+          lockPendingTs: Date.now(),
+          lockResets: (piece.lockResets || 0) + 1
+        };
+      };
+      if (action === "tap") {
+        const nr = (p2.rot + 1) % 4;
+        // Wall kick (mirror of P1): ROT_KICKS, horizontal first then
+        // vertical/diagonal so a 4-tall I-piece rotates near the ceiling/boundary.
+        for (const [dx, dy] of ROT_KICKS) {
+          if (isValid2P(getCells(p2.type, nr, p2.x + dx, p2.y + dy), board, boundary, 2)) {
+            haptic.light();
+            return {
+              ...s,
+              p2: {
+                ...p2,
+                rot: nr,
+                x: p2.x + dx,
+                y: p2.y + dy,
+                ...lockReset(p2)
+              }
+            };
+          }
+        }
+      } else if (action === "left") {
+        if (isValid2P(getCells(p2.type, p2.rot, p2.x - 1, p2.y), board, boundary, 2)) {
+          haptic.light();
+          return {
+            ...s,
+            p2: {
+              ...p2,
+              x: p2.x - 1,
+              ...lockReset(p2)
+            }
+          };
+        }
+      } else if (action === "right") {
+        if (isValid2P(getCells(p2.type, p2.rot, p2.x + 1, p2.y), board, boundary, 2)) {
+          haptic.light();
+          return {
+            ...s,
+            p2: {
+              ...p2,
+              x: p2.x + 1,
+              ...lockReset(p2)
+            }
+          };
+        }
+      } else if (action === "down") {
+        // Hard drop DOWN: same pattern as P1's hard drop UP. Bypass
+        // lock-delay extension by setting the timer to a past instant.
+        let y = p2.y;
+        while (isValid2P(getCells(p2.type, p2.rot, p2.x, y + 1), board, boundary, 2)) {
+          y++;
+        }
+        if (y !== p2.y) {
+          // Mirror of P1 hard drop: immediate sound + haptic.
+          haptic.pieceLock();
+          sfx.pieceLock();
+          hardDropFiredRef.current = true;
+          return {
+            ...s,
+            p2: {
+              ...p2,
+              y,
+              lockPendingTs: Date.now() - LOCK_DELAY_MS,
+              lockResets: MAX_LOCK_RESETS
+            }
+          };
+        }
+      } else if (action === "soft") {
+        // Soft drop for P2: one row DOWN (y+1), with natural travel toward boundary.
+        // Refreshes the lock-delay timer like any other successful input.
+        if (isValid2P(getCells(p2.type, p2.rot, p2.x, p2.y + 1), board, boundary, 2)) {
+          haptic.light();
+          return {
+            ...s,
+            p2: {
+              ...p2,
+              y: p2.y + 1,
+              ...lockReset(p2)
+            }
+          };
+        }
+      }
+      return s;
+    });
+  }, []);
+
+  // playerSideRef mirrors state.playerSide for closure-free access inside
+  // the keyboard and touch-gesture event handlers (which run outside the
+  // render cycle and would otherwise read a stale closure).
+  const playerSideRef = React.useRef(state.playerSide);
+  playerSideRef.current = state.playerSide;
+
+  // Keyboard: "0" reset, "p"/"P" pause, arrows + space drive whichever
+  // side the user picked on the start screen. Vertical arrows fire the
+  // hard drop toward the boundary; the opposite arrow is a no-op.
+  // Touch hard drop fires on lift after DROP_PX vertical travel.
+  //   ArrowLeft / ArrowRight -- horizontal move
+  //   ArrowUp                -- P1 hard drop (all the way up) / P2 no-op
+  //   ArrowDown              -- P2 hard drop (all the way down) / P1 no-op
+  //   Space                  -- rotate
+  React.useEffect(() => {
+    const onKey = e => {
+      if (e.key === "0") setState(makeInitState2P());else if (e.key === "p" || e.key === "P") {
+        setState(s => ({
+          ...s,
+          paused: !s.paused
+        }));
+        return;
+      }
+      const side = playerSideRef.current;
+      const apply = side === 2 ? applyP2 : applyP1;
+      if (e.key === "ArrowLeft") apply("left");else if (e.key === "ArrowRight") apply("right");else if (e.key === "ArrowUp") {
+        if (side !== 2) apply("up");
+      } else if (e.key === "ArrowDown") {
+        if (side === 2) apply("down");
+      } else if (e.key === " ") apply("tap");
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [applyP1, applyP2]);
+
+  // Touch gestures: tap rotates (< STEP_PX=30px movement), swipe moves.
+  // TAP_PX matches STEP_PX so there is no dead zone between the two.
+  // Non-passive touchstart/touchmove + preventDefault() bypasses WKWebView
+  // UIKit gesture recognizer competition for near-zero dispatch latency.
+  const playRef = React.useRef(null);
+  const gestureRef = React.useRef(null);
+  React.useEffect(() => {
+    const el = gestureRef.current;
+    if (!el) return;
+    // Continuous gesture tracking. Horizontal moves fire DURING the touch
+    // (every STEP_PX pixels of drag) so the piece tracks the finger live.
+    // Vertical hard drop fires ONCE on lift (touchend) only when total
+    // vertical travel exceeds DROP_PX deadzone -- small accidental movements
+    // are ignored. Tap rotates on release if the finger barely moved.
+    // Direction: P1 swipe-up fires "up"; P2 swipe-down fires "down".
+    // Against-gravity swipes are intentionally no-ops.
+    const STEP_PX = 30; // ratchet: each 30px of horizontal drag = one cell
+    const TAP_PX = 44; // movement under this on both axes = tap (rotate).
+    // Raised to 44 to match DROP_PX: closes the 30-43px
+    // dead zone where WKWebView touch jitter caused neither
+    // tap (adx/ady >= old 30px) nor step/drop to fire.
+    const DROP_PX = 44; // min vertical travel before hard drop fires on lift
+    const FIRST_STEP_PX = 44; // first horizontal cell-move needs >= this (= TAP_PX)
+    // so a quick tap that drifts a few px is never stolen
+    // as a slide; it stays a tap (rotate) on lift.
+    const LOCK_PX = 10; // min travel before axis is committed
+    const AXIS_RATIO = 2; // ady >= AXIS_RATIO * adx -> commit to vertical
+    // axisLock: null (undecided), "h" (horizontal only), "v" (vertical only).
+    // Set once per gesture when travel first exceeds LOCK_PX; reset on new touch.
+    // "v" suppresses all horizontal steps (pure drop gesture).
+    // "h" suppresses the drop on lift (pure move gesture).
+    let startX = 0,
+      startY = 0;
+    let lastDx = 0;
+    let moved = false;
+    let axisLock = null;
+    const onStart = e => {
+      // preventDefault BEFORE any early return: non-passive listeners must
+      // always call (or explicitly skip) preventDefault or WKWebView may
+      // throw when the handler exits without it on a non-passive contract.
+      e.preventDefault();
+      if (e.touches.length !== 1) return;
+      startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
+      lastDx = 0;
+      moved = false;
+      axisLock = null;
+    };
+    const onMove = e => {
+      e.preventDefault();
+      if (e.touches.length !== 1) return;
+      const dx = e.touches[0].clientX - startX;
+      const dy = e.touches[0].clientY - startY;
+      const adx = Math.abs(dx),
+        ady = Math.abs(dy);
+      const side = playerSideRef.current;
+      const apply = side === 2 ? applyP2 : applyP1;
+      // Commit to an axis once travel is enough to read intent.
+      if (axisLock === null && (adx > LOCK_PX || ady > LOCK_PX)) {
+        axisLock = ady >= AXIS_RATIO * adx ? "v" : "h";
+      }
+      // Horizontal steps only when not locked to vertical. The FIRST cell-move
+      // must cross FIRST_STEP_PX (= TAP_PX) so a quick tap that drifts a little
+      // is never stolen as a slide -- it stays a tap (rotate) on lift. Once the
+      // gesture clearly commits to moving, ratchet one cell every STEP_PX.
+      if (axisLock !== "v") {
+        if (!moved) {
+          if (dx >= FIRST_STEP_PX) {
+            apply("right");
+            lastDx = FIRST_STEP_PX;
+            moved = true;
+          } else if (dx <= -FIRST_STEP_PX) {
+            apply("left");
+            lastDx = -FIRST_STEP_PX;
+            moved = true;
+          }
+        } else {
+          while (dx - lastDx >= STEP_PX) {
+            apply("right");
+            lastDx += STEP_PX;
+          }
+          while (dx - lastDx <= -STEP_PX) {
+            apply("left");
+            lastDx -= STEP_PX;
+          }
+        }
+      }
+    };
+    const onEnd = e => {
+      if (e.changedTouches.length !== 1) return;
+      const dx = e.changedTouches[0].clientX - startX;
+      const dy = e.changedTouches[0].clientY - startY;
+      const adx = Math.abs(dx),
+        ady = Math.abs(dy);
+      const side = playerSideRef.current;
+      const apply = side === 2 ? applyP2 : applyP1;
+      // Fast-path tap: if touchmove never locked an axis (no movement > LOCK_PX
+      // on either axis) and no step fired, the user definitely intended a tap.
+      // This fires even when changedTouches reports jitter up to TAP_PX on lift.
+      if (axisLock === null && !moved) {
+        apply("tap");
+        return;
+      }
+      // Standard tap: axis was committed (slight diagonal) but total movement
+      // stayed under TAP_PX=44 on both axes -- still a tap, not a slide/drop.
+      if (!moved && adx < TAP_PX && ady < TAP_PX) {
+        apply("tap");
+        return;
+      }
+      // Hard drop: only when axis is vertical or still undecided.
+      // Horizontal-locked gestures never trigger a drop.
+      if (axisLock !== "h") {
+        if (side === 2) {
+          if (dy >= DROP_PX) apply("down");
+        } else {
+          if (dy <= -DROP_PX) apply("up");
+        }
+      }
+    };
+    // Attach to a transparent full-height gesture surface that spans from
+    // x=0 to x=SIDEBAR_X (the entire left portion of the screen) so the
+    // player can swipe/tap anywhere outside the right sidebar. Sidebar
+    // chrome -- pause / info / gear / NEXT -- sits at x>=349, well past
+    // SIDEBAR_X=320, so its taps never reach this surface.
+    // passive:false + preventDefault() in onStart/onMove tells WKWebView's
+    // UIKit gesture pipeline to yield immediately to JS, eliminating the
+    // ~100ms hold while native recognizers resolve. touchend stays passive
+    // (no scroll to prevent on lift).
+    el.addEventListener("touchstart", onStart, {
+      passive: false
+    });
+    el.addEventListener("touchmove", onMove, {
+      passive: false
+    });
+    el.addEventListener("touchend", onEnd, {
+      passive: true
+    });
+    return () => {
+      el.removeEventListener("touchstart", onStart);
+      el.removeEventListener("touchmove", onMove);
+      el.removeEventListener("touchend", onEnd);
+    };
+    // state.phase is in the dep array so the effect RE-RUNS after the
+    // user taps a side button on the start screen. Without it, playRef
+    // is null at first mount (start screen is rendered, not the game)
+    // so the effect returns early and never re-attaches once the play
+    // area finally renders. Adding phase forces a clean re-attach on
+    // every phase transition (start -> playing, playing -> over).
+  }, [applyP1, applyP2, state.phase]);
+
+  // Demo countdown
+  React.useEffect(() => {
+    const id = setInterval(() => {
+      setState(s => {
+        // No demo countdown in online matches -- they end on a real game over.
+        if (s.online || s.paused || s.summary || s.phase !== "playing") return s;
+        const next = s.demoLeft - 1;
+        if (next <= 0) {
+          const winning = s.p1Lines > s.p2Lines ? 1 : s.p2Lines > s.p1Lines ? 2 : 0;
+          return {
+            ...s,
+            demoLeft: 0,
+            summary: {
+              p1Lines: s.p1Lines,
+              p2Lines: s.p2Lines,
+              boundary: s.boundary,
+              winning
+            }
+          };
+        }
+        return {
+          ...s,
+          demoLeft: next
+        };
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Expire the "+N" gain indicator after GAIN_FADE_MS. Polls every 100ms
+  // so the indicator clears even when paused (the bracket is a transient
+  // UI marker, not gameplay state). Setting opacity via inline style on
+  // the render lets CSS transition the fade smoothly to zero.
+  React.useEffect(() => {
+    const id = setInterval(() => {
+      setState(s => {
+        if (!s.lastGain) return s;
+        if (Date.now() - s.lastGain.ts >= GAIN_FADE_MS) return {
+          ...s,
+          lastGain: null
+        };
+        return s;
+      });
+    }, 100);
+    return () => clearInterval(id);
+  }, []);
+
+  // Expire the line-clear flash after CLEAR_FLASH_MS. Single setTimeout
+  // scheduled per clearAnim (rather than a polling interval) since the
+  // flash window is short and we want the cleanup to be precisely timed.
+  React.useEffect(() => {
+    if (!state.clearAnim) return;
+    const ts = state.clearAnim.ts;
+    const id = setTimeout(() => {
+      setState(s => s.clearAnim && s.clearAnim.ts === ts ? {
+        ...s,
+        clearAnim: null
+      } : s);
+    }, CLEAR_FLASH_MS);
+    return () => clearTimeout(id);
+  }, [state.clearAnim]);
+
+  // Haptic feedback via the `haptic` helper (module-level). Refs compare
+  // current and previous values so each event fires exactly once per
+  // transition. Helper fails silently when navigator.vibrate is missing
+  // (iOS Safari) and will be swapped for @capacitor/haptics in v3.
+  //   piece lock           = p1.type changed   ->  medium  (60ms)
+  //   row clear            = p1Lines+p2Lines+  ->  heavy   (100ms)
+  //   territory shift      = boundary changed  ->  heavy   (100ms)
+  //   game over            = phase -> "over"   ->  pattern (200/100/200)
+  // Move/rotate light (30ms) haptics fire inside applyP1/applyP2 so each
+  // successful input -- keyboard or touch -- gets a tap.
+  // When multiple events land in the same tick, the last call cancels the
+  // previous one and only its pattern fires -- "most important event wins"
+  // (game-over > shift > clear > lock).
+  const prevP1TypeRef = React.useRef(state.p1.type);
+  const prevP2TypeRef = React.useRef(state.p2.type);
+  const prevLinesRef = React.useRef(state.p1Lines + state.p2Lines);
+  const prevBoundaryRef = React.useRef(state.boundary);
+  const prevPhaseRef = React.useRef(state.phase);
+  // Set to true when a hard drop fires sound+haptic immediately.
+  // Prevents the tick-based useEffect from double-firing the same pieceLock
+  // sound when the piece actually commits on the next tick.
+  const hardDropFiredRef = React.useRef(false);
+  React.useEffect(() => {
+    // Piece lock: fires only when the HUMAN player's active piece type
+    // changes (i.e. a new piece spawned). AI side is intentionally excluded.
+    const humanTypeChanged = state.playerSide === 2 ? state.p2.type !== prevP2TypeRef.current : state.p1.type !== prevP1TypeRef.current;
+    // Line clear: any lines cleared this tick (either side counts).
+    // linesThisTick carries the count so sfx can pick single vs multi.
+    // Computed before pieceLock so the lock sound can be suppressed on
+    // clear frames (new piece always spawns same tick as a clear, which
+    // would fire both sounds simultaneously).
+    const totalLines = state.p1Lines + state.p2Lines;
+    const linesThisTick = totalLines - prevLinesRef.current;
+    if (linesThisTick > 0) {
+      haptic.lineClear(linesThisTick);
+      sfx.lineClear(linesThisTick);
+    }
+    if (humanTypeChanged && state.phase === "playing" && linesThisTick === 0) {
+      // Skip if hard drop already fired the sound immediately (suppresses
+      // the up-to-one-tick duplicate caused by the tick-loop delay).
+      if (!hardDropFiredRef.current) {
+        haptic.pieceLock();
+        sfx.pieceLock();
+      }
+    }
+    // Always reset the flag when a new piece spawns, even if a line cleared
+    // the same tick (in that case linesThisTick > 0 skips the block above,
+    // but the flag still needs to clear for the next normal lock).
+    if (humanTypeChanged) {
+      hardDropFiredRef.current = false;
+    }
+    prevP1TypeRef.current = state.p1.type;
+    prevP2TypeRef.current = state.p2.type;
+    prevLinesRef.current = totalLines;
+
+    // Boundary shift: gain vs loss relative to the human player's side.
+    // boundary decreasing = P1 gaining territory
+    // boundary increasing = P2 gaining territory
+    if (state.boundary !== prevBoundaryRef.current) {
+      const moved = state.boundary - prevBoundaryRef.current;
+      const p1Gained = moved < 0;
+      const humanGained = state.playerSide === 1 && p1Gained || state.playerSide === 2 && !p1Gained;
+      if (humanGained) {
+        haptic.boundaryGain();
+        sfx.boundaryGain();
+      } else {
+        haptic.boundaryLoss();
+        sfx.boundaryLoss();
+      }
+    }
+    prevBoundaryRef.current = state.boundary;
+    if (state.phase === "over" && prevPhaseRef.current !== "over") {
+      haptic.gameOver();
+      sfx.gameOver();
+    }
+    prevPhaseRef.current = state.phase;
+  });
+
+  // TEST PROBE flush: runs after every render so the a11y bridge always
+  // reflects current state. Snapshot is also stashed in driftLastSnap so
+  // applyP1/applyP2 can re-flush counters immediately on a blocked move.
+  React.useEffect(() => {
+    if (!TEST_PROBE) return;
+    const snap = {
+      phase: state.phase,
+      playerSide: state.playerSide,
+      p1x: state.p1.x,
+      p1rot: state.p1.rot,
+      p2x: state.p2.x,
+      p2rot: state.p2.rot,
+      p1type: state.p1.type,
+      p2type: state.p2.type,
+      p1n: state.p1Next,
+      p2n: state.p2Next,
+      p1c: state.board.reduce((a, row) => a + row.filter(v => v === CELL_P1).length, 0),
+      p2c: state.board.reduce((a, row) => a + row.filter(v => v === CELL_P2).length, 0),
+      boundary: state.boundary,
+      p1Lines: state.p1Lines,
+      p2Lines: state.p2Lines,
+      showSettings: showSettings,
+      level: settings.level,
+      paused: state.paused,
+      sfxOn: settings.soundFX,
+      hapOn: settings.haptics,
+      vol: settings.volume
+    };
+    driftLastSnap = snap;
+    writeDriftProbe(snap);
+  });
+  const {
+    board,
+    p1,
+    p2,
+    p1Next,
+    p1NextNext,
+    p2Next,
+    p2NextNext,
+    p1Lines,
+    p2Lines,
+    phase,
+    boundary,
+    winner,
+    paused,
+    summary,
+    lastGain,
+    clearAnim,
+    playerSide,
+    aiLevel
+  } = state;
+
+  // NEXT queue routing: show whichever side the human is playing. P2's
+  // queue while the user is P1, or P1's queue if anyone is observing
+  // the start-screen flicker before a side is picked (defaults to P1).
+  // For P1: next-to-spawn in BOTTOM slot (closer to P1's bottom territory)
+  // For P2: next-to-spawn in TOP slot (closer to P2's top territory)
+  const nextTop = playerSide === 2 ? p2Next : p1NextNext;
+  const nextBottom = playerSide === 2 ? p2NextNext : p1Next;
+
+  // Side selector: tapping a start-screen button transitions phase
+  // "start" to "playing" and stores which side the user picked.
+  // Currently both buttons start the game with the player controlling
+  // P1 (the only side wired to gestures/keys today); playerSide is
+  // remembered so future logic can swap which side AI controls.
+  // selectSide starts the game and saves the side preference to settings.
+  const selectSide = side => e => {
+    if (e && e.stopPropagation) e.stopPropagation();
+    updateSetting("direction", side);
+    sfx.preload(); // no-op if already attempted; preload() calls diagnose() internally
+    sfx._unlock(); // play silence at vol=0 to unlock iOS WebKit audio for the session
+    if (settings.soundFX) {
+      sfx.bgmPlay(settings.volume / 5);
+    }
+    console.log("[diag] selectSide", side, "| haptics:", settings.haptics, "| intensity:", settings.hapticIntensity, "| soundFX:", settings.soundFX, "| volume:", settings.volume);
+    // Fire immediate test haptic so we know the bridge works at game start.
+    const H = window.Capacitor?.Plugins?.Haptics;
+    if (H) {
+      try {
+        H.impact({
+          style: "HEAVY"
+        });
+        console.log("[diag] test impact OK");
+      } catch (e) {
+        console.error("[diag] test impact FAILED:", e);
+      }
+    }
+    navTo(() => setState(s => ({
+      ...s,
+      phase: "playing",
+      playerSide: side,
+      aiLevel: settings.level
+    })));
+  };
+
+  // Close and discard the WebSocket, reset online state back to idle.
+  const disconnectRoom = () => {
+    if (wsRef.current) {
+      wsRef.current.onclose = null;
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+    onlineRoleRef.current = null;
+    clearNetPieces();
+    setState(s => ({
+      ...s,
+      online: false,
+      onlineStatus: "idle",
+      onlineRole: null,
+      opponentLeft: false,
+      netResult: null
+    }));
+  };
+
+  // Build a fresh ONLINE game state from a shared seed + assigned role.
+  // Seeds the deterministic piece PRNG FIRST so both phones generate the
+  // identical opening board, then layers the online fields on top.
+  const buildFreshOnline = (seed, role) => {
+    seedNetPieces(seed);
+    const fresh = makeInitState2P();
+    return {
+      ...fresh,
+      phase: "playing",
+      online: true,
+      onlineRole: role,
+      playerSide: role === "p1" ? 1 : 2,
+      onlineStatus: "ready",
+      aiLevel: settings.level
+    };
+  };
+
+  // Connect to a PartyKit room. First to join = p1, second = p2.
+  // Server sends: {type:"role",...} then {type:"ready",seed} when full.
+  // In-match gameplay messages: mv (piece moved), lk (lock + snapshot),
+  // go (game over), rematch (server-minted new seed).
+  const connectToRoom = code => {
+    if (wsRef.current) {
+      wsRef.current.onclose = null;
+      wsRef.current.close();
+    }
+    const url = "wss://" + PARTYKIT_HOST + "/parties/main/" + code.toUpperCase();
+    const ws = new WebSocket(url);
+    wsRef.current = ws;
+    navTo(() => setState(s => ({
+      ...s,
+      onlineStatus: "waiting",
+      phase: "online"
+    })), "slide");
+    ws.onmessage = e => {
+      const msg = JSON.parse(e.data);
+      if (msg.type === "role") {
+        onlineRoleRef.current = msg.role;
+        setState(s => ({
+          ...s,
+          onlineRole: msg.role
+        }));
+      } else if (msg.type === "ready") {
+        sfx.preload();
+        sfx._unlock();
+        if (settings.soundFX) sfx.bgmPlay(settings.volume / 5);
+        setState(() => buildFreshOnline(msg.seed, onlineRoleRef.current));
+      } else if (msg.type === "rematch") {
+        // Server minted a new shared seed: both phones reset identically.
+        if (settings.soundFX) sfx.bgmPlay(settings.volume / 5);
+        setState(() => buildFreshOnline(msg.seed, onlineRoleRef.current));
+      } else if (msg.k === "mv") {
+        // Opponent's piece moved -- render it directly on our board.
+        setState(s => {
+          if (!s.online || s.phase !== "playing") return s;
+          const piece = {
+            type: msg.type,
+            x: msg.x,
+            rot: msg.rot,
+            y: msg.y,
+            lockPendingTs: null,
+            lockResets: 0
+          };
+          return msg.side === 1 ? {
+            ...s,
+            p1: piece
+          } : {
+            ...s,
+            p2: piece
+          };
+        });
+      } else if (msg.k === "lk") {
+        // Opponent locked: merge their territory snapshot, apply the boundary
+        // shift from their line-clears, and adopt their new piece + queue.
+        setState(s => {
+          if (!s.online) return s;
+          const remote = msg.side;
+          const remoteColor = remote === 1 ? CELL_P1 : CELL_P2;
+          const myColor = remote === 1 ? CELL_P2 : CELL_P1;
+          const merged = s.board.map((row, r) => row.map((v, c) => {
+            if (v === myColor) return v; // keep my own cells
+            return msg.board[r][c] === remoteColor ? remoteColor : CELL_EMPTY; // remote from snapshot
+          }));
+          const n1 = remote === 1 ? msg.lines : 0;
+          const n2 = remote === 2 ? msg.lines : 0;
+          const sh = shiftBoundary2P({
+            board: merged,
+            boundary: s.boundary,
+            p1: s.p1,
+            p1Next: s.p1Next,
+            p1NextNext: s.p1NextNext,
+            p2: s.p2,
+            p2Next: s.p2Next,
+            p2NextNext: s.p2NextNext,
+            lastGain: s.lastGain
+          }, n1, n2);
+          const adopted = {
+            type: msg.piece.type,
+            x: msg.piece.x,
+            rot: msg.piece.rot,
+            y: msg.piece.y,
+            lockPendingTs: null,
+            lockResets: 0
+          };
+          const ovr = remote === 1 ? {
+            p1: adopted,
+            p1Next: msg.next,
+            p1NextNext: msg.nextNext
+          } : {
+            p2: adopted,
+            p2Next: msg.next,
+            p2NextNext: msg.nextNext
+          };
+          return {
+            ...s,
+            board: sh.board,
+            boundary: sh.boundary,
+            p1: sh.p1,
+            p1Next: sh.p1Next,
+            p1NextNext: sh.p1NextNext,
+            p2: sh.p2,
+            p2Next: sh.p2Next,
+            p2NextNext: sh.p2NextNext,
+            ...ovr,
+            winner: sh.winner,
+            phase: sh.phase,
+            lastGain: sh.lastGain,
+            p1Lines: s.p1Lines + n1,
+            p2Lines: s.p2Lines + n2,
+            netResult: sh.phase === "over" ? sh.winner === s.playerSide ? "win" : "lose" : s.netResult
+          };
+        });
+      } else if (msg.k === "go") {
+        // Opponent topped out.
+        setState(s => {
+          if (!s.online) return s;
+          // Provisional-loss upgrade: if we already finalized as LOSE (our
+          // grace timer fired before the opponent's "go" packet arrived) but
+          // the opponent ALSO topped out, it was a simultaneous death -> DRAW.
+          // A true winner never tops out, so it never sends a late "go" -- this
+          // can only ever upgrade a genuine double-top-out, never a real loss.
+          if (s.phase === "over" && s.netResult === "lose") {
+            return {
+              ...s,
+              oppDied: true,
+              netResult: "draw"
+            };
+          }
+          // Still playing: record the opponent's death and let the grace-window
+          // resolver decide WIN vs DRAW. We keep playing during the window so a
+          // near-simultaneous local top-out resolves to DRAW.
+          if (s.phase === "playing") {
+            return {
+              ...s,
+              oppDied: true,
+              resolveAt: s.resolveAt || Date.now()
+            };
+          }
+          return s;
+        });
+      } else if (msg.type === "opponent_left") {
+        // Mark opponent-left during an active match OR on the game-over screen
+        // (so the disconnect overlay covers REMATCH -- prevents rematching into
+        // a ghost game when the opponent quit to MENU).
+        setState(s => s.phase === "playing" || s.phase === "over" ? {
+          ...s,
+          opponentLeft: true
+        } : s);
+      } else if (msg.type === "error") {
+        disconnectRoom();
+      }
+    };
+    ws.onclose = () => {
+      // If we're still waiting or playing when the socket closes unexpectedly,
+      // treat it as the opponent leaving.
+      setState(s => {
+        if (s.phase === "online") return {
+          ...s,
+          phase: "start",
+          onlineStatus: "idle"
+        };
+        if (s.phase === "playing") return {
+          ...s,
+          opponentLeft: true
+        };
+        return s;
+      });
+      wsRef.current = null;
+    };
+  };
+
+  // Online = "Enter Code" screen -- join with a 4-letter code.
+  // Design: Figma 269:7678 / 269:9127 / 269:9328
+  if (phase === "online") {
+    const isWaiting = state.onlineStatus === "waiting";
+    const letters = joinCode.padEnd(4, " ").split(""); // always 4 slots
+    const driftGrid = {
+      position: "absolute",
+      inset: 0,
+      pointerEvents: "none",
+      backgroundImage: "linear-gradient(rgba(49,50,51,0.3) 1px,transparent 1px)," + "linear-gradient(90deg,rgba(49,50,51,0.3) 1px,transparent 1px)",
+      backgroundSize: "20px 20px"
+    };
+    return /*#__PURE__*/React.createElement("div", {
+      style: {
+        width: FRAME_W,
+        height: GAME_2P_H,
+        background: "#212223",
+        position: "relative",
+        overflow: "hidden",
+        fontFamily: "'Inter', sans-serif",
+        userSelect: "none",
+        WebkitUserSelect: "none",
+        color: "#fff",
+        ...slideAnim
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: driftGrid
+    }), /*#__PURE__*/React.createElement(BgVignette, null), /*#__PURE__*/React.createElement("div", {
+      onPointerDown: () => {
+        disconnectRoom();
+        setJoinCode("");
+        setStartTab("2players");
+        navTo(() => {
+          setStartKey(0);
+          setState(s => ({
+            ...s,
+            phase: "start"
+          }));
+        }, "slide");
+      },
+      onTouchStart: e => e.stopPropagation(),
+      style: {
+        position: "absolute",
+        left: 29,
+        top: 82,
+        fontSize: 12,
+        fontWeight: 800,
+        letterSpacing: "6px",
+        color: "#fff",
+        textTransform: "uppercase",
+        opacity: 0.3,
+        cursor: "pointer"
+      }
+    }, "←", "Back"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "absolute",
+        left: 0,
+        right: 0,
+        top: 294,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 16
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: 8,
+        alignItems: "center",
+        justifyContent: "center"
+      }
+    }, letters.map((ch, i) => /*#__PURE__*/React.createElement("div", {
+      key: i,
+      style: {
+        width: 80,
+        height: 97,
+        borderBottom: "1px solid #616263",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        overflow: "hidden"
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 80,
+        fontWeight: 100,
+        letterSpacing: "40px",
+        color: "#fff",
+        textTransform: "uppercase",
+        lineHeight: 1,
+        display: "block",
+        width: "100%",
+        textAlign: "center"
+      }
+    }, ch.trim())))), /*#__PURE__*/React.createElement("input", {
+      type: "text",
+      maxLength: 4,
+      autoCapitalize: "characters",
+      value: joinCode,
+      onChange: ev => setJoinCode(ev.target.value.toUpperCase().replace(/[^A-Z]/g, "")),
+      onTouchStart: e => e.stopPropagation(),
+      style: {
+        position: "absolute",
+        opacity: 0,
+        width: 1,
+        height: 1,
+        top: 0,
+        left: 0,
+        pointerEvents: "none"
+      },
+      id: "join-code-input"
+    }), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 10,
+        letterSpacing: "5px",
+        fontWeight: 400,
+        opacity: 0.5,
+        textTransform: "uppercase",
+        color: "#fff"
+      }
+    }, "Join with Code")), /*#__PURE__*/React.createElement("div", {
+      onPointerDown: () => {
+        document.getElementById("join-code-input") && document.getElementById("join-code-input").focus();
+      },
+      onTouchStart: e => {
+        e.stopPropagation();
+        document.getElementById("join-code-input") && document.getElementById("join-code-input").focus();
+      },
+      style: {
+        position: "absolute",
+        left: 0,
+        right: 0,
+        top: 200,
+        height: 220,
+        cursor: "text"
+      }
+    }), joinCode.length === 4 && /*#__PURE__*/React.createElement("div", {
+      onPointerDown: () => connectToRoom(joinCode),
+      onTouchStart: e => e.stopPropagation(),
+      style: {
+        position: "absolute",
+        left: 0,
+        right: 0,
+        top: 435,
+        display: "flex",
+        justifyContent: "center",
+        fontSize: 12,
+        fontWeight: 800,
+        letterSpacing: "6px",
+        color: "#fff",
+        textTransform: "uppercase",
+        cursor: "pointer"
+      }
+    }, "Connect"), isWaiting && /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "absolute",
+        left: 0,
+        right: 0,
+        top: 522,
+        display: "flex",
+        justifyContent: "center",
+        fontSize: 10,
+        letterSpacing: "3px",
+        fontWeight: 400,
+        color: "rgba(255,255,255,0.5)",
+        textTransform: "uppercase"
+      }
+    }, "Waiting for opponent..."));
+  }
+
+  // Start screen render -- short-circuits the rest of the layout.
+  // Level selector moved to Settings (gear icon). P1/P2 buttons still
+  // start the game immediately. Settings overlay shared via showSettings state.
+  if (phase === "start") {
+    // Shared grid background style
+    const driftGrid = {
+      position: "absolute",
+      inset: 0,
+      pointerEvents: "none",
+      backgroundImage: "linear-gradient(rgba(49,50,51,0.3) 1px,transparent 1px)," + "linear-gradient(90deg,rgba(49,50,51,0.3) 1px,transparent 1px)",
+      backgroundSize: "20px 20px"
+    };
+
+    // Mode tab toggle row (SINGLE | 2 PLAYERS)
+    const modeRow = /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: 16,
+        alignItems: "center",
+        justifyContent: "center",
+        color: "#fff",
+        textTransform: "uppercase"
+      }
+    }, [0, 1].map(i => /*#__PURE__*/React.createElement("span", {
+      key: "dl" + i,
+      style: {
+        fontSize: 12,
+        letterSpacing: "2.4px",
+        opacity: 0.2
+      }
+    }, "-")), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 16,
+        letterSpacing: "3.2px",
+        opacity: 0.2
+      }
+    }, "|"), /*#__PURE__*/React.createElement("span", {
+      onPointerDown: () => setStartTab("single"),
+      onTouchStart: e => e.stopPropagation(),
+      style: {
+        fontSize: 12,
+        letterSpacing: "6px",
+        fontWeight: startTab === "single" ? 600 : 400,
+        opacity: startTab === "single" ? 1 : 0.3,
+        cursor: "pointer",
+        padding: "17px 8px"
+      }
+    }, "Single"), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 16,
+        letterSpacing: "3.2px",
+        opacity: 0.2
+      }
+    }, "|"), /*#__PURE__*/React.createElement("span", {
+      onPointerDown: () => setStartTab("2players"),
+      onTouchStart: e => e.stopPropagation(),
+      style: {
+        fontSize: 12,
+        letterSpacing: "6px",
+        fontWeight: startTab === "2players" ? 800 : 400,
+        opacity: startTab === "2players" ? 1 : 0.3,
+        cursor: "pointer",
+        padding: "17px 8px",
+        whiteSpace: "nowrap"
+      }
+    }, "2 Players"), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 16,
+        letterSpacing: "3.2px",
+        opacity: 0.2
+      }
+    }, "|"), [0, 1].map(i => /*#__PURE__*/React.createElement("span", {
+      key: "dr" + i,
+      style: {
+        fontSize: 12,
+        letterSpacing: "2.4px",
+        opacity: 0.2
+      }
+    }, "-")));
+    if (startTab === "2players") {
+      // 2 PLAYERS TAB - show room code + join link
+      // Design: Figma 269:7487
+      const myCode = generatedCodeRef.current;
+      const di = n => ({
+        animation: `${startKey > 0 ? "slideInLeft 0.15s" : "driftIn 0.18s"} ease ${n * 45}ms both`
+      });
+      return /*#__PURE__*/React.createElement("div", {
+        style: {
+          width: FRAME_W,
+          height: GAME_2P_H,
+          background: "#212223",
+          position: "relative",
+          overflow: "hidden",
+          fontFamily: "'Inter', sans-serif",
+          userSelect: "none",
+          WebkitUserSelect: "none",
+          color: "#fff",
+          ...startAnim
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: driftGrid
+      }), /*#__PURE__*/React.createElement(BgVignette, null), /*#__PURE__*/React.createElement(React.Fragment, {
+        key: `${startTab}-${startKey}`
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          position: "absolute",
+          left: 0,
+          right: 0,
+          top: 391,
+          display: "flex",
+          justifyContent: "center",
+          ...di(0)
+        }
+      }, /*#__PURE__*/React.createElement(RivalLogo, null)), /*#__PURE__*/React.createElement("div", {
+        style: {
+          position: "absolute",
+          left: 0,
+          right: 0,
+          top: 448,
+          display: "flex",
+          justifyContent: "center"
+        }
+      }, modeRow), /*#__PURE__*/React.createElement("div", {
+        style: {
+          position: "absolute",
+          left: 0,
+          right: 0,
+          top: 507,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: 8,
+          ...di(1)
+        }
+      }, /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 40,
+          fontWeight: 300,
+          letterSpacing: "20px",
+          color: "#fff",
+          opacity: 0.5,
+          textTransform: "uppercase"
+        }
+      }, myCode), /*#__PURE__*/React.createElement("div", {
+        style: {
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          opacity: 0.3,
+          fontSize: 10,
+          letterSpacing: "3px",
+          fontWeight: 600,
+          textTransform: "uppercase"
+        }
+      }, /*#__PURE__*/React.createElement("span", null, "Share your code"), /*#__PURE__*/React.createElement("span", null, "with opponent"))), /*#__PURE__*/React.createElement("div", {
+        style: {
+          position: "absolute",
+          left: 0,
+          right: 0,
+          top: 611,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: 24,
+          ...di(2)
+        }
+      }, /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 10,
+          letterSpacing: "5px",
+          fontWeight: 600,
+          opacity: 0.3,
+          textTransform: "uppercase"
+        }
+      }, "or"), /*#__PURE__*/React.createElement("span", {
+        onPointerDown: () => {
+          setJoinCode("");
+          navTo(() => setState(s => ({
+            ...s,
+            phase: "online"
+          })), "slide");
+        },
+        onTouchStart: e => e.stopPropagation(),
+        style: {
+          fontSize: 12,
+          letterSpacing: "3.6px",
+          fontWeight: 400,
+          opacity: 0.5,
+          textTransform: "uppercase",
+          cursor: "pointer"
+        }
+      }, "Join with Code")), /*#__PURE__*/React.createElement("div", {
+        style: {
+          position: "absolute",
+          left: 0,
+          right: 0,
+          bottom: "max(20px,env(safe-area-inset-bottom))",
+          display: "flex",
+          justifyContent: "space-between",
+          padding: "0 24px",
+          fontSize: 10,
+          fontWeight: 500,
+          letterSpacing: 2,
+          color: "rgba(255,255,255,0.2)",
+          pointerEvents: "none"
+        }
+      }, /*#__PURE__*/React.createElement("span", null, APP_VERSION, " \xA0\u2022\xA0 ", APP_COMMIT), /*#__PURE__*/React.createElement("span", null, relTime(APP_BUILD_DATE)))));
+    }
+
+    // SINGLE TAB (default) - Design: Figma 247:5857
+    const di = n => ({
+      animation: `${startKey > 0 ? "slideInLeft 0.15s" : "driftIn 0.18s"} ease ${n * 45}ms both`
+    });
+    return /*#__PURE__*/React.createElement("div", {
+      style: {
+        width: FRAME_W,
+        height: GAME_2P_H,
+        background: "#212223",
+        position: "relative",
+        overflow: "hidden",
+        fontFamily: "'Inter', sans-serif",
+        userSelect: "none",
+        WebkitUserSelect: "none",
+        color: "#fff",
+        ...startAnim
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: driftGrid
+    }), /*#__PURE__*/React.createElement(BgVignette, null), /*#__PURE__*/React.createElement(React.Fragment, {
+      key: `${startTab}-${startKey}`
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "absolute",
+        left: 0,
+        right: 0,
+        top: 391,
+        display: "flex",
+        justifyContent: "center",
+        ...di(0)
+      }
+    }, /*#__PURE__*/React.createElement(RivalLogo, null)), /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "absolute",
+        left: 0,
+        right: 0,
+        top: 448,
+        display: "flex",
+        justifyContent: "center"
+      }
+    }, modeRow), /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "absolute",
+        left: 0,
+        right: 0,
+        top: 514,
+        display: "flex",
+        gap: 24,
+        alignItems: "flex-start",
+        justifyContent: "center",
+        ...di(1)
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      onPointerDown: selectSide(1),
+      onTouchStart: e => e.stopPropagation(),
+      style: {
+        display: "flex",
+        flexDirection: "column",
+        gap: 2,
+        alignItems: "center",
+        justifyContent: "center",
+        width: 64,
+        height: 64,
+        cursor: "pointer"
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 24,
+        letterSpacing: "12px",
+        marginRight: "-12px",
+        opacity: 0.5,
+        fontWeight: 300,
+        color: "#fff"
+      }
+    }, "\u2191"), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 10,
+        letterSpacing: "5px",
+        marginRight: "-5px",
+        opacity: 0.5,
+        fontWeight: 600,
+        color: "#fff",
+        textTransform: "uppercase"
+      }
+    }, "up")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "flex-end",
+        height: 64,
+        paddingBottom: 10
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 10,
+        letterSpacing: "5px",
+        opacity: 0.3,
+        fontWeight: 600,
+        color: "#fff",
+        textTransform: "uppercase"
+      }
+    }, "or")), /*#__PURE__*/React.createElement("div", {
+      onPointerDown: selectSide(2),
+      onTouchStart: e => e.stopPropagation(),
+      style: {
+        display: "flex",
+        flexDirection: "column",
+        gap: 2,
+        alignItems: "center",
+        justifyContent: "center",
+        width: 64,
+        height: 64,
+        cursor: "pointer"
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 24,
+        letterSpacing: "12px",
+        marginRight: "-12px",
+        opacity: 0.5,
+        fontWeight: 300,
+        color: "#fff"
+      }
+    }, "\u2193"), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 10,
+        letterSpacing: "5px",
+        marginRight: "-5px",
+        opacity: 0.5,
+        fontWeight: 600,
+        color: "#fff",
+        textTransform: "uppercase"
+      }
+    }, "Dn"))), /*#__PURE__*/React.createElement("div", {
+      onPointerDown: () => openSettings("game"),
+      onTouchStart: e => e.stopPropagation(),
+      style: {
+        position: "absolute",
+        left: 0,
+        right: 0,
+        top: 618,
+        display: "flex",
+        gap: 8,
+        alignItems: "center",
+        justifyContent: "center",
+        minHeight: 44,
+        cursor: "pointer",
+        ...di(2)
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 10,
+        letterSpacing: "5px",
+        opacity: 0.5,
+        color: "#fff",
+        textTransform: "uppercase"
+      }
+    }, "Difficulty:"), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 10,
+        letterSpacing: "5px",
+        fontWeight: 600,
+        color: "#fff",
+        textTransform: "uppercase"
+      }
+    }, settings.level)), /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "absolute",
+        left: 0,
+        right: 0,
+        top: 754,
+        display: "flex",
+        gap: 24,
+        alignItems: "center",
+        justifyContent: "center",
+        opacity: 0.5
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      onPointerDown: () => openInstructions(),
+      onTouchStart: e => e.stopPropagation(),
+      style: {
+        color: "#fff",
+        opacity: 0.3,
+        cursor: "pointer"
+      }
+    }, /*#__PURE__*/React.createElement(InfoIcon, null)), /*#__PURE__*/React.createElement("div", {
+      onPointerDown: () => openSettings(),
+      onTouchStart: e => e.stopPropagation(),
+      style: {
+        color: "#fff",
+        opacity: 0.3,
+        cursor: "pointer"
+      }
+    }, /*#__PURE__*/React.createElement(GearIcon, null))), /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "absolute",
+        left: 0,
+        right: 0,
+        bottom: "max(20px,env(safe-area-inset-bottom))",
+        display: "flex",
+        justifyContent: "space-between",
+        padding: "0 24px",
+        fontSize: 10,
+        fontWeight: 500,
+        letterSpacing: 2,
+        color: "rgba(255,255,255,0.2)",
+        pointerEvents: "none"
+      }
+    }, /*#__PURE__*/React.createElement("span", null, APP_VERSION, " \xA0\u2022\xA0 ", APP_COMMIT), /*#__PURE__*/React.createElement("span", null, relTime(APP_BUILD_DATE)))), showSettings && /*#__PURE__*/React.createElement(SettingsScreen, {
+      settings: settings,
+      initialSection: settingsSection,
+      exiting: settingsExiting,
+      onUpdate: (key, val) => {
+        updateSetting(key, val);
+        if (key === "level") setState(s => s.online ? s : {
+          ...s,
+          aiLevel: val
+        });
+      },
+      onClose: closeSettings
+    }), showInstructions && /*#__PURE__*/React.createElement(InstructionsScreen, {
+      exiting: instructionsExiting,
+      onClose: closeInstructions
+    }), TEST_PROBE && /*#__PURE__*/React.createElement("div", {
+      ref: el => {
+        driftProbeEl = el;
+      },
+      "aria-live": "polite",
+      style: {
+        position: "absolute",
+        left: 0,
+        top: 0,
+        width: 1,
+        height: 1,
+        overflow: "hidden",
+        opacity: 0.01,
+        color: "transparent",
+        pointerEvents: "none",
+        fontSize: 1
+      }
+    }, "DRIFT;"));
+  }
+
+  // Human player always gets bright locked color; AI gets dark, regardless of side.
+  const humanCell = playerSide === 2 ? CELL_P2 : CELL_P1;
+  const aiCell = playerSide === 2 ? CELL_P1 : CELL_P2;
+  const cellColor = {
+    [CELL_EMPTY]: null,
+    [humanCell]: P1_LOCKED_COLOR,
+    [aiCell]: P2_LOCKED_COLOR
+  };
+  const grid = board.map(row => row.map(v => cellColor[v]));
+
+  // Ghost piece: a faint preview of where the HUMAN player's active piece
+  // will land if dropped from its current position. Standard Tetris ghost
+  // behavior. Only shown for the human-controlled side; the AI's piece has
+  // no ghost. Painted BEFORE the active piece so the active piece visually
+  // overwrites any overlap (which only happens when the piece is already
+  // at its landing position, i.e. about to lock).
+  let laneData = null;
+  if (playerSide === 1 || playerSide === 2) {
+    const piece = playerSide === 1 ? p1 : p2;
+    const ghostStep = playerSide === 1 ? -1 : +1; // P1 floats UP, P2 falls DOWN
+    let gy = piece.y;
+    while (isValid2P(getCells(piece.type, piece.rot, piece.x, gy + ghostStep), board, boundary, playerSide)) {
+      gy += ghostStep;
+    }
+    if (gy !== piece.y) {
+      getCells(piece.type, piece.rot, piece.x, gy).forEach(([c, r]) => {
+        if (r >= 0 && r < ROWS_2P && c >= 0 && c < COLS && !grid[r][c]) {
+          grid[r][c] = GHOST_COLOR;
+        }
+      });
+    }
+    const pCells = getCells(piece.type, piece.rot, piece.x, piece.y);
+    const lMinC = Math.min(...pCells.map(([c]) => c));
+    const lMaxC = Math.max(...pCells.map(([c]) => c));
+    const topRow = playerSide === 1 ? boundary : 0;
+    const botRow = playerSide === 1 ? ROWS_2P : boundary;
+    laneData = {
+      minC: lMinC,
+      maxC: lMaxC,
+      topPx: topRow * CELL,
+      hPx: (botRow - topRow) * CELL
+    };
+  }
+
+  // Active pieces -- BOTH players -- render at the same translucent color
+  // (ACTIVE_COLOR = opacity 0.5). The Figma design uses a single base color
+  // and only varies opacity to distinguish locked vs active and per-player.
+  getCells(p1.type, p1.rot, p1.x, p1.y).forEach(([c, r]) => {
+    if (r >= 0 && r < ROWS_2P && c >= 0 && c < COLS) grid[r][c] = ACTIVE_COLOR;
+  });
+  getCells(p2.type, p2.rot, p2.x, p2.y).forEach(([c, r]) => {
+    if (r >= 0 && r < ROWS_2P && c >= 0 && c < COLS) grid[r][c] = ACTIVE_COLOR;
+  });
+
+  // Pause toggle for the on-screen pause button. Stops touch from
+  // propagating so the gesture handler does not also fire (the gesture
+  // handler is attached to the play area; the pause button is in the
+  // sidebar so this is defensive but harmless).
+  const togglePause = e => {
+    if (e && e.stopPropagation) e.stopPropagation();
+    setState(s => ({
+      ...s,
+      paused: !s.paused
+    }));
+  };
+
+  // ── Match / set outcome handlers ──────────────────────────────────────
+  // Increment the winner's tally, then restart the match immediately
+  // in the same side + level config. Phase goes straight to "playing"
+  // so the user never sees the start screen again mid-set.
+  const handleRematch = winnerSide => {
+    setP1Wins(w => w + (winnerSide === 1 ? 1 : 0));
+    setP2Wins(w => w + (winnerSide === 2 ? 1 : 0));
+    if (settings.soundFX) {
+      sfx.bgmPlay(settings.volume / 5);
+    }
+    setState(s => ({
+      ...makeInitState2P(),
+      phase: "playing",
+      playerSide: s.playerSide,
+      aiLevel: s.aiLevel
+    }));
+  };
+
+  // Reset the whole session (wins + match) and go back to start screen.
+  const handleMenu = () => {
+    setP1Wins(0);
+    setP2Wins(0);
+    sfx.bgmStop();
+    navTo(() => {
+      setStartKey(0); // fresh entrance -> driftIn, not the Settings-return slideInLeft
+      setState(s => ({
+        ...makeInitState2P(),
+        playerSide: s.playerSide,
+        aiLevel: s.aiLevel
+      }));
+    });
+  };
+
+  // Set is over -- reset wins to 0-0 and start a fresh set immediately
+  // in the same side + level config (no start screen).
+  const handlePlayAgain = winnerSide => {
+    setP1Wins(0);
+    setP2Wins(0);
+    if (settings.soundFX) {
+      sfx.bgmPlay(settings.volume / 5);
+    }
+    setState(s => ({
+      ...makeInitState2P(),
+      phase: "playing",
+      playerSide: s.playerSide,
+      aiLevel: s.aiLevel
+    }));
+  };
+
+  // ── Stack-height brackets (Figma 128-3004) ───────────────────────────
+  // For each player, find how many rows of their territory currently
+  // contain at least one of their cells. The bracket length equals
+  // (rows-with-cells) * CELL.
+  //   P2 stack: topmost P2 row (minP2) -> boundary-1
+  //   P1 stack: boundary -> bottommost P1 row (maxP1)
+  let _minP2 = ROWS_2P,
+    _maxP1 = -1;
+  for (let r = 0; r < ROWS_2P; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const v = board[r][c];
+      if (v === CELL_P2 && r < _minP2) _minP2 = r;
+      if (v === CELL_P1 && r > _maxP1) _maxP1 = r;
+    }
+  }
+  const p2StackRows = _minP2 < boundary ? boundary - _minP2 : 0;
+  const p1StackRows = _maxP1 >= boundary ? _maxP1 - boundary + 1 : 0;
+  const boundaryY = PLAY_Y + boundary * CELL; // y of the boundary line in frame coords
+  const originY = PLAY_Y + BDY_2P * CELL; // y of the fixed origin (neutral) line, never moves
+
+  // ── Boundary change indicator (one per screen, local-player view) ────
+  // Single indicator from the LOCAL player's perspective. Persistent while
+  // the live boundary differs from the origin (BDY_2P). The vertical line
+  // spans from the origin (dotted) to the live boundary (dashed). The
+  // number reflects the actual row gap. Sign + color depend on whether
+  // the local player is currently AHEAD (+, green #2fff00) or BEHIND
+  // (-, red #ff0000) per Figma 152-1747 / 152-2247.
+  //   Local P1 ahead  -> "+N" green, text below the live line in P1 territory
+  //   Local P1 behind -> "-N" red,   text below the live line in P1 territory
+  //   Local P2 ahead  -> "+N" green, text above the live line in P2 territory
+  //   Local P2 behind -> "-N" red,   text above the live line in P2 territory
+  let bdyView = null;
+  if (boundary !== BDY_2P && (playerSide === 1 || playerSide === 2)) {
+    const gap = BDY_2P - boundary; // + = P1 ahead, - = P2 ahead
+    const gainerSide = gap > 0 ? 1 : 2;
+    const localAhead = gainerSide === playerSide;
+    const sign = localAhead ? "+" : "-";
+    const rows = Math.abs(gap);
+    // Base hex (Figma) so we can apply Figma's per-element opacities
+    // via the CSS opacity property (0.5 on cap + text, 0.15 on stem).
+    const colorHex = localAhead ? GAIN_HEX : LOSS_HEX;
+    // Pre-mixed rgba for the live-dash linear-gradient.
+    const dashRgba = localAhead ? GAIN_DASH_RGBA : LOSS_DASH_RGBA;
+    const bracketTop = Math.min(originY, boundaryY);
+    const bracketH = Math.abs(originY - boundaryY);
+    // Cap sits at the LIVE boundary end of the bracket (where the
+    // dashed line is). For gain (live above origin) that's the top
+    // edge of the bracket; for loss (live below origin) it's the
+    // bottom edge.
+    const capTop = boundaryY;
+    // Text sits at the live boundary, on the LOCAL player's side.
+    // P1 territory is below boundary -> text below live line.
+    // P2 territory is above boundary -> text above live line.
+    const textTop = (originY + boundaryY) / 2 - 5; // midpoint between origin and live line, minus half font-height (10px/2)
+    bdyView = {
+      sign,
+      rows,
+      colorHex,
+      dashRgba,
+      bracketTop,
+      bracketH,
+      capTop,
+      textTop
+    };
+  }
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: FRAME_W,
+      height: GAME_2P_H,
+      background: "#0a0a0a",
+      position: "relative",
+      overflow: "hidden",
+      fontFamily: "monospace",
+      userSelect: "none",
+      WebkitUserSelect: "none",
+      ...gameAnim
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      inset: 0,
+      backgroundImage: `linear-gradient(${GRID_LINE_COLOR} 1px, transparent 1px), ` + `linear-gradient(90deg, ${GRID_LINE_COLOR} 1px, transparent 1px)`,
+      backgroundSize: "20px 20px, 20px 20px",
+      backgroundPosition: "0 0, 1px 0",
+      pointerEvents: "none"
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      inset: 0,
+      background:
+      // Mobile-Safari compensation: source Figma stops are
+      // rgba(17,18,19,0.5); iOS renders those near-black. RGB bumped
+      // ~+115% (HSL lightness +~18%) and center alpha +0.05 so the
+      // dual-vignette reads with depth and texture on iPhone.
+      "radial-gradient(circle 663px at 201px 211px, rgba(36,38,44,0.55), rgba(36,38,44,0)), " + "radial-gradient(circle 496px at 201px 437px, rgba(36,38,44,0.55), rgba(36,38,44,0))",
+      pointerEvents: "none"
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      left: 0,
+      top: 0,
+      width: 322,
+      height: GAME_2P_H,
+      // Mobile-Safari compensation: source alpha 0.3 crushes the play
+      // zone on iPhone; reduced to 0.18 so depth is visible without
+      // killing the gradient texture.
+      background: "rgba(0, 0, 0, 0.18)",
+      pointerEvents: "none"
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      left: DASH_LEFT_X,
+      top: originY,
+      width: DASH_LEFT_W,
+      height: 1,
+      background: ORIGIN_DASH_COLOR,
+      pointerEvents: "none"
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      left: DASH_RIGHT_X,
+      top: originY,
+      width: ORIGIN_RIGHT_W,
+      height: 1,
+      background: ORIGIN_DASH_COLOR,
+      pointerEvents: "none"
+    }
+  }), p2StackRows > 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      left: BRACKET_X,
+      top: boundaryY - p2StackRows * CELL,
+      width: BRACKET_W,
+      height: p2StackRows * CELL,
+      pointerEvents: "none",
+      transition: `top ${BRACKET_EASE}, height ${BRACKET_EASE}`
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      left: 0,
+      top: 0,
+      width: BRACKET_CAP_W,
+      height: 1,
+      background: BRACKET_COLOR
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      left: BRACKET_STEM_X,
+      top: 1,
+      bottom: 0,
+      width: 1,
+      background: BRACKET_COLOR
+    }
+  })), p1StackRows > 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      left: BRACKET_X,
+      top: boundaryY,
+      width: BRACKET_W,
+      height: p1StackRows * CELL,
+      pointerEvents: "none",
+      transition: `top ${BRACKET_EASE}, height ${BRACKET_EASE}`
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      left: BRACKET_STEM_X,
+      top: 0,
+      bottom: 1,
+      width: 1,
+      background: BRACKET_COLOR
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      left: 0,
+      bottom: 0,
+      width: BRACKET_CAP_W,
+      height: 1,
+      background: BRACKET_COLOR
+    }
+  })), bdyView && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      left: DASH_LEFT_X,
+      top: boundaryY,
+      width: DASH_LEFT_W,
+      height: 1,
+      backgroundImage: `linear-gradient(90deg, ${bdyView.dashRgba} 0, ${bdyView.dashRgba} ${DASH_SEG}px, transparent ${DASH_SEG}px, transparent ${DASH_SEG * 2}px)`,
+      backgroundSize: `${DASH_SEG * 2}px 1px`,
+      backgroundRepeat: "repeat-x",
+      pointerEvents: "none",
+      transition: `top ${BRACKET_EASE}`
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      left: DASH_RIGHT_X,
+      top: boundaryY,
+      width: ORIGIN_RIGHT_W,
+      height: 1,
+      backgroundImage: `linear-gradient(90deg, ${bdyView.dashRgba} 0, ${bdyView.dashRgba} ${DASH_SEG}px, transparent ${DASH_SEG}px, transparent ${DASH_SEG * 2}px)`,
+      backgroundSize: `${DASH_SEG * 2}px 1px`,
+      backgroundRepeat: "repeat-x",
+      pointerEvents: "none",
+      transition: `top ${BRACKET_EASE}`
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      left: GAIN_BRACKET_X + BRACKET_STEM_X,
+      top: bdyView.bracketTop,
+      width: 1,
+      height: bdyView.bracketH,
+      background: bdyView.colorHex,
+      opacity: 0.15,
+      pointerEvents: "none",
+      transition: `top ${BRACKET_EASE}, height ${BRACKET_EASE}, background-color 200ms linear`
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      left: GAIN_BRACKET_X,
+      top: bdyView.capTop,
+      width: BRACKET_CAP_W,
+      height: 1,
+      background: bdyView.colorHex,
+      opacity: 0.5,
+      pointerEvents: "none",
+      transition: `top ${BRACKET_EASE}, background-color 200ms linear`
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      left: GAIN_TEXT_X,
+      top: bdyView.textTop,
+      fontFamily: "'Inter', sans-serif",
+      fontWeight: 400,
+      fontSize: 10,
+      lineHeight: "10px",
+      letterSpacing: 2,
+      textTransform: "uppercase",
+      color: bdyView.colorHex,
+      opacity: 0.5,
+      pointerEvents: "none",
+      transition: `top ${BRACKET_EASE}, color 200ms linear`,
+      fontVariantNumeric: "tabular-nums",
+      whiteSpace: "nowrap"
+    }
+  }, bdyView.sign, bdyView.rows)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      left: SIDEBAR_X,
+      top: 0,
+      width: SIDEBAR_W,
+      height: GAME_2P_H,
+      background: "rgba(17, 18, 19, 0.5)",
+      borderLeft: "1px solid rgba(49, 50, 51, 0.5)",
+      pointerEvents: "none"
+    }
+  }), laneData && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      left: PLAY_X + laneData.minC * CELL,
+      top: laneData.topPx,
+      width: 1,
+      height: laneData.hPx,
+      backgroundImage: `repeating-linear-gradient(to bottom, ${LANE_COLOR} 0px, ${LANE_COLOR} 2px, transparent 2px, transparent 4px)`,
+      pointerEvents: "none"
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      left: PLAY_X + (laneData.maxC + 1) * CELL,
+      top: laneData.topPx,
+      width: 1,
+      height: laneData.hPx,
+      backgroundImage: `repeating-linear-gradient(to bottom, ${LANE_COLOR} 0px, ${LANE_COLOR} 2px, transparent 2px, transparent 4px)`,
+      pointerEvents: "none"
+    }
+  })), /*#__PURE__*/React.createElement("div", {
+    ref: playRef,
+    style: {
+      position: "absolute",
+      top: PLAY_Y,
+      left: PLAY_X,
+      width: PLAY_W,
+      height: ROWS_2P * CELL
+    }
+  }, /*#__PURE__*/React.createElement(BoardViewport, {
+    grid: grid,
+    boundary: boundary,
+    startRow: 0,
+    endRow: ROWS_2P,
+    animateBoundary: true,
+    showBoundary: false
+  })), clearAnim && clearAnim.rows.map(r => /*#__PURE__*/React.createElement("div", {
+    key: r,
+    style: {
+      position: "absolute",
+      left: PLAY_X,
+      top: PLAY_Y + r * CELL,
+      width: PLAY_W,
+      height: CELL,
+      background: "rgba(255, 255, 255, 0.7)",
+      pointerEvents: "none"
+    }
+  })), /*#__PURE__*/React.createElement("div", {
+    ref: gestureRef,
+    style: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      width: SIDEBAR_X,
+      height: GAME_2P_H,
+      background: "transparent",
+      touchAction: "none"
+    }
+  }), TEST_PROBE && /*#__PURE__*/React.createElement("div", {
+    ref: el => {
+      driftProbeEl = el;
+    },
+    "aria-live": "polite",
+    style: {
+      position: "absolute",
+      left: 0,
+      top: 0,
+      width: 1,
+      height: 1,
+      overflow: "hidden",
+      opacity: 0.01,
+      color: "transparent",
+      pointerEvents: "none",
+      fontSize: 1
+    }
+  }, "DRIFT;"), /*#__PURE__*/React.createElement("div", {
+    onPointerDown: () => openInstructions(),
+    onTouchStart: e => e.stopPropagation(),
+    style: {
+      position: "absolute",
+      left: ICON_INFO_X,
+      top: `calc(${ICON_INFO_Y}px + env(safe-area-inset-top))`,
+      width: ICON_SIZE,
+      height: ICON_SIZE,
+      color: "#fff",
+      opacity: CHROME_OPACITY,
+      cursor: "pointer"
+    }
+  }, /*#__PURE__*/React.createElement(InfoIcon, null)), /*#__PURE__*/React.createElement("div", {
+    onPointerDown: () => openSettings(),
+    onTouchStart: e => e.stopPropagation(),
+    style: {
+      position: "absolute",
+      left: ICON_GEAR_X,
+      top: `calc(${ICON_GEAR_Y}px + env(safe-area-inset-top))`,
+      width: ICON_SIZE,
+      height: ICON_SIZE,
+      color: "#fff",
+      opacity: CHROME_OPACITY,
+      cursor: "pointer"
+    }
+  }, /*#__PURE__*/React.createElement(GearIcon, null)), /*#__PURE__*/React.createElement("div", {
+    onPointerDown: togglePause,
+    onTouchStart: e => e.stopPropagation(),
+    style: {
+      position: "absolute",
+      left: PAUSE_X + (PAUSE_BAR_W + PAUSE_BAR_GAP + PAUSE_BAR_W) / 2 - 24,
+      top: PAUSE_Y + PAUSE_BAR_H / 2 - 24,
+      width: 48,
+      height: 48,
+      cursor: "pointer"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      left: 24 - (PAUSE_BAR_W + PAUSE_BAR_GAP + PAUSE_BAR_W) / 2,
+      top: 24 - PAUSE_BAR_H / 2,
+      width: PAUSE_BAR_W,
+      height: PAUSE_BAR_H,
+      background: PAUSE_COLOR
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      left: 24 + PAUSE_BAR_GAP / 2,
+      top: 24 - PAUSE_BAR_H / 2,
+      width: PAUSE_BAR_W,
+      height: PAUSE_BAR_H,
+      background: PAUSE_COLOR
+    }
+  })), p1Wins + p2Wins > 0 && phase === "playing" && (() => {
+    const myW = playerSide === 1 ? p1Wins : p2Wins;
+    const oppW = playerSide === 1 ? p2Wins : p1Wins;
+    return /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "absolute",
+        left: NEXT_X,
+        top: `calc(${NEXT_Y - 36}px - max(20px, env(safe-area-inset-bottom)))`,
+        width: NEXT_W,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 4
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontFamily: "'Inter',sans-serif",
+        fontSize: 8,
+        fontWeight: 600,
+        letterSpacing: "2px",
+        textTransform: "uppercase",
+        color: "#fff",
+        opacity: 0.3
+      }
+    }, "Series"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: 6,
+        alignItems: "center"
+      }
+    }, [...Array(WINS_TO_WIN)].map((_, i) => /*#__PURE__*/React.createElement("div", {
+      key: i,
+      style: {
+        width: 6,
+        height: 6,
+        borderRadius: "50%",
+        flexShrink: 0,
+        background: i < myW ? "#339900" : i < myW + oppW ? "#990000" : "transparent",
+        border: i < myW + oppW ? "none" : "1px solid rgba(255,255,255,0.2)"
+      }
+    }))));
+  })(), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      left: NEXT_X,
+      top: `calc(${NEXT_Y}px - max(20px, env(safe-area-inset-bottom)))`,
+      width: NEXT_W,
+      color: "#fff"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: NEXT_W,
+      height: NEXT_LABEL_H,
+      fontFamily: "'Inter', sans-serif",
+      fontWeight: 600,
+      fontSize: 10,
+      letterSpacing: 2,
+      textAlign: "center",
+      textTransform: "uppercase",
+      opacity: CHROME_OPACITY
+    }
+  }, "Next"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      left: 15,
+      top: 28,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      width: 30,
+      height: 20,
+      opacity: 0.5
+    }
+  }, /*#__PURE__*/React.createElement(CompactNext, {
+    type: nextTop
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      left: 15,
+      top: 64,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      width: 30,
+      height: 20,
+      opacity: 0.2
+    }
+  }, /*#__PURE__*/React.createElement(CompactNext, {
+    type: nextBottom
+  }))), state.opponentLeft && (phase === "playing" || phase === "over") && (() => {
+    const dg = {
+      position: "absolute",
+      inset: 0,
+      pointerEvents: "none",
+      backgroundImage: "linear-gradient(rgba(49,50,51,0.3) 1px,transparent 1px)," + "linear-gradient(90deg,rgba(49,50,51,0.3) 1px,transparent 1px)",
+      backgroundSize: "20px 20px"
+    };
+    return /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "absolute",
+        inset: 0,
+        background: "#212223",
+        zIndex: 50,
+        fontFamily: "'Inter',sans-serif",
+        color: "#fff",
+        overflow: "hidden"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: dg
+    }), /*#__PURE__*/React.createElement(BgVignette, null), /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "absolute",
+        left: 0,
+        right: 0,
+        top: 419,
+        display: "flex",
+        justifyContent: "center",
+        fontSize: 16,
+        fontWeight: 500,
+        letterSpacing: "8px",
+        opacity: 0.3,
+        textTransform: "uppercase"
+      }
+    }, "Connection"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "absolute",
+        left: 0,
+        right: 0,
+        top: 448,
+        display: "flex",
+        gap: 16,
+        alignItems: "center",
+        justifyContent: "center",
+        textTransform: "uppercase"
+      }
+    }, [0.1, 0.2, 0.3].map((o, i) => /*#__PURE__*/React.createElement("span", {
+      key: "dl" + i,
+      style: {
+        fontWeight: 400,
+        fontSize: 12,
+        letterSpacing: "2.4px",
+        opacity: o
+      }
+    }, "-")), /*#__PURE__*/React.createElement(ArrowR, {
+      opacity: 0.2
+    }), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 16,
+        fontWeight: 500,
+        letterSpacing: "8px",
+        marginRight: "-8px",
+        opacity: 0.5
+      }
+    }, "Lost"), /*#__PURE__*/React.createElement(ArrowL, {
+      opacity: 0.2
+    }), [0.3, 0.2, 0.1].map((o, i) => /*#__PURE__*/React.createElement("span", {
+      key: "dr" + i,
+      style: {
+        fontWeight: 400,
+        fontSize: 12,
+        letterSpacing: "2.4px",
+        opacity: o
+      }
+    }, "-"))), /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "absolute",
+        left: 0,
+        right: 0,
+        top: 599,
+        display: "flex",
+        justifyContent: "center"
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      onPointerDown: () => {
+        disconnectRoom();
+        navTo(() => {
+          setStartKey(0);
+          setState(s => ({
+            ...makeInitState2P()
+          }));
+        });
+      },
+      onTouchStart: e => e.stopPropagation(),
+      style: {
+        fontSize: 12,
+        fontWeight: 600,
+        letterSpacing: "6px",
+        color: "#fff",
+        textTransform: "uppercase",
+        cursor: "pointer"
+      }
+    }, "Menu")));
+  })(), paused && !summary && phase === "playing" && (() => {
+    const dg = {
+      position: "absolute",
+      inset: 0,
+      pointerEvents: "none",
+      backgroundImage: "linear-gradient(rgba(49,50,51,0.3) 1px,transparent 1px)," + "linear-gradient(90deg,rgba(49,50,51,0.3) 1px,transparent 1px)",
+      backgroundSize: "20px 20px"
+    };
+    return /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "absolute",
+        inset: 0,
+        background: "#212223",
+        zIndex: 40,
+        fontFamily: "'Inter',sans-serif",
+        color: "#fff",
+        overflow: "hidden"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: dg
+    }), /*#__PURE__*/React.createElement(BgVignette, null), /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "absolute",
+        left: 0,
+        right: 0,
+        top: 448,
+        display: "flex",
+        gap: 16,
+        alignItems: "center",
+        justifyContent: "center",
+        textTransform: "uppercase"
+      }
+    }, [0.1, 0.2, 0.3].map((o, i) => /*#__PURE__*/React.createElement("span", {
+      key: "dl" + i,
+      style: {
+        fontFamily: "'Inter',sans-serif",
+        fontWeight: 400,
+        fontSize: 12,
+        letterSpacing: "2.4px",
+        opacity: o
+      }
+    }, "-")), /*#__PURE__*/React.createElement(ArrowR, null), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontFamily: "'Inter',sans-serif",
+        fontSize: 24,
+        fontWeight: 500,
+        letterSpacing: "12px",
+        marginRight: "-12px",
+        opacity: 0.5
+      }
+    }, "Paused"), /*#__PURE__*/React.createElement(ArrowL, null), [0.3, 0.2, 0.1].map((o, i) => /*#__PURE__*/React.createElement("span", {
+      key: "dr" + i,
+      style: {
+        fontFamily: "'Inter',sans-serif",
+        fontWeight: 400,
+        fontSize: 12,
+        letterSpacing: "2.4px",
+        opacity: o
+      }
+    }, "-"))), /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "absolute",
+        left: 0,
+        right: 0,
+        top: 496,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 12
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 12,
+        fontWeight: 600,
+        letterSpacing: "6px",
+        opacity: 0.3,
+        textTransform: "uppercase"
+      }
+    }, "Best of 3"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: 16,
+        alignItems: "center"
+      }
+    }, [...Array(3)].map((_, i) => {
+      const myW = playerSide === 1 ? p1Wins : p2Wins;
+      const oppW = playerSide === 1 ? p2Wins : p1Wins;
+      const bg = i < myW ? "#339900" : i < myW + oppW ? "#990000" : "transparent";
+      const bordered = i >= myW + oppW;
+      return /*#__PURE__*/React.createElement("div", {
+        key: i,
+        style: {
+          width: 8,
+          height: 8,
+          borderRadius: "50%",
+          flexShrink: 0,
+          background: bg,
+          border: bordered ? "1px solid rgba(255,255,255,0.2)" : "none"
+        }
+      });
+    }))), /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "absolute",
+        left: 0,
+        right: 0,
+        top: 599,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 40
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      onPointerDown: () => setState(s => ({
+        ...s,
+        paused: false
+      })),
+      onTouchStart: e => e.stopPropagation(),
+      style: {
+        fontSize: 12,
+        fontWeight: 600,
+        letterSpacing: "6px",
+        color: "#fff",
+        textTransform: "uppercase",
+        cursor: "pointer"
+      }
+    }, "Resume"), /*#__PURE__*/React.createElement("span", {
+      onPointerDown: handleMenu,
+      onTouchStart: e => e.stopPropagation(),
+      style: {
+        fontSize: 12,
+        fontWeight: 400,
+        letterSpacing: "6px",
+        color: "rgba(255,255,255,0.3)",
+        textTransform: "uppercase",
+        cursor: "pointer"
+      }
+    }, state.online ? "Quit" : "Restart")));
+  })(), summary && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      inset: 0,
+      background: "rgba(0,0,0,0.88)",
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      justifyContent: "center"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 24,
+      fontWeight: 700,
+      letterSpacing: 5,
+      color: "#fff",
+      marginBottom: 18
+    }
+  }, "DEMO COMPLETE"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      letterSpacing: 2,
+      color: "rgba(255,255,255,0.55)",
+      marginBottom: 4
+    }
+  }, "P1 ", summary.p1Lines, "  /  P2 ", summary.p2Lines), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      letterSpacing: 2,
+      color: "rgba(255,255,255,0.55)",
+      marginBottom: 4
+    }
+  }, "boundary ", summary.boundary), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      letterSpacing: 2,
+      color: "rgba(255,255,255,0.55)",
+      marginBottom: 24
+    }
+  }, summary.winning === 1 ? "P1 leading" : summary.winning === 2 ? "P2 leading" : "tied"), /*#__PURE__*/React.createElement("div", {
+    onPointerDown: () => setState(s => ({
+      ...makeInitState2P(),
+      aiLevel: s.aiLevel
+    })),
+    style: {
+      padding: "12px 36px",
+      background: "#ff3333",
+      color: "#fff",
+      borderRadius: 6,
+      fontSize: 12,
+      fontWeight: 700,
+      letterSpacing: 3,
+      cursor: "pointer"
+    }
+  }, "REMATCH")), phase === "over" && (() => {
+    const dg = {
+      position: "absolute",
+      inset: 0,
+      pointerEvents: "none",
+      backgroundImage: "linear-gradient(rgba(49,50,51,0.3) 1px,transparent 1px)," + "linear-gradient(90deg,rgba(49,50,51,0.3) 1px,transparent 1px)",
+      backgroundSize: "20px 20px"
+    };
+
+    // Shared result-row renderer: - - - → TEXT ← - - -
+    const ResultRow = ({
+      text,
+      color,
+      arrowOp = 1,
+      textOp = 1,
+      size = 24,
+      tracking = 24
+    }) => /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: 16,
+        alignItems: "center",
+        justifyContent: "center",
+        color: "#fff",
+        textTransform: "uppercase"
+      }
+    }, [0.1, 0.2, 0.3].map((o, i) => /*#__PURE__*/React.createElement("span", {
+      key: "dl" + i,
+      style: {
+        fontWeight: 400,
+        fontSize: 12,
+        letterSpacing: "2.4px",
+        opacity: o
+      }
+    }, "-")), /*#__PURE__*/React.createElement(ArrowR, {
+      opacity: arrowOp
+    }), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontFamily: "'Inter',sans-serif",
+        fontSize: size,
+        fontWeight: 500,
+        letterSpacing: tracking + "px",
+        marginRight: "-" + tracking + "px",
+        color,
+        opacity: textOp
+      }
+    }, text), /*#__PURE__*/React.createElement(ArrowL, {
+      opacity: arrowOp
+    }), [0.3, 0.2, 0.1].map((o, i) => /*#__PURE__*/React.createElement("span", {
+      key: "dr" + i,
+      style: {
+        fontWeight: 400,
+        fontSize: 12,
+        letterSpacing: "2.4px",
+        opacity: o
+      }
+    }, "-")));
+
+    // Shared pips: p1 red dots, p2 green dots, rest empty
+    const Pip = ({
+      color,
+      filled
+    }) => /*#__PURE__*/React.createElement("div", {
+      style: {
+        width: 8,
+        height: 8,
+        borderRadius: "50%",
+        flexShrink: 0,
+        background: filled ? color : "transparent",
+        border: filled ? "none" : "1px solid rgba(255,255,255,0.2)"
+      }
+    });
+    const Pips = ({
+      p1,
+      p2
+    }) => /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: 16,
+        alignItems: "center"
+      }
+    }, [...Array(3)].map((_, i) => {
+      if (i < p1) return /*#__PURE__*/React.createElement(Pip, {
+        key: i,
+        color: "#339900",
+        filled: true
+      });
+      if (i < p1 + p2) return /*#__PURE__*/React.createElement(Pip, {
+        key: i,
+        color: "#990000",
+        filled: true
+      });
+      return /*#__PURE__*/React.createElement(Pip, {
+        key: i,
+        filled: false
+      });
+    }));
+
+    // Shared screen wrapper
+    const Screen = ({
+      gameOverLabel,
+      resultRow,
+      p1,
+      p2,
+      primary,
+      onPrimary,
+      secondary,
+      onSecondary
+    }) => /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "absolute",
+        inset: 0,
+        background: "#212223",
+        zIndex: 40,
+        fontFamily: "'Inter',sans-serif",
+        color: "#fff",
+        overflow: "hidden",
+        animation: "fadeIn 0.35s ease-out both"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: dg
+    }), /*#__PURE__*/React.createElement(BgVignette, null), gameOverLabel && /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "absolute",
+        left: 0,
+        right: 0,
+        top: 419,
+        display: "flex",
+        justifyContent: "center",
+        fontSize: 12,
+        fontWeight: 600,
+        letterSpacing: "6px",
+        opacity: 0.4,
+        textTransform: "uppercase"
+      }
+    }, "Game Over"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "absolute",
+        left: 0,
+        right: 0,
+        top: 448,
+        display: "flex",
+        justifyContent: "center"
+      }
+    }, resultRow), /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "absolute",
+        left: 0,
+        right: 0,
+        top: 496,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 12
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 12,
+        fontWeight: 600,
+        letterSpacing: "6px",
+        opacity: 0.3,
+        textTransform: "uppercase"
+      }
+    }, "Best of 3"), /*#__PURE__*/React.createElement(Pips, {
+      p1: p1,
+      p2: p2
+    })), /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "absolute",
+        left: 0,
+        right: 0,
+        top: 599,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 40
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      onPointerDown: onPrimary,
+      onTouchStart: e => e.stopPropagation(),
+      style: {
+        fontSize: 12,
+        fontWeight: 600,
+        letterSpacing: "6px",
+        color: "#fff",
+        textTransform: "uppercase",
+        cursor: "pointer"
+      }
+    }, primary), secondary && /*#__PURE__*/React.createElement("span", {
+      onPointerDown: onSecondary,
+      onTouchStart: e => e.stopPropagation(),
+      style: {
+        fontSize: 12,
+        fontWeight: 400,
+        letterSpacing: "6px",
+        color: "rgba(255,255,255,0.3)",
+        textTransform: "uppercase",
+        cursor: "pointer"
+      }
+    }, secondary)));
+    if (state.online) {
+      const isDraw = state.netResult === "draw";
+      const won = state.netResult ? state.netResult === "win" : winner === playerSide;
+      const dispP1 = p1Wins + (winner === 1 ? 1 : 0);
+      const dispP2 = p2Wins + (winner === 2 ? 1 : 0);
+      const setOver = dispP1 >= WINS_TO_WIN || dispP2 >= WINS_TO_WIN;
+      const myWinsOnline = playerSide === 1 ? dispP1 : dispP2;
+      const oppWinsOnline = playerSide === 1 ? dispP2 : dispP1;
+      const txt = isDraw ? "Draw" : won ? "Win" : "Lose";
+      const col = isDraw ? "#fff" : won ? "#339900" : "#990000";
+      return /*#__PURE__*/React.createElement(Screen, {
+        gameOverLabel: setOver,
+        resultRow: /*#__PURE__*/React.createElement(ResultRow, {
+          text: txt,
+          color: col
+        }),
+        p1: myWinsOnline,
+        p2: oppWinsOnline,
+        primary: "Rematch",
+        onPrimary: () => {
+          if (!state.opponentLeft) netSend({
+            type: "rematch_request"
+          });
+        },
+        secondary: "Menu",
+        onSecondary: () => {
+          disconnectRoom();
+          setState(s => ({
+            ...makeInitState2P()
+          }));
+        }
+      });
+    }
+
+    // Offline game over
+    const displayP1 = p1Wins + (winner === 1 ? 1 : 0);
+    const displayP2 = p2Wins + (winner === 2 ? 1 : 0);
+    const setOver = displayP1 >= WINS_TO_WIN || displayP2 >= WINS_TO_WIN;
+    // From human player's perspective: winner===playerSide = WIN, else LOSE
+    const humanWon = winner === playerSide;
+    const txt = humanWon ? "Win" : "Lose";
+    const col = humanWon ? "#339900" : "#990000";
+    const myWinsOff = playerSide === 1 ? displayP1 : displayP2;
+    const oppWinsOff = playerSide === 1 ? displayP2 : displayP1;
+    return /*#__PURE__*/React.createElement(Screen, {
+      gameOverLabel: setOver,
+      resultRow: /*#__PURE__*/React.createElement(ResultRow, {
+        text: txt,
+        color: col
+      }),
+      p1: myWinsOff,
+      p2: oppWinsOff,
+      primary: setOver ? "Rematch" : `Play Game ${displayP1 + displayP2 + 1}`,
+      onPrimary: setOver ? () => handlePlayAgain(displayP1 >= WINS_TO_WIN ? 1 : 2) : () => handleRematch(winner),
+      secondary: "Menu",
+      onSecondary: handleMenu
+    });
+  })(), showSettings && /*#__PURE__*/React.createElement(SettingsScreen, {
+    settings: settings,
+    initialSection: settingsSection,
+    exiting: settingsExiting,
+    onUpdate: (key, val) => {
+      updateSetting(key, val);
+      if (key === "level") setState(s => ({
+        ...s,
+        aiLevel: val
+      }));
+    },
+    onClose: closeSettings
+  }), showInstructions && /*#__PURE__*/React.createElement(InstructionsScreen, {
+    exiting: instructionsExiting,
+    onClose: closeInstructions
+  }));
+}
+
+// ============================================================
+// FULLSCREEN WRAPPER
+// Scales TetrisGame2P (402x874 native) to fit the viewport while
+// preserving aspect ratio. Black letterboxing if aspect mismatch.
+// ============================================================
+
+function FullscreenGame() {
+  const [scale, setScale] = useState(1);
+  useEffect(() => {
+    // Scale to fit HEIGHT -- the play area runs from the very top of
+    // the viewport to the very bottom, so every row is on-screen and
+    // playable. On devices wider than the 402:874 frame ratio (most
+    // modern phones are within ~1% of it), this leaves a thin
+    // horizontal letterbox that disappears into the matching #0a0a0a
+    // body bg. Trade-off: vertical play space is always fully visible,
+    // which is the priority for a Tetris-style game.
+    const recalc = () => {
+      const root = document.getElementById("root");
+      const w = root && root.clientWidth || window.innerWidth;
+      const h = root && root.clientHeight || window.innerHeight;
+      // Pick the smaller scale so the FULL frame always fits inside
+      // the viewport; height almost always wins on phones.
+      setScale(Math.min(w / FRAME_W, h / GAME_2P_H));
+    };
+    recalc();
+    window.addEventListener("resize", recalc);
+    window.addEventListener("orientationchange", recalc);
+    return () => {
+      window.removeEventListener("resize", recalc);
+      window.removeEventListener("orientationchange", recalc);
+    };
+  }, []);
+
+  // Block default touch behaviors (scroll, double-tap zoom, pull-to-refresh).
+  useEffect(() => {
+    const prevent = e => {
+      e.preventDefault();
+    };
+    document.addEventListener("touchmove", prevent, {
+      passive: false
+    });
+    document.addEventListener("gesturestart", prevent, {
+      passive: false
+    });
+    return () => {
+      document.removeEventListener("touchmove", prevent);
+      document.removeEventListener("gesturestart", prevent);
+    };
+  }, []);
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      transform: `scale(${scale})`,
+      transformOrigin: "center center",
+      width: FRAME_W,
+      height: GAME_2P_H
+    }
+  }, /*#__PURE__*/React.createElement(TetrisGame2P, null));
+}
+ReactDOM.createRoot(document.getElementById("root")).render( /*#__PURE__*/React.createElement(FullscreenGame, null));
+
+// Tell Capacitor to hide the splash screen as soon as the JS bundle
+// executes. Without this, Capacitor waits for launchShowDuration (1200ms)
+// before auto-hiding. On web this is a no-op.
+try {
+  window.Capacitor?.Plugins?.SplashScreen?.hide();
+} catch (_) {}
