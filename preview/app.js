@@ -3409,8 +3409,7 @@ function TetrisGame2P() {
       style: {
         fontSize: 80,
         fontWeight: 100,
-        letterSpacing: "40px",
-        color: "#fff",
+        color: "rgba(255,255,255,0.3)",
         textTransform: "uppercase",
         lineHeight: 1,
         display: "block",

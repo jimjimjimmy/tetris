@@ -2509,8 +2509,8 @@ function TetrisGame2P() {
                 overflow:"hidden",
               }}>
                 <span style={{
-                  fontSize:80, fontWeight:100, letterSpacing:"40px",
-                  color:"#fff", textTransform:"uppercase",
+                  fontSize:80, fontWeight:100,
+                  color:"rgba(255,255,255,0.3)", textTransform:"uppercase",
                   lineHeight:1, display:"block",
                   width:"100%", textAlign:"center",
                 }}>{ch.trim()}</span>
