@@ -1354,6 +1354,12 @@ function TetrisGame2P() {
   // Session win counts -- persist across rematches, reset on MENU or PLAY AGAIN.
   const [p1Wins, setP1Wins] = React.useState(0);
   const [p2Wins, setP2Wins] = React.useState(0);
+  // Latest wins + winner mirrored into refs so the WebSocket onmessage closure
+  // (captured once at connect time) can read CURRENT values when banking the
+  // online series score on the shared rematch-seed message.
+  const p1WinsRef = React.useRef(0);
+  const p2WinsRef = React.useRef(0);
+  const winnerRef = React.useRef(null);
   // Online: stable generated room code for this session (doesn't change on re-render).
   const generatedCodeRef = React.useRef(makeRoomCode());
   // Online: text the user typed into the "join with code" input.
@@ -2285,6 +2291,8 @@ function TetrisGame2P() {
   });
 
   const { board, p1, p2, p1Next, p1NextNext, p2Next, p2NextNext, p1Lines, p2Lines, phase, boundary, winner, paused, summary, lastGain, clearAnim, playerSide, aiLevel } = state;
+  // Keep the win/winner refs current for the onmessage closure (see refs above).
+  p1WinsRef.current = p1Wins; p2WinsRef.current = p2Wins; winnerRef.current = winner;
 
   // NEXT queue routing: show whichever side the human is playing. P2's
   // queue while the user is P1, or P1's queue if anyone is observing
@@ -2367,9 +2375,22 @@ function TetrisGame2P() {
         sfx.preload();
         sfx._unlock();
         if (settings.soundFX) sfx.bgmPlay(settings.volume / 5);
+        // A new match always starts a fresh best-of-3 (0-0).
+        setP1Wins(0); setP2Wins(0);
         setState(() => buildFreshOnline(msg.seed, onlineRoleRef.current));
       } else if (msg.type === "rematch") {
-        // Server minted a new shared seed: both phones reset identically.
+        // Server minted a new shared seed. Advance the series identically on
+        // BOTH phones: bank the just-finished game's winner (from the mirrored
+        // refs, since this closure was captured at connect time). If banking
+        // that point clinches the set, this seed instead begins a NEW series
+        // (0-0) -- the "Rematch" case; otherwise it's the next game and the
+        // running score carries over -- the "Play Game N" case. Draw => no bank.
+        const w = winnerRef.current;
+        const np1 = p1WinsRef.current + (w === 1 ? 1 : 0);
+        const np2 = p2WinsRef.current + (w === 2 ? 1 : 0);
+        const setWasClinched = np1 >= WINS_TO_WIN || np2 >= WINS_TO_WIN;
+        setP1Wins(setWasClinched ? 0 : np1);
+        setP2Wins(setWasClinched ? 0 : np2);
         if (settings.soundFX) sfx.bgmPlay(settings.volume / 5);
         setState(() => buildFreshOnline(msg.seed, onlineRoleRef.current));
       } else if (msg.k === "mv") {
@@ -3770,7 +3791,7 @@ function TetrisGame2P() {
               gameOverLabel={setOver}
               resultRow={<ResultRow text={txt} color={col}/>}
               p1={myWinsOnline} p2={oppWinsOnline}
-              primary="Rematch"
+              primary={setOver ? "Rematch" : `Play Game ${dispP1+dispP2+1}`}
               onPrimary={()=>{ if(!state.opponentLeft) netSend({type:"rematch_request"}); }}
               secondary="Menu"
               onSecondary={()=>{ disconnectRoom(); setState(s=>({...makeInitState2P()})); }}
