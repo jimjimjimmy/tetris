@@ -4021,7 +4021,7 @@ function FullscreenGame() {
   return (
     <div style={{
       transform: `scale(${scale})`,
-      transformOrigin: "center center",
+      transformOrigin: "top center",
       width: FRAME_W,
       height: GAME_2P_H,
     }}>

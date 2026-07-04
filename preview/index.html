@@ -56,7 +56,11 @@
       height: 100vh;
       height: 100dvh;
       min-height: 100dvh;
-      display: flex; align-items: center; justify-content: center;
+      /* Top-anchored (not centered) vertically: the frame fills the height on
+         phones so this looks identical normally, but if the on-screen keyboard
+         shrinks the viewport, a top-anchored frame keeps its TOP (and the Back
+         button) fixed instead of re-centering upward. Horizontally centered. */
+      display: flex; align-items: flex-start; justify-content: center;
       background: #0a0a0a;
       overflow: hidden;
     }

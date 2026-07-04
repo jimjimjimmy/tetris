@@ -511,6 +511,15 @@ The top line is the truth (that is what is on GitHub). If git ever prints
     zone. viewport-fit=cover meta tag unchanged. FullscreenGame
     recalc still measures root.clientHeight so scale picks up the
     larger dvh automatically on URL-bar show/hide.
+  - Keyboard-stable frame (Back button): the on-screen keyboard must NOT move
+    the frame. TWO guards, keep BOTH: (1) FullscreenGame.recalc early-returns
+    while a text input is focused (`document.activeElement.tagName==="INPUT"`)
+    so the scale doesn't shrink; (2) #root is `align-items: flex-start` and the
+    frame uses `transformOrigin: "top center"` so a shrunk viewport can't
+    re-center the (frozen-scale) frame upward -- its TOP stays pinned. The frame
+    fills height on phones, so top-align looks identical to centered in normal
+    use; it only matters when the keyboard shrinks the viewport. Do NOT revert
+    #root to `align-items: center` or the origin to `center center`.
   - Per-level fall speed (5c16db7): AI_LEVEL_CONFIG now carries tickMs
     per level: 1=600, 2=440, 3=320, 4=220, 5=140. ~1.5x faster per
     level, 4.3x speedup L1->L5. Tick useEffect deps include
