@@ -2012,12 +2012,8 @@ function TetrisGame2P() {
     const onKey = (e) => {
       if (e.key === "0") setState(makeInitState2P());
       else if (e.key === "p" || e.key === "P") {
-        setState(s => {
-          if (s.oppPaused) return s; // opponent holds the pause; can't override
-          const next = !s.paused;
-          if (s.online) netSend({ k: "pause", paused: next });
-          return { ...s, paused: next };
-        });
+        // MVP: pause is solo-only -- no pausing in online 2P.
+        setState(s => s.online ? s : { ...s, paused: !s.paused });
         return;
       }
       const side = playerSideRef.current;
@@ -3461,7 +3457,10 @@ function TetrisGame2P() {
 
       {/* Pause button: two #d9d9d9 bars (Figma 124:2218). The visible icon
           is 12x16; a transparent 48x48 hit box centered on it enlarges the
-          touch target for ergonomic thumb reach. */}
+          touch target for ergonomic thumb reach.
+          MVP: hidden in online 2P -- no pausing there for now (the shared-pause
+          + opponent-paused machinery stays dormant for a later revisit). */}
+      {!state.online && (
       <div
         onPointerDown={togglePause}
         onTouchStart={(e) => e.stopPropagation()}
@@ -3489,6 +3488,7 @@ function TetrisGame2P() {
           background: PAUSE_COLOR,
         }} />
       </div>
+      )}
 
       {/* NEXT block (Figma 124:1463). Label is Inter 600 / 10px / 2px
           letter-spacing / uppercase, opacity 0.3. Newer pieces enter the

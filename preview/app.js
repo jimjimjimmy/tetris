@@ -2707,17 +2707,10 @@ function TetrisGame2P() {
   React.useEffect(() => {
     const onKey = e => {
       if (e.key === "0") setState(makeInitState2P());else if (e.key === "p" || e.key === "P") {
-        setState(s => {
-          if (s.oppPaused) return s; // opponent holds the pause; can't override
-          const next = !s.paused;
-          if (s.online) netSend({
-            k: "pause",
-            paused: next
-          });
-          return {
-            ...s,
-            paused: next
-          };
+        // MVP: pause is solo-only -- no pausing in online 2P.
+        setState(s => s.online ? s : {
+          ...s,
+          paused: !s.paused
         });
         return;
       }
@@ -4578,7 +4571,7 @@ function TetrisGame2P() {
       opacity: CHROME_OPACITY,
       cursor: "pointer"
     }
-  }, /*#__PURE__*/React.createElement(GearIcon, null)), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement(GearIcon, null)), !state.online && /*#__PURE__*/React.createElement("div", {
     onPointerDown: togglePause,
     onTouchStart: e => e.stopPropagation(),
     style: {
