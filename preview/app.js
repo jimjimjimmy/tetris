@@ -3142,7 +3142,7 @@ function TetrisGame2P() {
   // Server sends: {type:"role",...} then {type:"ready",seed} when full.
   // In-match gameplay messages: mv (piece moved), lk (lock + snapshot),
   // go (game over), rematch (server-minted new seed).
-  const connectToRoom = code => {
+  const connectToRoom = (code, opts = {}) => {
     if (wsRef.current) {
       wsRef.current.onclose = null;
       wsRef.current.close();
@@ -3150,11 +3150,21 @@ function TetrisGame2P() {
     const url = "wss://" + PARTYKIT_HOST + "/parties/main/" + code.toUpperCase();
     const ws = new WebSocket(url);
     wsRef.current = ws;
-    navTo(() => setState(s => ({
-      ...s,
-      onlineStatus: "waiting",
-      phase: "online"
-    })), "slide");
+    if (opts.host) {
+      // Host stays on the 2 Players "share your code" screen while connected as
+      // P1 in the background -- no navigation. When the opponent enters the code
+      // and joins as P2, the server fires "ready" and both jump to play.
+      setState(s => ({
+        ...s,
+        onlineStatus: "waiting"
+      }));
+    } else {
+      navTo(() => setState(s => ({
+        ...s,
+        onlineStatus: "waiting",
+        phase: "online"
+      })), "slide");
+    }
     ws.onmessage = e => {
       const msg = JSON.parse(e.data);
       if (msg.type === "role") {
@@ -3311,6 +3321,27 @@ function TetrisGame2P() {
       wsRef.current = null;
     };
   };
+
+  // Host auto-connect: as soon as the 2 Players "share your code" screen is
+  // shown, join the room as P1 in the background so the opponent entering the
+  // code (P2) fills the room and the server's "ready" starts BOTH at once.
+  // Drop the idle room if the host leaves that screen without a match; keep
+  // the socket once a match has begun (state.online === true).
+  const hostRoomRef = React.useRef(false);
+  React.useEffect(() => {
+    const onShareScreen = phase === "start" && startTab === "2players";
+    if (onShareScreen && !wsRef.current) {
+      hostRoomRef.current = true;
+      connectToRoom(generatedCodeRef.current, {
+        host: true
+      });
+    } else if (state.online) {
+      hostRoomRef.current = false; // match started -- keep the socket
+    } else if (!onShareScreen && hostRoomRef.current) {
+      hostRoomRef.current = false;
+      disconnectRoom();
+    }
+  }, [phase, startTab, state.online]);
 
   // Online = "Enter Code" screen -- join with a 4-letter code.
   // Design: Figma 269:7678 / 269:9127 / 269:9328
@@ -3512,7 +3543,15 @@ function TetrisGame2P() {
         color: "rgba(255,255,255,0.5)",
         textTransform: "uppercase"
       }
-    }, "Waiting for opponent..."));
+    }, "Waiting for opponent", /*#__PURE__*/React.createElement("span", null, "."), /*#__PURE__*/React.createElement("span", {
+      style: {
+        animation: "ellipDot2 1.2s linear infinite"
+      }
+    }, "."), /*#__PURE__*/React.createElement("span", {
+      style: {
+        animation: "ellipDot3 1.2s linear infinite"
+      }
+    }, ".")));
   }
 
   // Start screen render -- short-circuits the rest of the layout.

@@ -74,6 +74,10 @@
     @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
     /* Text caret blink for the Enter-Code slots (0.5s on / 0.5s off). */
     @keyframes caretBlink { 0%, 50% { opacity: 1; } 50.01%, 100% { opacity: 0; } }
+    /* Looping ellipsis for "Waiting for opponent" (1.2s cycle, dots ~400ms
+       apart): "." -> ".." -> "..." -> loop. dot1 is always shown. */
+    @keyframes ellipDot2 { 0%, 33% { opacity: 0; } 34%, 100% { opacity: 1; } }
+    @keyframes ellipDot3 { 0%, 66% { opacity: 0; } 67%, 100% { opacity: 1; } }
   </style>
 </head>
 <body>
