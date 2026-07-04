@@ -611,9 +611,9 @@ function makeInitState2P() {
 
 // Generate a random 4-letter room code (no I/O to avoid ambiguity).
 function makeRoomCode() {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+  // 4-digit numeric code -- easier to enter on the numeric keypad than letters.
   let code = "";
-  for (let i = 0; i < 4; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  for (let i = 0; i < 4; i++) code += Math.floor(Math.random() * 10);
   return code;
 }
 const PARTYKIT_HOST = "drift-game.jimjimjimmy.partykit.dev";
@@ -3631,14 +3631,14 @@ function TetrisGame2P() {
       }
     }, "Join with Code")), /*#__PURE__*/React.createElement("input", {
       type: "text",
-      inputMode: "text",
+      inputMode: "numeric",
+      pattern: "[0-9]*",
       maxLength: 4,
-      autoCapitalize: "characters",
       autoCorrect: "off",
       autoComplete: "off",
       spellCheck: false,
       value: joinCode,
-      onChange: ev => setJoinCode(ev.target.value.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 4)),
+      onChange: ev => setJoinCode(ev.target.value.replace(/[^0-9]/g, "").slice(0, 4)),
       onFocus: () => setJoinFocused(true),
       onBlur: () => setJoinFocused(false),
       onTouchStart: e => e.stopPropagation(),
