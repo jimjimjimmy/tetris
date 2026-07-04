@@ -4018,6 +4018,29 @@ function FullscreenGame() {
     };
   }, []);
 
+  // Keep the Back button (and the whole frame) fixed when the keyboard opens.
+  // iOS WKWebView "keyboard avoidance" scrolls the webview up to lift a focused
+  // input above the keyboard, dragging the frame (and the top-left Back button)
+  // up with it. Our layout is position:fixed + overflow:hidden, so ANY scroll
+  // offset is unwanted -- pin it back to 0 on every scroll / visual-viewport
+  // change. (The code input sits well above the keypad, so nothing needs to
+  // scroll into view anyway.)
+  useEffect(() => {
+    const pin = () => {
+      if (window.pageYOffset) window.scrollTo(0, 0);
+      const de = document.documentElement, b = document.body;
+      if (de && de.scrollTop) de.scrollTop = 0;
+      if (b && b.scrollTop) b.scrollTop = 0;
+    };
+    window.addEventListener("scroll", pin, { passive: true });
+    const vv = window.visualViewport;
+    if (vv) { vv.addEventListener("scroll", pin); vv.addEventListener("resize", pin); }
+    return () => {
+      window.removeEventListener("scroll", pin);
+      if (vv) { vv.removeEventListener("scroll", pin); vv.removeEventListener("resize", pin); }
+    };
+  }, []);
+
   return (
     <div style={{
       transform: `scale(${scale})`,
