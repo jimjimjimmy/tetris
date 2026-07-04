@@ -1054,10 +1054,11 @@ function SettingsScreen({ settings, onUpdate, onClose, initialSection, exiting }
         ...di(0),
       }}>Settings</div>
 
-      {/* Settings content */}
+      {/* Settings content -- Figma 324:6539, y:221 (was 160; the block sat
+          too high under the title). */}
       <div style={{
-        position: "absolute", left: 44, top: 160, width: 314,
-        display: "flex", flexDirection: "column", gap: 40,
+        position: "absolute", left: 44, top: 221, width: 314,
+        display: "flex", flexDirection: "column", gap: 45,
       }}>
 
         {/* SOUND section */}

@@ -1364,11 +1364,11 @@ function SettingsScreen({
     style: {
       position: "absolute",
       left: 44,
-      top: 160,
+      top: 221,
       width: 314,
       display: "flex",
       flexDirection: "column",
-      gap: 40
+      gap: 45
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {

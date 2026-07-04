@@ -944,10 +944,12 @@ On return, swap `driftIn` for `slideInLeft 0.15s` (no opacity, avoids flash).
   = HARD drop (not "drop faster"), online is room-code only (no random
   matchmaking), side is chosen via UP/DN in Solo. Keep the copy accurate if
   mechanics change.
-- Settings title moved top:82 -> top:106 to align with the Instructions title
-  (both Figma y:106). Settings content still at top:160 (pre-existing drift
-  from Figma's 221 - not corrected here; a full Settings re-align is a separate
-  task if wanted).
+- Settings title at top:106 (Figma y:106, aligned with the Instructions title).
+  Settings content block now at top:221 (Figma 324:6539 y:221; was 160 -- it sat
+  too high under the title) with section gap:45 so Sound/Haptics/Game land at
+  ~221/380/539 matching Figma 324:6417 (verified within ~1-4px). Cancel/Done row
+  container at top:709 whose 17px top padding puts the text baseline at Figma's
+  y:726.
 
 ### Screen-to-screen navigation (phase swaps)
 
