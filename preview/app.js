@@ -138,6 +138,12 @@ const ONLINE_TICK_MS = 500;
 // "go" packet would beat the second player's top-out and force a win/lose.
 const GAMEOVER_GRACE_MS = 700;
 
+// Online-only: while one player holds the pause, their game (and the frozen
+// opponent's) can otherwise stall forever. The pauser gets FORFEIT_SECS to
+// resume; if the countdown reaches 0 they forfeit the current game (treated
+// exactly like a local top-out) and the opponent is awarded the win.
+const FORFEIT_SECS = 30;
+
 // Figma 124-1377 layout, adjusted so the FRAME height matches the play
 // area height exactly. No rows clipped at the frame edge -- every cell
 // in the 200x880 play area is visible.
@@ -1759,6 +1765,9 @@ function TetrisGame2P() {
   // Session win counts -- persist across rematches, reset on MENU or PLAY AGAIN.
   const [p1Wins, setP1Wins] = React.useState(0);
   const [p2Wins, setP2Wins] = React.useState(0);
+  // Online: seconds left on the auto-forfeit countdown shown on the pauser's
+  // PAUSED screen. Reset to FORFEIT_SECS whenever we're not actively paused.
+  const [forfeitLeft, setForfeitLeft] = React.useState(FORFEIT_SECS);
   // Latest wins + winner mirrored into refs so the WebSocket onmessage closure
   // (captured once at connect time) can read CURRENT values when banking the
   // online series score on the shared rematch-seed message.
@@ -2460,6 +2469,37 @@ function TetrisGame2P() {
     return () => clearTimeout(t);
   }, [state.online, state.phase, state.iDied, state.oppDied, state.resolveAt]);
 
+  // Online auto-forfeit countdown. While WE hold the pause, count FORFEIT_SECS
+  // down once per second. At 0 the pauser forfeits the current game: we mirror
+  // a local top-out (set iDied + resolveAt, bump goStamp) so the SAME machinery
+  // resolves both phones -- the goStamp effect sends "go", our grace-resolver
+  // finalizes us as LOSE, and the opponent (who receives "go" while frozen)
+  // finalizes as WIN. No draw risk: the frozen opponent can never top out, so
+  // only one side ever dies. Solo pause never forfeits.
+  React.useEffect(() => {
+    if (!state.online || !state.paused || state.phase !== "playing") {
+      setForfeitLeft(FORFEIT_SECS);
+      return;
+    }
+    setForfeitLeft(FORFEIT_SECS);
+    let left = FORFEIT_SECS;
+    const id = setInterval(() => {
+      left -= 1;
+      setForfeitLeft(left);
+      if (left <= 0) {
+        clearInterval(id);
+        setState(s => s.online && s.paused && s.phase === "playing" ? {
+          ...s,
+          paused: false,
+          iDied: true,
+          resolveAt: s.resolveAt || Date.now(),
+          goStamp: (s.goStamp || 0) + 1
+        } : s);
+      }
+    }, 1000);
+    return () => clearInterval(id);
+  }, [state.online, state.paused, state.phase]);
+
   // applyP1: human-input dispatcher for the P1 piece. Used by both the
   // touch-gesture handler (iOS) and the keyboard handler (laptop testing).
   // Each action mutates only p1.{x,rot,y} after isValid2P passes; if the
@@ -2709,10 +2749,21 @@ function TetrisGame2P() {
   React.useEffect(() => {
     const onKey = e => {
       if (e.key === "0") setState(makeInitState2P());else if (e.key === "p" || e.key === "P") {
-        // MVP: pause is solo-only -- no pausing in online 2P.
-        setState(s => s.online ? s : {
-          ...s,
-          paused: !s.paused
+        // Toggle pause (solo AND online). Online: can't override the
+        // opponent's pause, and we sync our pause state to them so their
+        // "Opponent Paused" overlay + freeze stays in lockstep (mirrors
+        // togglePause). The forfeit countdown handles a stuck online pause.
+        setState(s => {
+          if (s.online && s.oppPaused) return s;
+          const next = !s.paused;
+          if (s.online) netSend({
+            k: "pause",
+            paused: next
+          });
+          return {
+            ...s,
+            paused: next
+          };
         });
         return;
       }
@@ -4691,7 +4742,7 @@ function TetrisGame2P() {
       opacity: CHROME_OPACITY,
       cursor: "pointer"
     }
-  }, /*#__PURE__*/React.createElement(GearIcon, null)), !state.online && /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement(GearIcon, null)), /*#__PURE__*/React.createElement("div", {
     onPointerDown: togglePause,
     onTouchStart: e => e.stopPropagation(),
     style: {
@@ -4971,7 +5022,27 @@ function TetrisGame2P() {
         letterSpacing: "2.4px",
         opacity: o
       }
-    }, "-"))), /*#__PURE__*/React.createElement("div", {
+    }, "-"))), state.online ? /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "absolute",
+        left: 0,
+        right: 0,
+        top: 496,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 12
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 11,
+        fontWeight: 400,
+        letterSpacing: "2px",
+        opacity: 0.3,
+        textTransform: "uppercase",
+        fontVariantNumeric: "tabular-nums"
+      }
+    }, "Will forfeit game in ", forfeitLeft, " sec")) : /*#__PURE__*/React.createElement("div", {
       style: {
         position: "absolute",
         left: 0,

@@ -83,6 +83,12 @@ const ONLINE_TICK_MS = 500;
 // "go" packet would beat the second player's top-out and force a win/lose.
 const GAMEOVER_GRACE_MS = 700;
 
+// Online-only: while one player holds the pause, their game (and the frozen
+// opponent's) can otherwise stall forever. The pauser gets FORFEIT_SECS to
+// resume; if the countdown reaches 0 they forfeit the current game (treated
+// exactly like a local top-out) and the opponent is awarded the win.
+const FORFEIT_SECS = 30;
+
 // Figma 124-1377 layout, adjusted so the FRAME height matches the play
 // area height exactly. No rows clipped at the frame edge -- every cell
 // in the 200x880 play area is visible.
@@ -1357,6 +1363,9 @@ function TetrisGame2P() {
   // Session win counts -- persist across rematches, reset on MENU or PLAY AGAIN.
   const [p1Wins, setP1Wins] = React.useState(0);
   const [p2Wins, setP2Wins] = React.useState(0);
+  // Online: seconds left on the auto-forfeit countdown shown on the pauser's
+  // PAUSED screen. Reset to FORFEIT_SECS whenever we're not actively paused.
+  const [forfeitLeft, setForfeitLeft] = React.useState(FORFEIT_SECS);
   // Latest wins + winner mirrored into refs so the WebSocket onmessage closure
   // (captured once at connect time) can read CURRENT values when banking the
   // online series score on the shared rematch-seed message.
@@ -1859,6 +1868,34 @@ function TetrisGame2P() {
     return () => clearTimeout(t);
   }, [state.online, state.phase, state.iDied, state.oppDied, state.resolveAt]);
 
+  // Online auto-forfeit countdown. While WE hold the pause, count FORFEIT_SECS
+  // down once per second. At 0 the pauser forfeits the current game: we mirror
+  // a local top-out (set iDied + resolveAt, bump goStamp) so the SAME machinery
+  // resolves both phones -- the goStamp effect sends "go", our grace-resolver
+  // finalizes us as LOSE, and the opponent (who receives "go" while frozen)
+  // finalizes as WIN. No draw risk: the frozen opponent can never top out, so
+  // only one side ever dies. Solo pause never forfeits.
+  React.useEffect(() => {
+    if (!state.online || !state.paused || state.phase !== "playing") {
+      setForfeitLeft(FORFEIT_SECS);
+      return;
+    }
+    setForfeitLeft(FORFEIT_SECS);
+    let left = FORFEIT_SECS;
+    const id = setInterval(() => {
+      left -= 1;
+      setForfeitLeft(left);
+      if (left <= 0) {
+        clearInterval(id);
+        setState(s => (s.online && s.paused && s.phase === "playing")
+          ? { ...s, paused: false, iDied: true,
+              resolveAt: s.resolveAt || Date.now(), goStamp: (s.goStamp || 0) + 1 }
+          : s);
+      }
+    }, 1000);
+    return () => clearInterval(id);
+  }, [state.online, state.paused, state.phase]);
+
   // applyP1: human-input dispatcher for the P1 piece. Used by both the
   // touch-gesture handler (iOS) and the keyboard handler (laptop testing).
   // Each action mutates only p1.{x,rot,y} after isValid2P passes; if the
@@ -2013,8 +2050,16 @@ function TetrisGame2P() {
     const onKey = (e) => {
       if (e.key === "0") setState(makeInitState2P());
       else if (e.key === "p" || e.key === "P") {
-        // MVP: pause is solo-only -- no pausing in online 2P.
-        setState(s => s.online ? s : { ...s, paused: !s.paused });
+        // Toggle pause (solo AND online). Online: can't override the
+        // opponent's pause, and we sync our pause state to them so their
+        // "Opponent Paused" overlay + freeze stays in lockstep (mirrors
+        // togglePause). The forfeit countdown handles a stuck online pause.
+        setState(s => {
+          if (s.online && s.oppPaused) return s;
+          const next = !s.paused;
+          if (s.online) netSend({ k: "pause", paused: next });
+          return { ...s, paused: next };
+        });
         return;
       }
       const side = playerSideRef.current;
@@ -3515,9 +3560,9 @@ function TetrisGame2P() {
       {/* Pause button: two #d9d9d9 bars (Figma 124:2218). The visible icon
           is 12x16; a transparent 48x48 hit box centered on it enlarges the
           touch target for ergonomic thumb reach.
-          MVP: hidden in online 2P -- no pausing there for now (the shared-pause
-          + opponent-paused machinery stays dormant for a later revisit). */}
-      {!state.online && (
+          Online 2P: pausing is allowed (syncs to the opponent as "Opponent
+          Paused"); the FORFEIT_SECS auto-forfeit countdown on the PAUSED
+          screen is the safeguard so a pause can't stall the match forever. */}
       <div
         onPointerDown={togglePause}
         onTouchStart={(e) => e.stopPropagation()}
@@ -3545,7 +3590,6 @@ function TetrisGame2P() {
           background: PAUSE_COLOR,
         }} />
       </div>
-      )}
 
       {/* NEXT block (Figma 124:1463). Label is Inter 600 / 10px / 2px
           letter-spacing / uppercase, opacity 0.3. Newer pieces enter the
@@ -3686,26 +3730,37 @@ function TetrisGame2P() {
               <ArrowL/>
               {[0.3,0.2,0.1].map((o,i)=><span key={"dr"+i} style={{fontFamily:"'Inter',sans-serif",fontWeight:400,fontSize:12,letterSpacing:"2.4px",opacity:o}}>-</span>)}
             </div>
-            {/* Best of 3 + pips at 496px */}
-            <div style={{
-              position:"absolute",left:0,right:0,top:496,
-              display:"flex",flexDirection:"column",alignItems:"center",gap:12,
-            }}>
-              <span style={{fontSize:12,fontWeight:600,letterSpacing:"6px",opacity:0.3,textTransform:"uppercase"}}>Best of 3</span>
-              <div style={{display:"flex",gap:16,alignItems:"center"}}>
-                {[...Array(3)].map((_,i)=>{
-                  const myW  = playerSide===1 ? p1Wins : p2Wins;
-                  const oppW = playerSide===1 ? p2Wins : p1Wins;
-                  const bg   = i<myW ? "#339900" : i<myW+oppW ? "#990000" : "transparent";
-                  const bordered = i>=myW+oppW;
-                  return <div key={i} style={{
-                    width:8, height:8, borderRadius:"50%", flexShrink:0,
-                    background: bg,
-                    border: bordered ? "1px solid rgba(255,255,255,0.2)" : "none",
-                  }}/>;
-                })}
+            {/* At 496px (the "Best of 3" slot): online shows the auto-forfeit
+                countdown caption -- the pauser loses the current game if they
+                don't resume in time. Solo keeps the Best of 3 + pips. */}
+            {state.online ? (
+              <div style={{
+                position:"absolute",left:0,right:0,top:496,
+                display:"flex",flexDirection:"column",alignItems:"center",gap:12,
+              }}>
+                <span style={{fontSize:11,fontWeight:400,letterSpacing:"2px",opacity:0.3,textTransform:"uppercase",fontVariantNumeric:"tabular-nums"}}>Will forfeit game in {forfeitLeft} sec</span>
               </div>
-            </div>
+            ) : (
+              <div style={{
+                position:"absolute",left:0,right:0,top:496,
+                display:"flex",flexDirection:"column",alignItems:"center",gap:12,
+              }}>
+                <span style={{fontSize:12,fontWeight:600,letterSpacing:"6px",opacity:0.3,textTransform:"uppercase"}}>Best of 3</span>
+                <div style={{display:"flex",gap:16,alignItems:"center"}}>
+                  {[...Array(3)].map((_,i)=>{
+                    const myW  = playerSide===1 ? p1Wins : p2Wins;
+                    const oppW = playerSide===1 ? p2Wins : p1Wins;
+                    const bg   = i<myW ? "#339900" : i<myW+oppW ? "#990000" : "transparent";
+                    const bordered = i>=myW+oppW;
+                    return <div key={i} style={{
+                      width:8, height:8, borderRadius:"50%", flexShrink:0,
+                      background: bg,
+                      border: bordered ? "1px solid rgba(255,255,255,0.2)" : "none",
+                    }}/>;
+                  })}
+                </div>
+              </div>
+            )}
             {/* Resume + Restart at 599px, gap:40 */}
             <div style={{position:"absolute",left:0,right:0,top:599,display:"flex",flexDirection:"column",alignItems:"center",gap:40}}>
               <span
