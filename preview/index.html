@@ -72,6 +72,8 @@
     @keyframes pageInRight  { from { opacity: 0; transform: translateX(100%); } to { opacity: 1; transform: translateX(0); } }
     @keyframes pageOutRight { from { opacity: 1; transform: translateX(0); }    to { opacity: 0; transform: translateX(100%); } }
     @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+    /* Text caret blink for the Enter-Code slots (0.5s on / 0.5s off). */
+    @keyframes caretBlink { 0%, 50% { opacity: 1; } 50.01%, 100% { opacity: 0; } }
   </style>
 </head>
 <body>

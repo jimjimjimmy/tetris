@@ -1358,6 +1358,9 @@ function TetrisGame2P() {
   const generatedCodeRef = React.useRef(makeRoomCode());
   // Online: text the user typed into the "join with code" input.
   const [joinCode, setJoinCode] = React.useState("");
+  // True while the code input is focused (keyboard up) -- drives the active
+  // slot's highlighted underline + blinking caret on the Enter-Code screen.
+  const [joinFocused, setJoinFocused] = React.useState(false);
   const [startTab, setStartTab] = React.useState("single"); // "single" | "2players"
   // Online: live WebSocket connection (not state -- no re-renders on ws events).
   const wsRef = React.useRef(null);
@@ -2476,21 +2479,25 @@ function TetrisGame2P() {
 
         {/* BACK button top-left per Figma 269:7678. Chevron reuses the
             Win/Lose result-row arrow (ArrowL) instead of a unicode arrow. */}
-        <div
-          onPointerDown={() => { disconnectRoom(); setJoinCode(""); setStartTab("2players"); navTo(() => { setStartKey(0); setState(s => ({...s, phase:"start"})); }, "slide"); }}
-          onTouchStart={e => e.stopPropagation()}
-          style={{
-            position:"absolute", left:29, top:82,
-            display:"flex", alignItems:"center", gap:8,
-            opacity:0.3, cursor:"pointer",
-            ...di(0),
-          }}
-        >
-          <ArrowL/>
-          <span style={{
-            fontSize:12, fontWeight:800, letterSpacing:"6px",
-            color:"#fff", textTransform:"uppercase",
-          }}>Back</span>
+        {/* Outer wrapper carries the entrance animation (di's driftIn fills to
+            opacity:1); the inner holds the steady 50% opacity. Split across two
+            elements because an animation's opacity fill overrides an inline
+            opacity on the SAME element -- compounded, the final render is 0.5. */}
+        <div style={{ position:"absolute", left:29, top:82, ...di(0) }}>
+          <div
+            onPointerDown={() => { disconnectRoom(); setJoinCode(""); setStartTab("2players"); navTo(() => { setStartKey(0); setState(s => ({...s, phase:"start"})); }, "slide"); }}
+            onTouchStart={e => e.stopPropagation()}
+            style={{
+              display:"flex", alignItems:"center", gap:8,
+              opacity:0.5, cursor:"pointer",
+            }}
+          >
+            <ArrowL/>
+            <span style={{
+              fontSize:12, fontWeight:800, letterSpacing:"6px",
+              color:"#fff", textTransform:"uppercase",
+            }}>Back</span>
+          </div>
         </div>
 
         {/* 4-letter code display + label, top 294px */}
@@ -2499,23 +2506,36 @@ function TetrisGame2P() {
           display:"flex", flexDirection:"column", alignItems:"center", gap:16,
           ...di(1),
         }}>
-          {/* Letter slots */}
+          {/* Letter slots. While focused, the active slot (next empty one)
+              gets an 80%-white underline + a blinking caret; the others keep
+              the dim #616263 underline. */}
           <div style={{display:"flex", gap:8, alignItems:"center", justifyContent:"center"}}>
-            {letters.map((ch, i) => (
-              <div key={i} style={{
-                width:80, height:97, borderBottom:"1px solid #616263",
-                display:"flex", flexDirection:"column",
-                alignItems:"center", justifyContent:"center",
-                overflow:"hidden",
-              }}>
-                <span style={{
-                  fontSize:80, fontWeight:100,
-                  color:"rgba(255,255,255,0.3)", textTransform:"uppercase",
-                  lineHeight:1, display:"block",
-                  width:"100%", textAlign:"center",
-                }}>{ch.trim()}</span>
-              </div>
-            ))}
+            {letters.map((ch, i) => {
+              const isActive = joinFocused && i === joinCode.length && joinCode.length < 4;
+              return (
+                <div key={i} style={{
+                  width:80, height:97, position:"relative",
+                  borderBottom: isActive ? "1px solid rgba(255,255,255,0.8)" : "1px solid #616263",
+                  display:"flex", alignItems:"center", justifyContent:"center",
+                  overflow:"hidden",
+                }}>
+                  <span style={{
+                    fontSize:80, fontWeight:100,
+                    color:"rgba(255,255,255,0.3)", textTransform:"uppercase",
+                    lineHeight:1, display:"block",
+                    width:"100%", textAlign:"center",
+                  }}>{ch.trim()}</span>
+                  {isActive && (
+                    <span style={{
+                      position:"absolute", left:"50%", top:"50%",
+                      transform:"translate(-50%,-50%)",
+                      width:2, height:60, background:"rgba(255,255,255,0.8)",
+                      animation:"caretBlink 1s step-end infinite",
+                    }}/>
+                  )}
+                </div>
+              );
+            })}
           </div>
           {/* "Join with Code" label */}
           <span style={{
@@ -2542,6 +2562,8 @@ function TetrisGame2P() {
           spellCheck={false}
           value={joinCode}
           onChange={ev => setJoinCode(ev.target.value.toUpperCase().replace(/[^A-Z]/g,"").slice(0,4))}
+          onFocus={() => setJoinFocused(true)}
+          onBlur={() => setJoinFocused(false)}
           onTouchStart={e => e.stopPropagation()}
           style={{
             position:"absolute", left:0, right:0, top:200, height:220,
@@ -3775,6 +3797,12 @@ function FullscreenGame() {
     // body bg. Trade-off: vertical play space is always fully visible,
     // which is the priority for a Tetris-style game.
     const recalc = () => {
+      // While a text input is focused the on-screen keyboard shrinks the
+      // viewport; skip the rescale so the frame (and the Back button on the
+      // Enter-Code screen) stay at the same coordinates instead of jumping
+      // smaller when the keyboard slides in. Restored on blur (fires resize).
+      const ae = document.activeElement;
+      if (ae && ae.tagName === "INPUT") return;
       const root = document.getElementById("root");
       const w = (root && root.clientWidth)  || window.innerWidth;
       const h = (root && root.clientHeight) || window.innerHeight;

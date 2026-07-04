@@ -1759,6 +1759,9 @@ function TetrisGame2P() {
   const generatedCodeRef = React.useRef(makeRoomCode());
   // Online: text the user typed into the "join with code" input.
   const [joinCode, setJoinCode] = React.useState("");
+  // True while the code input is focused (keyboard up) -- drives the active
+  // slot's highlighted underline + blinking caret on the Enter-Code screen.
+  const [joinFocused, setJoinFocused] = React.useState(false);
   const [startTab, setStartTab] = React.useState("single"); // "single" | "2players"
   // Online: live WebSocket connection (not state -- no re-renders on ws events).
   const wsRef = React.useRef(null);
@@ -3342,6 +3345,13 @@ function TetrisGame2P() {
     }, /*#__PURE__*/React.createElement("div", {
       style: driftGrid
     }), /*#__PURE__*/React.createElement(BgVignette, null), /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "absolute",
+        left: 29,
+        top: 82,
+        ...di(0)
+      }
+    }, /*#__PURE__*/React.createElement("div", {
       onPointerDown: () => {
         disconnectRoom();
         setJoinCode("");
@@ -3356,15 +3366,11 @@ function TetrisGame2P() {
       },
       onTouchStart: e => e.stopPropagation(),
       style: {
-        position: "absolute",
-        left: 29,
-        top: 82,
         display: "flex",
         alignItems: "center",
         gap: 8,
-        opacity: 0.3,
-        cursor: "pointer",
-        ...di(0)
+        opacity: 0.5,
+        cursor: "pointer"
       }
     }, /*#__PURE__*/React.createElement(ArrowL, null), /*#__PURE__*/React.createElement("span", {
       style: {
@@ -3374,7 +3380,7 @@ function TetrisGame2P() {
         color: "#fff",
         textTransform: "uppercase"
       }
-    }, "Back")), /*#__PURE__*/React.createElement("div", {
+    }, "Back"))), /*#__PURE__*/React.createElement("div", {
       style: {
         position: "absolute",
         left: 0,
@@ -3393,30 +3399,44 @@ function TetrisGame2P() {
         alignItems: "center",
         justifyContent: "center"
       }
-    }, letters.map((ch, i) => /*#__PURE__*/React.createElement("div", {
-      key: i,
-      style: {
-        width: 80,
-        height: 97,
-        borderBottom: "1px solid #616263",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        overflow: "hidden"
-      }
-    }, /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 80,
-        fontWeight: 100,
-        color: "rgba(255,255,255,0.3)",
-        textTransform: "uppercase",
-        lineHeight: 1,
-        display: "block",
-        width: "100%",
-        textAlign: "center"
-      }
-    }, ch.trim())))), /*#__PURE__*/React.createElement("span", {
+    }, letters.map((ch, i) => {
+      const isActive = joinFocused && i === joinCode.length && joinCode.length < 4;
+      return /*#__PURE__*/React.createElement("div", {
+        key: i,
+        style: {
+          width: 80,
+          height: 97,
+          position: "relative",
+          borderBottom: isActive ? "1px solid rgba(255,255,255,0.8)" : "1px solid #616263",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          overflow: "hidden"
+        }
+      }, /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 80,
+          fontWeight: 100,
+          color: "rgba(255,255,255,0.3)",
+          textTransform: "uppercase",
+          lineHeight: 1,
+          display: "block",
+          width: "100%",
+          textAlign: "center"
+        }
+      }, ch.trim()), isActive && /*#__PURE__*/React.createElement("span", {
+        style: {
+          position: "absolute",
+          left: "50%",
+          top: "50%",
+          transform: "translate(-50%,-50%)",
+          width: 2,
+          height: 60,
+          background: "rgba(255,255,255,0.8)",
+          animation: "caretBlink 1s step-end infinite"
+        }
+      }));
+    })), /*#__PURE__*/React.createElement("span", {
       style: {
         fontSize: 10,
         letterSpacing: "5px",
@@ -3435,6 +3455,8 @@ function TetrisGame2P() {
       spellCheck: false,
       value: joinCode,
       onChange: ev => setJoinCode(ev.target.value.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 4)),
+      onFocus: () => setJoinFocused(true),
+      onBlur: () => setJoinFocused(false),
       onTouchStart: e => e.stopPropagation(),
       style: {
         position: "absolute",
@@ -5159,6 +5181,12 @@ function FullscreenGame() {
     // body bg. Trade-off: vertical play space is always fully visible,
     // which is the priority for a Tetris-style game.
     const recalc = () => {
+      // While a text input is focused the on-screen keyboard shrinks the
+      // viewport; skip the rescale so the frame (and the Back button on the
+      // Enter-Code screen) stay at the same coordinates instead of jumping
+      // smaller when the keyboard slides in. Restored on blur (fires resize).
+      const ae = document.activeElement;
+      if (ae && ae.tagName === "INPUT") return;
       const root = document.getElementById("root");
       const w = root && root.clientWidth || window.innerWidth;
       const h = root && root.clientHeight || window.innerHeight;
