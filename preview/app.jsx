@@ -3666,21 +3666,55 @@ function TetrisGame2P() {
         );
       })()}
 
-      {/* OPPONENT PAUSED scrim (online) -- the other player paused, so our
-          game is frozen too. Interim 50% black scrim + label; final design TBD.
-          Hidden when WE are the one paused (our own PAUSED menu shows instead). */}
-      {state.oppPaused && !paused && !summary && phase === "playing" && (
-        <div style={{
-          position:"absolute", inset:0, background:"rgba(0,0,0,0.5)", zIndex:45,
-          display:"flex", alignItems:"center", justifyContent:"center",
-          fontFamily:"'Inter',sans-serif", color:"#fff",
-        }}>
-          <span style={{
-            fontSize:16, fontWeight:500, letterSpacing:"6px",
-            textTransform:"uppercase", opacity:0.8,
-          }}>Opponent Paused</span>
-        </div>
-      )}
+      {/* OPPONENT PAUSED overlay (online) -- Figma 376:6580 "Game Paused
+          Opponent". The other player paused, so our game is frozen; full
+          overlay (not a scrim) with the standard grid+vignette chrome. Hidden
+          when WE are the one paused (our own PAUSED menu shows instead). */}
+      {state.oppPaused && !paused && !summary && phase === "playing" && (() => {
+        const dg = {
+          position:"absolute",inset:0,pointerEvents:"none",
+          backgroundImage:
+            "linear-gradient(rgba(49,50,51,0.3) 1px,transparent 1px)," +
+            "linear-gradient(90deg,rgba(49,50,51,0.3) 1px,transparent 1px)",
+          backgroundSize:"20px 20px",
+        };
+        return (
+          <div style={{
+            position:"absolute",inset:0,background:"#212223",zIndex:45,
+            fontFamily:"'Inter',sans-serif",color:"#fff",overflow:"hidden",
+          }}>
+            <div style={dg}/>
+            <BgVignette/>
+            {/* "Opponent" label at 419px (Figma 376:6665) */}
+            <div style={{
+              position:"absolute",left:0,right:0,top:419,
+              display:"flex",justifyContent:"center",
+              fontSize:16,fontWeight:500,letterSpacing:"8px",
+              opacity:0.3,textTransform:"uppercase",
+            }}>Opponent</div>
+            {/* "- - - -> Paused <- - - -" row at 448px (Figma 376:6654) */}
+            <div style={{
+              position:"absolute",left:0,right:0,top:448,
+              display:"flex",gap:16,alignItems:"center",justifyContent:"center",
+              textTransform:"uppercase",
+            }}>
+              {[0.1,0.2,0.3].map((o,i)=><span key={"dl"+i} style={{fontWeight:400,fontSize:12,letterSpacing:"2.4px",opacity:o}}>-</span>)}
+              <span style={{fontSize:16,letterSpacing:"3.2px",opacity:0.2}}>{"→"}</span>
+              <span style={{fontSize:16,fontWeight:500,letterSpacing:"8px",marginRight:"-8px",opacity:0.5}}>Paused</span>
+              <span style={{fontSize:16,letterSpacing:"3.2px",opacity:0.2}}>{"←"}</span>
+              {[0.3,0.2,0.1].map((o,i)=><span key={"dr"+i} style={{fontWeight:400,fontSize:12,letterSpacing:"2.4px",opacity:o}}>-</span>)}
+            </div>
+            {/* Menu at 599px (Figma 376:6667) -- leaves the match. */}
+            <div style={{position:"absolute",left:0,right:0,top:599,display:"flex",justifyContent:"center"}}>
+              <span
+                onPointerDown={()=>{ disconnectRoom(); setState(s=>({...makeInitState2P()})); }}
+                onTouchStart={e=>e.stopPropagation()}
+                style={{fontSize:12,fontWeight:600,letterSpacing:"6px",color:"#fff",textTransform:"uppercase",cursor:"pointer"}}
+              >Menu</span>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* DEMO COMPLETE summary overlay */}
       {summary && (

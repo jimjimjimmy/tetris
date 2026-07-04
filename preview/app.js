@@ -4942,27 +4942,115 @@ function TetrisGame2P() {
         cursor: "pointer"
       }
     }, state.online ? "Quit" : "Restart")));
-  })(), state.oppPaused && !paused && !summary && phase === "playing" && /*#__PURE__*/React.createElement("div", {
-    style: {
+  })(), state.oppPaused && !paused && !summary && phase === "playing" && (() => {
+    const dg = {
       position: "absolute",
       inset: 0,
-      background: "rgba(0,0,0,0.5)",
-      zIndex: 45,
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      fontFamily: "'Inter',sans-serif",
-      color: "#fff"
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 16,
-      fontWeight: 500,
-      letterSpacing: "6px",
-      textTransform: "uppercase",
-      opacity: 0.8
-    }
-  }, "Opponent Paused")), summary && /*#__PURE__*/React.createElement("div", {
+      pointerEvents: "none",
+      backgroundImage: "linear-gradient(rgba(49,50,51,0.3) 1px,transparent 1px)," + "linear-gradient(90deg,rgba(49,50,51,0.3) 1px,transparent 1px)",
+      backgroundSize: "20px 20px"
+    };
+    return /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "absolute",
+        inset: 0,
+        background: "#212223",
+        zIndex: 45,
+        fontFamily: "'Inter',sans-serif",
+        color: "#fff",
+        overflow: "hidden"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: dg
+    }), /*#__PURE__*/React.createElement(BgVignette, null), /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "absolute",
+        left: 0,
+        right: 0,
+        top: 419,
+        display: "flex",
+        justifyContent: "center",
+        fontSize: 16,
+        fontWeight: 500,
+        letterSpacing: "8px",
+        opacity: 0.3,
+        textTransform: "uppercase"
+      }
+    }, "Opponent"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "absolute",
+        left: 0,
+        right: 0,
+        top: 448,
+        display: "flex",
+        gap: 16,
+        alignItems: "center",
+        justifyContent: "center",
+        textTransform: "uppercase"
+      }
+    }, [0.1, 0.2, 0.3].map((o, i) => /*#__PURE__*/React.createElement("span", {
+      key: "dl" + i,
+      style: {
+        fontWeight: 400,
+        fontSize: 12,
+        letterSpacing: "2.4px",
+        opacity: o
+      }
+    }, "-")), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 16,
+        letterSpacing: "3.2px",
+        opacity: 0.2
+      }
+    }, "→"), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 16,
+        fontWeight: 500,
+        letterSpacing: "8px",
+        marginRight: "-8px",
+        opacity: 0.5
+      }
+    }, "Paused"), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 16,
+        letterSpacing: "3.2px",
+        opacity: 0.2
+      }
+    }, "←"), [0.3, 0.2, 0.1].map((o, i) => /*#__PURE__*/React.createElement("span", {
+      key: "dr" + i,
+      style: {
+        fontWeight: 400,
+        fontSize: 12,
+        letterSpacing: "2.4px",
+        opacity: o
+      }
+    }, "-"))), /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "absolute",
+        left: 0,
+        right: 0,
+        top: 599,
+        display: "flex",
+        justifyContent: "center"
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      onPointerDown: () => {
+        disconnectRoom();
+        setState(s => ({
+          ...makeInitState2P()
+        }));
+      },
+      onTouchStart: e => e.stopPropagation(),
+      style: {
+        fontSize: 12,
+        fontWeight: 600,
+        letterSpacing: "6px",
+        color: "#fff",
+        textTransform: "uppercase",
+        cursor: "pointer"
+      }
+    }, "Menu")));
+  })(), summary && /*#__PURE__*/React.createElement("div", {
     style: {
       position: "absolute",
       inset: 0,
