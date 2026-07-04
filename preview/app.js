@@ -3737,10 +3737,18 @@ function TetrisGame2P() {
       }, "or"), /*#__PURE__*/React.createElement("span", {
         onPointerDown: () => {
           setJoinCode("");
-          navTo(() => setState(s => ({
+          // Land on the Enter-Code screen already focused so the keyboard
+          // slides straight up. iOS only opens the keyboard for a focus()
+          // made INSIDE the user gesture, so mount the screen synchronously
+          // (flushSync) and focus the field in this same tap -- a navTo
+          // delay would drop the gesture activation and the keyboard would
+          // stay down. The Enter-Code content still animates in via di().
+          ReactDOM.flushSync(() => setState(s => ({
             ...s,
             phase: "online"
-          })), "slide");
+          })));
+          const inp = document.getElementById("join-code-input");
+          if (inp) inp.focus();
         },
         onTouchStart: e => e.stopPropagation(),
         style: {
