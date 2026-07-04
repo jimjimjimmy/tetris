@@ -1384,9 +1384,6 @@ function TetrisGame2P() {
   const generatedCodeRef = React.useRef(makeRoomCode());
   // Online: text the user typed into the "join with code" input.
   const [joinCode, setJoinCode] = React.useState("");
-  // True while the code input is focused (keyboard up) -- drives the active
-  // slot's highlighted underline + blinking caret on the Enter-Code screen.
-  const [joinFocused, setJoinFocused] = React.useState(false);
   const [startTab, setStartTab] = React.useState("single"); // "single" | "2players"
   // Online: live WebSocket connection (not state -- no re-renders on ws events).
   const wsRef = React.useRef(null);
@@ -2753,7 +2750,7 @@ function TetrisGame2P() {
               the dim #616263 underline. */}
           <div style={{display:"flex", gap:8, alignItems:"center", justifyContent:"center"}}>
             {letters.map((ch, i) => {
-              const isActive = joinFocused && i === joinCode.length && joinCode.length < 4;
+              const isActive = i === joinCode.length && joinCode.length < 4 && !isWaiting;
               return (
                 <div key={i} style={{
                   width:80, height:97, position:"relative",
@@ -2786,49 +2783,54 @@ function TetrisGame2P() {
           }}>Join with Code</span>
         </div>
 
-        {/* Real transparent input laid over the code region. The user taps
-            THIS directly, so iOS opens the keyboard from a genuine gesture and
-            keeps it up. The previous 1x1 opacity:0 pointerEvents:none input
-            focused programmatically made the keyboard flash open then dismiss.
-            fontSize 16 avoids iOS focus-zoom; text + caret are transparent (the
-            big letter slots are the visible value). Kept OUTSIDE the animated
-            groups so typing never restarts an animation or remounts the field
-            (either would drop focus). */}
-        <input
-          type="text"
-          inputMode="numeric"
-          pattern="[0-9]*"
-          maxLength={4}
-          autoCorrect="off"
-          autoComplete="off"
-          spellCheck={false}
-          value={joinCode}
-          onChange={ev => setJoinCode(ev.target.value.replace(/[^0-9]/g,"").slice(0,4))}
-          onFocus={() => setJoinFocused(true)}
-          onBlur={() => setJoinFocused(false)}
-          onTouchStart={e => e.stopPropagation()}
-          style={{
-            position:"absolute", left:0, right:0, top:200, height:220,
-            width:"100%", margin:0, padding:0, border:"none", outline:"none",
-            background:"transparent", color:"transparent", caretColor:"transparent",
-            fontSize:16, textAlign:"center", zIndex:6, cursor:"text",
-            WebkitAppearance:"none",
-          }}
-          id="join-code-input"
-        />
+        {/* On-screen numeric keypad. Replaces the native OS text input: on iOS
+            the system keyboard slid the whole frame (and the Back button) up to
+            reveal the focused field, even with resize:"none". A custom keypad
+            never opens the OS keyboard, so nothing can move the frame. Tapping a
+            digit appends to joinCode (max 4); the delete key pops the last one.
+            Hidden once we're waiting (already connected). */}
+        {!isWaiting && (
+        <div style={{
+          position:"absolute", left:0, right:0, top:452,
+          display:"flex", flexDirection:"column", alignItems:"center", gap:16,
+          ...di(2),
+        }}>
+          {[["1","2","3"],["4","5","6"],["7","8","9"],["","0","del"]].map((row,ri)=>(
+            <div key={"kr"+ri} style={{display:"flex", gap:28, alignItems:"center", justifyContent:"center"}}>
+              {row.map((k,ci)=>{
+                if(k==="") return <div key={"kc"+ci} style={{width:64,height:52}}/>;
+                const isDel = k === "del";
+                return (
+                  <div key={"kc"+ci}
+                    onPointerDown={()=>{ setJoinCode(c => isDel ? c.slice(0,-1) : (c + k).slice(0,4)); }}
+                    onTouchStart={e => e.stopPropagation()}
+                    style={{
+                      width:64, height:52, display:"flex",
+                      alignItems:"center", justifyContent:"center", cursor:"pointer",
+                      fontSize: isDel ? 22 : 30, fontWeight:300,
+                      color: isDel ? "rgba(255,255,255,0.35)" : "rgba(255,255,255,0.85)",
+                      WebkitTapHighlightColor:"transparent",
+                    }}
+                  >{isDel ? "⌫" : k}</div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+        )}
 
-        {/* CONNECT button at 435px -- only when code is full */}
-        {joinCode.length === 4 && (
+        {/* CONNECT button below the keypad -- only when the code is full and
+            we're not already waiting. */}
+        {joinCode.length === 4 && !isWaiting && (
           <div
             onPointerDown={() => connectToRoom(joinCode)}
             onTouchStart={e => e.stopPropagation()}
             style={{
-              position:"absolute", left:0, right:0, top:435,
+              position:"absolute", left:0, right:0, top:740,
               display:"flex", justifyContent:"center",
               fontSize:12, fontWeight:800, letterSpacing:"6px",
               color:"#fff", textTransform:"uppercase", cursor:"pointer",
               zIndex:7,
-              ...di(2),
             }}
           >Connect</div>
         )}

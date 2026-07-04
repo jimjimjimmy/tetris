@@ -1787,9 +1787,6 @@ function TetrisGame2P() {
   const generatedCodeRef = React.useRef(makeRoomCode());
   // Online: text the user typed into the "join with code" input.
   const [joinCode, setJoinCode] = React.useState("");
-  // True while the code input is focused (keyboard up) -- drives the active
-  // slot's highlighted underline + blinking caret on the Enter-Code screen.
-  const [joinFocused, setJoinFocused] = React.useState(false);
   const [startTab, setStartTab] = React.useState("single"); // "single" | "2players"
   // Online: live WebSocket connection (not state -- no re-renders on ws events).
   const wsRef = React.useRef(null);
@@ -3773,7 +3770,7 @@ function TetrisGame2P() {
         justifyContent: "center"
       }
     }, letters.map((ch, i) => {
-      const isActive = joinFocused && i === joinCode.length && joinCode.length < 4;
+      const isActive = i === joinCode.length && joinCode.length < 4 && !isWaiting;
       return /*#__PURE__*/React.createElement("div", {
         key: i,
         style: {
@@ -3818,48 +3815,62 @@ function TetrisGame2P() {
         textTransform: "uppercase",
         color: "#fff"
       }
-    }, "Join with Code")), /*#__PURE__*/React.createElement("input", {
-      type: "text",
-      inputMode: "numeric",
-      pattern: "[0-9]*",
-      maxLength: 4,
-      autoCorrect: "off",
-      autoComplete: "off",
-      spellCheck: false,
-      value: joinCode,
-      onChange: ev => setJoinCode(ev.target.value.replace(/[^0-9]/g, "").slice(0, 4)),
-      onFocus: () => setJoinFocused(true),
-      onBlur: () => setJoinFocused(false),
-      onTouchStart: e => e.stopPropagation(),
+    }, "Join with Code")), !isWaiting && /*#__PURE__*/React.createElement("div", {
       style: {
         position: "absolute",
         left: 0,
         right: 0,
-        top: 200,
-        height: 220,
-        width: "100%",
-        margin: 0,
-        padding: 0,
-        border: "none",
-        outline: "none",
-        background: "transparent",
-        color: "transparent",
-        caretColor: "transparent",
-        fontSize: 16,
-        textAlign: "center",
-        zIndex: 6,
-        cursor: "text",
-        WebkitAppearance: "none"
-      },
-      id: "join-code-input"
-    }), joinCode.length === 4 && /*#__PURE__*/React.createElement("div", {
+        top: 452,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 16,
+        ...di(2)
+      }
+    }, [["1", "2", "3"], ["4", "5", "6"], ["7", "8", "9"], ["", "0", "del"]].map((row, ri) => /*#__PURE__*/React.createElement("div", {
+      key: "kr" + ri,
+      style: {
+        display: "flex",
+        gap: 28,
+        alignItems: "center",
+        justifyContent: "center"
+      }
+    }, row.map((k, ci) => {
+      if (k === "") return /*#__PURE__*/React.createElement("div", {
+        key: "kc" + ci,
+        style: {
+          width: 64,
+          height: 52
+        }
+      });
+      const isDel = k === "del";
+      return /*#__PURE__*/React.createElement("div", {
+        key: "kc" + ci,
+        onPointerDown: () => {
+          setJoinCode(c => isDel ? c.slice(0, -1) : (c + k).slice(0, 4));
+        },
+        onTouchStart: e => e.stopPropagation(),
+        style: {
+          width: 64,
+          height: 52,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          cursor: "pointer",
+          fontSize: isDel ? 22 : 30,
+          fontWeight: 300,
+          color: isDel ? "rgba(255,255,255,0.35)" : "rgba(255,255,255,0.85)",
+          WebkitTapHighlightColor: "transparent"
+        }
+      }, isDel ? "⌫" : k);
+    })))), joinCode.length === 4 && !isWaiting && /*#__PURE__*/React.createElement("div", {
       onPointerDown: () => connectToRoom(joinCode),
       onTouchStart: e => e.stopPropagation(),
       style: {
         position: "absolute",
         left: 0,
         right: 0,
-        top: 435,
+        top: 740,
         display: "flex",
         justifyContent: "center",
         fontSize: 12,
@@ -3868,8 +3879,7 @@ function TetrisGame2P() {
         color: "#fff",
         textTransform: "uppercase",
         cursor: "pointer",
-        zIndex: 7,
-        ...di(2)
+        zIndex: 7
       }
     }, "Connect"), isWaiting && /*#__PURE__*/React.createElement("div", {
       style: {

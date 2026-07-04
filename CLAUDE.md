@@ -533,6 +533,17 @@ The top line is the truth (that is what is on GitHub). If git ever prints
       `window.scrollTo(0,0)` ONCE per show (event-driven, NOT the old continuous
       scroll-pin, so no re-focus jank). NEEDS ON-DEVICE VERIFICATION (Gandalf) --
       cannot be reproduced in the browser preview.
+    - RESOLVED (2026-07-04): the frame STILL slid on device after the above
+      (the movement wasn't page scroll -- likely iOS repositioning the WKWebView
+      view itself, which resize:none should stop but didn't). Fix: ELIMINATE the
+      native keyboard entirely on the Join-with-Code screen. The transparent
+      `<input>` is gone, replaced by an on-screen numeric KEYPAD (1-9/0/⌫, tap to
+      build joinCode, max 4). No OS keyboard => nothing can move the frame. The
+      native keyboard-pin effect + recalc input-focus early-return are now
+      DORMANT (no text inputs remain anywhere) but harmless -- keep them in case
+      an input is ever re-added. No Figma existed for the keypad; built to the
+      existing minimal aesthetic (Inter, dim white), placed below the code
+      slots, CONNECT moved below the keypad. Both hidden once `isWaiting`.
   - Per-level fall speed (5c16db7): AI_LEVEL_CONFIG now carries tickMs
     per level: 1=600, 2=440, 3=320, 4=220, 5=140. ~1.5x faster per
     level, 4.3x speedup L1->L5. Tick useEffect deps include
