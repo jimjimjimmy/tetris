@@ -568,6 +568,8 @@ function makeInitState2P() {
     // game starts playing immediately
     oppPaused: false,
     // online: the OTHER player paused (freeze + scrim)
+    roomFull: false,
+    // online: tried to join a room that already has 2 players
     demoLeft: DEMO_DURATION_S,
     summary: null,
     // Most-recent territory gain for the "+N" right-side indicator
@@ -3333,7 +3335,13 @@ function TetrisGame2P() {
           opponentLeft: true
         } : s);
       } else if (msg.type === "error") {
+        // Server rejected us. Drop the socket; for room_full, surface a
+        // "Room / Full" overlay instead of silently doing nothing.
         disconnectRoom();
+        if (msg.message === "room_full") setState(s => ({
+          ...s,
+          roomFull: true
+        }));
       }
     };
     ws.onclose = () => {
@@ -3363,7 +3371,7 @@ function TetrisGame2P() {
   const hostRoomRef = React.useRef(false);
   React.useEffect(() => {
     const onShareScreen = phase === "start" && startTab === "2players";
-    if (onShareScreen && !wsRef.current) {
+    if (onShareScreen && !wsRef.current && !state.roomFull) {
       hostRoomRef.current = true;
       connectToRoom(generatedCodeRef.current, {
         host: true
@@ -3374,7 +3382,119 @@ function TetrisGame2P() {
       hostRoomRef.current = false;
       disconnectRoom();
     }
-  }, [phase, startTab, state.online]);
+  }, [phase, startTab, state.online, state.roomFull]);
+
+  // ROOM FULL -- tried to join a room that already has 2 players. Terminal
+  // join-failure state, so it fully replaces whatever screen we were on
+  // (this happens on the enter-code "online" screen, which returns early
+  // below -- so it must be handled BEFORE that). Reuses the Connection-Lost
+  // status pattern ("Room" label + "Full" word + Menu).
+  if (state.roomFull) {
+    const dg = {
+      position: "absolute",
+      inset: 0,
+      pointerEvents: "none",
+      backgroundImage: "linear-gradient(rgba(49,50,51,0.3) 1px,transparent 1px)," + "linear-gradient(90deg,rgba(49,50,51,0.3) 1px,transparent 1px)",
+      backgroundSize: "20px 20px"
+    };
+    return /*#__PURE__*/React.createElement("div", {
+      style: {
+        width: FRAME_W,
+        height: GAME_2P_H,
+        background: "#212223",
+        position: "relative",
+        overflow: "hidden",
+        fontFamily: "'Inter',sans-serif",
+        color: "#fff",
+        userSelect: "none",
+        WebkitUserSelect: "none"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: dg
+    }), /*#__PURE__*/React.createElement(BgVignette, null), /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "absolute",
+        left: 0,
+        right: 0,
+        top: 419,
+        display: "flex",
+        justifyContent: "center",
+        fontSize: 16,
+        fontWeight: 500,
+        letterSpacing: "8px",
+        opacity: 0.3,
+        textTransform: "uppercase"
+      }
+    }, "Room"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "absolute",
+        left: 0,
+        right: 0,
+        top: 448,
+        display: "flex",
+        gap: 16,
+        alignItems: "center",
+        justifyContent: "center",
+        textTransform: "uppercase"
+      }
+    }, [0.1, 0.2, 0.3].map((o, i) => /*#__PURE__*/React.createElement("span", {
+      key: "dl" + i,
+      style: {
+        fontWeight: 400,
+        fontSize: 12,
+        letterSpacing: "2.4px",
+        opacity: o
+      }
+    }, "-")), /*#__PURE__*/React.createElement(ArrowR, {
+      opacity: 0.2
+    }), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 16,
+        fontWeight: 500,
+        letterSpacing: "8px",
+        marginRight: "-8px",
+        opacity: 0.5
+      }
+    }, "Full"), /*#__PURE__*/React.createElement(ArrowL, {
+      opacity: 0.2
+    }), [0.3, 0.2, 0.1].map((o, i) => /*#__PURE__*/React.createElement("span", {
+      key: "dr" + i,
+      style: {
+        fontWeight: 400,
+        fontSize: 12,
+        letterSpacing: "2.4px",
+        opacity: o
+      }
+    }, "-"))), /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "absolute",
+        left: 0,
+        right: 0,
+        top: 599,
+        display: "flex",
+        justifyContent: "center"
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      onPointerDown: () => {
+        disconnectRoom();
+        navTo(() => {
+          setStartKey(0);
+          setState(s => ({
+            ...makeInitState2P()
+          }));
+        });
+      },
+      onTouchStart: e => e.stopPropagation(),
+      style: {
+        fontSize: 12,
+        fontWeight: 600,
+        letterSpacing: "6px",
+        color: "#fff",
+        textTransform: "uppercase",
+        cursor: "pointer"
+      }
+    }, "Menu")));
+  }
 
   // Online = "Enter Code" screen -- join with a 4-letter code.
   // Design: Figma 269:7678 / 269:9127 / 269:9328
