@@ -890,6 +890,31 @@ All scenarios PASS. Two bugs found and fixed during the run:
   territory each lock and the opponent's piece is always adopted authoritatively, so
   it self-heals. Not observed in testing.
 
+### Auto-forfeit on pause + online pause re-enabled (1d0cd8e, 2026-07-04)
+- Online 2P pause is now ALLOWED again (it had been gated off as "MVP: no
+  pausing in online"). Both entry points un-gated: the sidebar pause button
+  (was wrapped in `!state.online &&`) and the `P` key (was `s.online ? s : ...`).
+  The `P` key now also `netSend`s `{k:"pause",paused}` and respects `oppPaused`
+  (can't override the opponent's pause), mirroring `togglePause`.
+- Safeguard so a pause can't stall the match forever: `FORFEIT_SECS = 30`
+  countdown. While the LOCAL player holds the pause, a `forfeitLeft` state
+  counts down once/second (effect keyed on `[state.online, state.paused,
+  state.phase]`; resets to 30 whenever not actively paused). Shown ONLY on the
+  pauser's PAUSED screen as the caption "Will forfeit game in N sec" at the
+  "Best of 3" slot (top 496); solo pause keeps Best of 3 + pips. The non-pauser
+  sees the unchanged "Opponent Paused" overlay (no timer).
+- At 0 the pauser forfeits: the effect mirrors a local top-out --
+  `{ paused:false, iDied:true, resolveAt: resolveAt||now, goStamp:++ }` -- so
+  the EXISTING machinery resolves both phones with no new protocol: the goStamp
+  effect sends `k:"go"`, the grace-resolver finalizes the pauser as LOSE and the
+  opponent (who receives `go`) as WIN, and the win banks into the series on
+  rematch. No draw risk: the frozen opponent can never top out, so only one side
+  ever dies. Resume before 0 clears the interval (no stale forfeit).
+- Verified end-to-end (two-iframe harness vs live PartyKit): pause syncs
+  (P1 PAUSED+countdown / P2 Opponent-Paused); countdown 30->0; forfeit ->
+  P1 LOSE + P2 WIN, converged, banked to "Play Game 2"; resume cancels cleanly
+  with no forfeit firing 8s later.
+
 ---
 
 ## Memory
