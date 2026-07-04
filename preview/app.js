@@ -3605,7 +3605,15 @@ function TetrisGame2P() {
         opacity: 0.2
       }
     }, "|"), /*#__PURE__*/React.createElement("span", {
-      onPointerDown: () => setStartTab("2players"),
+      onPointerDown: () => {
+        // Pre-unlock Web Audio inside this real gesture: the host's match
+        // starts from a NETWORK "ready" event (opponent joining), which is
+        // not a user gesture, so iOS would keep the AudioContext suspended.
+        // Unlocking here means bgm/SFX play once the game auto-starts.
+        sfx.preload();
+        sfx._unlock();
+        setStartTab("2players");
+      },
       onTouchStart: e => e.stopPropagation(),
       style: {
         fontSize: 12,
