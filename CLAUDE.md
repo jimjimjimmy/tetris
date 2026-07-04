@@ -929,6 +929,32 @@ All scenarios PASS. Two bugs found and fixed during the run:
   P1 LOSE + P2 WIN, converged, banked to "Play Game 2"; resume cancels cleanly
   with no forfeit firing 8s later.
 
+### Pre-match "START IN" countdown (Figma 377:6670, 2026-07-04)
+- Neither player's game starts until BOTH have joined AND a shared countdown
+  finishes. New phase `"countdown"`: on the server's `ready`, buildFreshOnline
+  runs (board + seed ready) but phase is set to `"countdown"` with
+  `countdownLeft = COUNTDOWN_SECS` (=5) instead of jumping to `"playing"`.
+- Driver effect (keyed on `[phase, countdownLeft]`): while `phase==="countdown"`,
+  a 1s setTimeout ticks `countdownLeft` down; at 0 it flips phase to `"playing"`.
+  Runs on both clients (both entered countdown on the same `ready` broadcast),
+  so they begin within ~1s of each other; deterministic seed means a small start
+  offset can't desync.
+- Countdown SCREEN is a standalone early-return (like the online/start screens),
+  NOT an overlay -- reuses the grid+vignette chrome; "Start in" label at top 419
+  + a "- - -> N <- - -" row at top 441 with the big number (Inter ExtraLight 40 /
+  20px tracking / opacity 0.5) where the PAUSED word sits. NOTE: the countdown
+  screen does NOT render the TEST_PROBE div, so the probe reads "NO" during it
+  (detect via the "START IN" text instead).
+- Disconnect during countdown: opponent_left / ws.onclose now also fire for
+  phase `"countdown"`; the disconnect resolves to the "Connection Lost" overlay
+  once the countdown flips to playing (<=5s), so no play-vs-ghost.
+- Applies to the INITIAL match ("ready") only; REMATCH still starts instantly
+  (buildFreshOnline -> playing). Extend to rematch by routing it through the
+  same phase if desired.
+- Verified live (two-iframe harness): host waits on share screen until P2 joins,
+  then the countdown shows "START IN 5..4..3..2..1" and flips to playing;
+  number sequence sampled 5->1; visual matches Figma 377:6670 (DIFF none).
+
 ---
 
 ## Memory

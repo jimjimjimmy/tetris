@@ -89,6 +89,11 @@ const GAMEOVER_GRACE_MS = 700;
 // exactly like a local top-out) and the opponent is awarded the win.
 const FORFEIT_SECS = 30;
 
+// Online: after the room fills (server "ready"), BOTH clients show a shared
+// "START IN N" countdown (Figma 377:6670) before the match begins, so neither
+// player's game starts until the other has joined and both are counted in.
+const COUNTDOWN_SECS = 5;
+
 // Figma 124-1377 layout, adjusted so the FRAME height matches the play
 // area height exactly. No rows clipped at the frame edge -- every cell
 // in the 200x880 play area is visible.
@@ -514,6 +519,9 @@ function makeInitState2P() {
     iDied:        false,    // local player topped out
     oppDied:      false,    // opponent reported top-out (their "go")
     resolveAt:    null,     // ms when the first death occurred (grace anchor)
+    // Pre-match countdown: while phase === "countdown", this counts
+    // COUNTDOWN_SECS -> 0 on BOTH clients, then flips to "playing".
+    countdownLeft: COUNTDOWN_SECS,
   };
 }
 
@@ -1904,6 +1912,23 @@ function TetrisGame2P() {
     return () => clearInterval(id);
   }, [state.online, state.paused, state.oppPaused, state.phase]);
 
+  // Pre-match countdown driver. While phase === "countdown", tick
+  // countdownLeft down once per second; at 0 flip to "playing" so the match
+  // begins. Runs identically on both clients (both entered "countdown" on the
+  // server's "ready"), so they start within ~1s of each other.
+  React.useEffect(() => {
+    if (state.phase !== "countdown") return;
+    if (state.countdownLeft <= 0) {
+      setState(s => s.phase === "countdown" ? { ...s, phase: "playing" } : s);
+      return;
+    }
+    const id = setTimeout(() => {
+      setState(s => s.phase === "countdown"
+        ? { ...s, countdownLeft: s.countdownLeft - 1 } : s);
+    }, 1000);
+    return () => clearTimeout(id);
+  }, [state.phase, state.countdownLeft]);
+
   // applyP1: human-input dispatcher for the P1 piece. Used by both the
   // touch-gesture handler (iOS) and the keyboard handler (laptop testing).
   // Each action mutates only p1.{x,rot,y} after isValid2P passes; if the
@@ -2437,7 +2462,12 @@ function TetrisGame2P() {
         if (settings.soundFX) sfx.bgmPlay(settings.volume / 5);
         // A new match always starts a fresh best-of-3 (0-0).
         setP1Wins(0); setP2Wins(0);
-        setState(() => buildFreshOnline(msg.seed, onlineRoleRef.current));
+        // Board + seed are built now, but the match is held behind a shared
+        // COUNTDOWN_SECS "START IN N" screen (phase "countdown"); the countdown
+        // effect flips to "playing" at 0. Both clients get "ready" together, so
+        // their countdowns run in lockstep and the game begins simultaneously.
+        setState(() => ({ ...buildFreshOnline(msg.seed, onlineRoleRef.current),
+                          phase: "countdown", countdownLeft: COUNTDOWN_SECS }));
       } else if (msg.type === "rematch") {
         // Server minted a new shared seed. Advance the series identically on
         // BOTH phones: bank the just-finished game's winner (from the mirrored
@@ -2521,7 +2551,7 @@ function TetrisGame2P() {
         // Mark opponent-left during an active match OR on the game-over screen
         // (so the disconnect overlay covers REMATCH -- prevents rematching into
         // a ghost game when the opponent quit to MENU).
-        setState(s => (s.phase === "playing" || s.phase === "over") ? { ...s, opponentLeft: true } : s);
+        setState(s => (s.phase === "playing" || s.phase === "over" || s.phase === "countdown") ? { ...s, opponentLeft: true } : s);
       } else if (msg.type === "error") {
         // Server rejected us. Drop the socket; for room_full, surface a
         // "Room / Full" overlay instead of silently doing nothing.
@@ -2535,7 +2565,7 @@ function TetrisGame2P() {
       // treat it as the opponent leaving.
       setState(s => {
         if (s.phase === "online") return { ...s, phase: "start", onlineStatus: "idle" };
-        if (s.phase === "playing") return { ...s, opponentLeft: true };
+        if (s.phase === "playing" || s.phase === "countdown") return { ...s, opponentLeft: true };
         return s;
       });
       wsRef.current = null;
@@ -2616,6 +2646,52 @@ function TetrisGame2P() {
 
   // Online = "Enter Code" screen -- join with a 4-letter code.
   // Design: Figma 269:7678 / 269:9127 / 269:9328
+  // Pre-match countdown screen (Figma 377:6670). Shown on BOTH clients after
+  // the room fills; the countdown effect flips phase to "playing" at 0. Same
+  // grid+vignette chrome as the Paused screens; "Start in" label over a
+  // "- - -> N <- - -" row with the big number where "Paused" would sit.
+  if (phase === "countdown") {
+    const dg = {
+      position:"absolute",inset:0,pointerEvents:"none",
+      backgroundImage:
+        "linear-gradient(rgba(49,50,51,0.3) 1px,transparent 1px)," +
+        "linear-gradient(90deg,rgba(49,50,51,0.3) 1px,transparent 1px)",
+      backgroundSize:"20px 20px",
+    };
+    const n = Math.max(1, state.countdownLeft);
+    return (
+      <div style={{
+        width: FRAME_W, height: GAME_2P_H,
+        background:"#212223", position:"relative", overflow:"hidden",
+        fontFamily:"'Inter',sans-serif", color:"#fff",
+        userSelect:"none", WebkitUserSelect:"none",
+      }}>
+        <div style={dg}/>
+        <BgVignette/>
+        {/* "Start in" label at 419px (Figma 382:6363) */}
+        <div style={{
+          position:"absolute",left:0,right:0,top:419,
+          display:"flex",justifyContent:"center",
+          fontSize:16,fontWeight:500,letterSpacing:"8px",
+          opacity:0.3,textTransform:"uppercase",
+        }}>Start in</div>
+        {/* "- - -> N <- - -" row at 441px (Figma 377:6744) -- big number where
+            the PAUSED word sits, mirrored dashes + arrows. */}
+        <div style={{
+          position:"absolute",left:0,right:0,top:441,
+          display:"flex",gap:16,alignItems:"center",justifyContent:"center",
+          textTransform:"uppercase",
+        }}>
+          {[0.1,0.2,0.3].map((o,i)=><span key={"cl"+i} style={{fontWeight:400,fontSize:12,letterSpacing:"2.4px",opacity:o}}>-</span>)}
+          <span style={{fontSize:16,letterSpacing:"3.2px",opacity:0.2}}>{"→"}</span>
+          <span style={{fontSize:40,fontWeight:200,letterSpacing:"20px",marginRight:"-20px",opacity:0.5,fontVariantNumeric:"tabular-nums"}}>{n}</span>
+          <span style={{fontSize:16,letterSpacing:"3.2px",opacity:0.2}}>{"←"}</span>
+          {[0.3,0.2,0.1].map((o,i)=><span key={"cr"+i} style={{fontWeight:400,fontSize:12,letterSpacing:"2.4px",opacity:o}}>-</span>)}
+        </div>
+      </div>
+    );
+  }
+
   if (phase === "online") {
     const isWaiting = state.onlineStatus === "waiting";
     const letters = joinCode.padEnd(4, " ").split(""); // always 4 slots
@@ -3664,7 +3740,7 @@ function TetrisGame2P() {
       </div>
 
       {/* OPPONENT DISCONNECTED / CONNECTION LOST -- Design: Figma 269:9540 */}
-      {state.opponentLeft && (phase === "playing" || phase === "over") && (() => {
+      {state.opponentLeft && (phase === "playing" || phase === "over" || phase === "countdown") && (() => {
         const dg = {
           position:"absolute",inset:0,pointerEvents:"none",
           backgroundImage:
