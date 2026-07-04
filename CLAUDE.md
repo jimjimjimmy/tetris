@@ -525,6 +525,14 @@ The top line is the truth (that is what is on GitHub). If git ever prints
     scale doesn't shrink; (2) #root `align-items: flex-start` + frame
     `transformOrigin: "top center"` so a shrunk viewport can't re-center the
     frame upward. Do NOT revert #root to `align-items: center`/`center center`.
+    - HARDENING (2026-07-04, reported still moving on device): the native
+      setResizeMode/setScroll effect now POLLS (every 100ms, up to 2s) until
+      `window.Capacitor.Plugins.Keyboard` exists, because the bridge can inject
+      Plugins AFTER React mounts -- a one-shot call was likely no-op'ing so the
+      scroll-lock never took. Also adds a `keyboardDidShow` listener that snaps
+      `window.scrollTo(0,0)` ONCE per show (event-driven, NOT the old continuous
+      scroll-pin, so no re-focus jank). NEEDS ON-DEVICE VERIFICATION (Gandalf) --
+      cannot be reproduced in the browser preview.
   - Per-level fall speed (5c16db7): AI_LEVEL_CONFIG now carries tickMs
     per level: 1=600, 2=440, 3=320, 4=220, 5=140. ~1.5x faster per
     level, 4.3x speedup L1->L5. Tick useEffect deps include
@@ -901,8 +909,14 @@ All scenarios PASS. Two bugs found and fixed during the run:
   counts down once/second (effect keyed on `[state.online, state.paused,
   state.phase]`; resets to 30 whenever not actively paused). Shown ONLY on the
   pauser's PAUSED screen as the caption "Will forfeit game in N sec" at the
-  "Best of 3" slot (top 496); solo pause keeps Best of 3 + pips. The non-pauser
-  sees the unchanged "Opponent Paused" overlay (no timer).
+  "Best of 3" slot (top 496); solo pause keeps Best of 3 + pips.
+- UPDATE: the non-pauser ALSO sees a synced countdown on the "Opponent Paused"
+  overlay -- caption "Opponent will forfeit in N sec" at top 496. The countdown
+  effect now runs on BOTH clients (keyed on `state.paused || state.oppPaused`),
+  but only the PAUSER's timer fires the forfeit at 0 (the setState guard still
+  requires `s.paused`); the opponent's countdown is DISPLAY-ONLY and holds at 0
+  until the pauser's "go" arrives. Both start on the pause message, so they stay
+  within ~1s of each other. `forfeitLeft` state drives both captions.
 - At 0 the pauser forfeits: the effect mirrors a local top-out --
   `{ paused:false, iDied:true, resolveAt: resolveAt||now, goStamp:++ }` -- so
   the EXISTING machinery resolves both phones with no new protocol: the goStamp

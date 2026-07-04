@@ -2476,8 +2476,15 @@ function TetrisGame2P() {
   // finalizes us as LOSE, and the opponent (who receives "go" while frozen)
   // finalizes as WIN. No draw risk: the frozen opponent can never top out, so
   // only one side ever dies. Solo pause never forfeits.
+  // Runs on BOTH clients while a pause is held: on the pauser (state.paused)
+  // and on the frozen opponent (state.oppPaused), so each side can show the
+  // same 30s countdown. Only the PAUSER's timer forfeits at 0 (sets iDied +
+  // goStamp); the opponent's countdown is display-only and just holds at 0
+  // until the pauser's "go" arrives (they resolve as the winner). Solo never
+  // forfeits (state.online gate).
   React.useEffect(() => {
-    if (!state.online || !state.paused || state.phase !== "playing") {
+    const active = state.online && state.phase === "playing" && (state.paused || state.oppPaused);
+    if (!active) {
       setForfeitLeft(FORFEIT_SECS);
       return;
     }
@@ -2498,7 +2505,7 @@ function TetrisGame2P() {
       }
     }, 1000);
     return () => clearInterval(id);
-  }, [state.online, state.paused, state.phase]);
+  }, [state.online, state.paused, state.oppPaused, state.phase]);
 
   // applyP1: human-input dispatcher for the P1 piece. Used by both the
   // touch-gesture handler (iOS) and the keyboard handler (laptop testing).
@@ -5213,6 +5220,24 @@ function TetrisGame2P() {
         position: "absolute",
         left: 0,
         right: 0,
+        top: 496,
+        display: "flex",
+        justifyContent: "center"
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 11,
+        fontWeight: 400,
+        letterSpacing: "2px",
+        opacity: 0.3,
+        textTransform: "uppercase",
+        fontVariantNumeric: "tabular-nums"
+      }
+    }, "Opponent will forfeit in ", forfeitLeft, " sec")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "absolute",
+        left: 0,
+        right: 0,
         top: 599,
         display: "flex",
         justifyContent: "center"
@@ -5628,18 +5653,42 @@ function FullscreenGame() {
   // Guarded -> no-op in the browser/preview (no Capacitor bridge). resize is
   // ALSO set in capacitor.config.json; this adds the scroll lock + is a fallback.
   useEffect(() => {
-    const K = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Keyboard;
-    if (!K) return;
-    try {
-      K.setResizeMode && K.setResizeMode({
-        mode: "none"
-      });
-    } catch (e) {}
-    try {
-      K.setScroll && K.setScroll({
-        isDisabled: true
-      });
-    } catch (e) {}
+    // The Capacitor bridge can inject window.Capacitor.Plugins slightly AFTER
+    // React mounts, so a one-shot call here may run before Keyboard exists and
+    // silently no-op -- leaving the scroll-lock unset and letting iOS scroll
+    // the frame (and the top-left Back button) up when the code input is
+    // focused. Poll briefly until the plugin is present, then apply.
+    const apply = () => {
+      const K = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Keyboard;
+      if (!K) return false;
+      try {
+        K.setResizeMode && K.setResizeMode({
+          mode: "none"
+        });
+      } catch (e) {}
+      try {
+        K.setScroll && K.setScroll({
+          isDisabled: true
+        });
+      } catch (e) {}
+      // Belt-and-suspenders: if iOS still nudges the webview scroll to reveal
+      // the focused input, snap it back to the top ONCE per keyboard-show. This
+      // is event-driven (not the continuous scroll-pin that caused the old
+      // re-focus slide jank), so it pins the frame without fighting focus.
+      try {
+        K.addListener && K.addListener("keyboardDidShow", () => {
+          window.scrollTo(0, 0);
+          if (document.scrollingElement) document.scrollingElement.scrollTop = 0;
+        });
+      } catch (e) {}
+      return true;
+    };
+    if (apply()) return;
+    let tries = 0;
+    const iv = setInterval(() => {
+      if (apply() || ++tries > 20) clearInterval(iv);
+    }, 100);
+    return () => clearInterval(iv);
   }, []);
   return /*#__PURE__*/React.createElement("div", {
     style: {
