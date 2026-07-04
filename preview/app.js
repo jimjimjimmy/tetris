@@ -3755,7 +3755,7 @@ function TetrisGame2P() {
         position: "absolute",
         left: 0,
         right: 0,
-        top: 294,
+        top: 214,
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
@@ -3820,18 +3820,18 @@ function TetrisGame2P() {
         position: "absolute",
         left: 0,
         right: 0,
-        top: 452,
+        top: 461,
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
-        gap: 16,
+        gap: 24,
         ...di(2)
       }
     }, [["1", "2", "3"], ["4", "5", "6"], ["7", "8", "9"], ["", "0", "del"]].map((row, ri) => /*#__PURE__*/React.createElement("div", {
       key: "kr" + ri,
       style: {
         display: "flex",
-        gap: 28,
+        gap: 32,
         alignItems: "center",
         justifyContent: "center"
       }
@@ -3839,54 +3839,51 @@ function TetrisGame2P() {
       if (k === "") return /*#__PURE__*/React.createElement("div", {
         key: "kc" + ci,
         style: {
-          width: 64,
-          height: 52
+          width: 80,
+          height: 64
         }
       });
       const isDel = k === "del";
       return /*#__PURE__*/React.createElement("div", {
         key: "kc" + ci,
         onPointerDown: () => {
-          setJoinCode(c => isDel ? c.slice(0, -1) : (c + k).slice(0, 4));
+          if (isDel) {
+            setJoinCode(joinCode.slice(0, -1));
+            return;
+          }
+          if (joinCode.length >= 4) return;
+          const nc = (joinCode + k).slice(0, 4);
+          setJoinCode(nc);
+          if (nc.length === 4) connectToRoom(nc); // auto-connect on the 4th digit
         },
         onTouchStart: e => e.stopPropagation(),
         style: {
-          width: 64,
-          height: 52,
+          width: 80,
+          height: 64,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           cursor: "pointer",
-          fontSize: isDel ? 22 : 30,
-          fontWeight: 300,
-          color: isDel ? "rgba(255,255,255,0.35)" : "rgba(255,255,255,0.85)",
           WebkitTapHighlightColor: "transparent"
         }
-      }, isDel ? "⌫" : k);
-    })))), joinCode.length === 4 && !isWaiting && /*#__PURE__*/React.createElement("div", {
-      onPointerDown: () => connectToRoom(joinCode),
-      onTouchStart: e => e.stopPropagation(),
+      }, /*#__PURE__*/React.createElement("span", {
+        style: {
+          width: "100%",
+          textAlign: "center",
+          color: "#fff",
+          opacity: 0.5,
+          textTransform: "uppercase",
+          fontSize: isDel ? 16 : 40,
+          fontWeight: isDel ? 600 : 100,
+          letterSpacing: isDel ? "4.8px" : "20px"
+        }
+      }, isDel ? "Del" : k));
+    })))), isWaiting && /*#__PURE__*/React.createElement("div", {
       style: {
         position: "absolute",
         left: 0,
         right: 0,
-        top: 740,
-        display: "flex",
-        justifyContent: "center",
-        fontSize: 12,
-        fontWeight: 800,
-        letterSpacing: "6px",
-        color: "#fff",
-        textTransform: "uppercase",
-        cursor: "pointer",
-        zIndex: 7
-      }
-    }, "Connect"), isWaiting && /*#__PURE__*/React.createElement("div", {
-      style: {
-        position: "absolute",
-        left: 0,
-        right: 0,
-        top: 522,
+        top: 386,
         display: "flex",
         justifyContent: "center",
         fontSize: 10,

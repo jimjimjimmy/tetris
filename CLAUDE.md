@@ -541,9 +541,17 @@ The top line is the truth (that is what is on GitHub). If git ever prints
       build joinCode, max 4). No OS keyboard => nothing can move the frame. The
       native keyboard-pin effect + recalc input-focus early-return are now
       DORMANT (no text inputs remain anywhere) but harmless -- keep them in case
-      an input is ever re-added. No Figma existed for the keypad; built to the
-      existing minimal aesthetic (Inter, dim white), placed below the code
-      slots, CONNECT moved below the keypad. Both hidden once `isWaiting`.
+      an input is ever re-added.
+    - KEYPAD now matches Figma (Enter Code 385:6362 / 385:6458 / 385:7132):
+      code slots at top 214 (80x97, borderBottom #616263); keypad block at
+      top 461, w304, rows gap 24, cols gap 32; keys 80x64; digits Inter Thin
+      (weight 100) 40px / 20px tracking / opacity 0.5; DEL = Inter SemiBold
+      16 / 4.8px / opacity 0.5 (bottom-right, "0" center, left slot an
+      invisible spacer). NO Connect button per design: entering the 4th digit
+      AUTO-CONNECTS (connectToRoom) and the screen shows "Waiting for opponent"
+      at top 386 (keypad hidden once isWaiting). Active-slot highlight (white
+      underline + blinking caret on the next-empty slot) kept as-is per Jimmy.
+      Visual diff vs all three Figma states: none.
   - Per-level fall speed (5c16db7): AI_LEVEL_CONFIG now carries tickMs
     per level: 1=600, 2=440, 3=320, 4=220, 5=140. ~1.5x faster per
     level, 4.3x speedup L1->L5. Tick useEffect deps include

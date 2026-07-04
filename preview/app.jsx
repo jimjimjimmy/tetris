@@ -2741,13 +2741,13 @@ function TetrisGame2P() {
 
         {/* 4-letter code display + label, top 294px */}
         <div style={{
-          position:"absolute", left:0, right:0, top:294,
+          position:"absolute", left:0, right:0, top:214,
           display:"flex", flexDirection:"column", alignItems:"center", gap:16,
           ...di(1),
         }}>
-          {/* Letter slots. While focused, the active slot (next empty one)
-              gets an 80%-white underline + a blinking caret; the others keep
-              the dim #616263 underline. */}
+          {/* Letter slots (Figma 385:6437: 80x97, borderBottom #616263). The
+              active slot (next empty one) gets an 80%-white underline + a
+              blinking caret; the others keep the dim #616263 underline. */}
           <div style={{display:"flex", gap:8, alignItems:"center", justifyContent:"center"}}>
             {letters.map((ch, i) => {
               const isActive = i === joinCode.length && joinCode.length < 4 && !isWaiting;
@@ -2783,35 +2783,50 @@ function TetrisGame2P() {
           }}>Join with Code</span>
         </div>
 
-        {/* On-screen numeric keypad. Replaces the native OS text input: on iOS
-            the system keyboard slid the whole frame (and the Back button) up to
-            reveal the focused field, even with resize:"none". A custom keypad
-            never opens the OS keyboard, so nothing can move the frame. Tapping a
-            digit appends to joinCode (max 4); the delete key pops the last one.
-            Hidden once we're waiting (already connected). */}
+        {/* On-screen numeric keypad (Figma 385:6990). Replaces the native OS
+            text input: on iOS the system keyboard slid the whole frame (and the
+            Back button) up to reveal the focused field, even with resize:"none".
+            A custom keypad never opens the OS keyboard, so nothing can move the
+            frame. Tapping a digit appends to joinCode; DEL pops the last one.
+            Entering the 4th digit AUTO-CONNECTS (no Connect button per design --
+            it goes straight to "Waiting for opponent"). Hidden once waiting.
+            Keys 80x64; digits Inter Thin 40 / 20px tracking / opacity 0.5;
+            DEL Inter SemiBold 16 / 4.8px. Rows gap 24, cols gap 32. */}
         {!isWaiting && (
         <div style={{
-          position:"absolute", left:0, right:0, top:452,
-          display:"flex", flexDirection:"column", alignItems:"center", gap:16,
+          position:"absolute", left:0, right:0, top:461,
+          display:"flex", flexDirection:"column", alignItems:"center", gap:24,
           ...di(2),
         }}>
           {[["1","2","3"],["4","5","6"],["7","8","9"],["","0","del"]].map((row,ri)=>(
-            <div key={"kr"+ri} style={{display:"flex", gap:28, alignItems:"center", justifyContent:"center"}}>
+            <div key={"kr"+ri} style={{display:"flex", gap:32, alignItems:"center", justifyContent:"center"}}>
               {row.map((k,ci)=>{
-                if(k==="") return <div key={"kc"+ci} style={{width:64,height:52}}/>;
+                if(k==="") return <div key={"kc"+ci} style={{width:80,height:64}}/>;
                 const isDel = k === "del";
                 return (
                   <div key={"kc"+ci}
-                    onPointerDown={()=>{ setJoinCode(c => isDel ? c.slice(0,-1) : (c + k).slice(0,4)); }}
+                    onPointerDown={()=>{
+                      if(isDel){ setJoinCode(joinCode.slice(0,-1)); return; }
+                      if(joinCode.length >= 4) return;
+                      const nc = (joinCode + k).slice(0,4);
+                      setJoinCode(nc);
+                      if(nc.length === 4) connectToRoom(nc); // auto-connect on the 4th digit
+                    }}
                     onTouchStart={e => e.stopPropagation()}
                     style={{
-                      width:64, height:52, display:"flex",
+                      width:80, height:64, display:"flex",
                       alignItems:"center", justifyContent:"center", cursor:"pointer",
-                      fontSize: isDel ? 22 : 30, fontWeight:300,
-                      color: isDel ? "rgba(255,255,255,0.35)" : "rgba(255,255,255,0.85)",
                       WebkitTapHighlightColor:"transparent",
                     }}
-                  >{isDel ? "⌫" : k}</div>
+                  >
+                    <span style={{
+                      width:"100%", textAlign:"center", color:"#fff", opacity:0.5,
+                      textTransform:"uppercase",
+                      fontSize: isDel ? 16 : 40,
+                      fontWeight: isDel ? 600 : 100,
+                      letterSpacing: isDel ? "4.8px" : "20px",
+                    }}>{isDel ? "Del" : k}</span>
+                  </div>
                 );
               })}
             </div>
@@ -2819,26 +2834,11 @@ function TetrisGame2P() {
         </div>
         )}
 
-        {/* CONNECT button below the keypad -- only when the code is full and
-            we're not already waiting. */}
-        {joinCode.length === 4 && !isWaiting && (
-          <div
-            onPointerDown={() => connectToRoom(joinCode)}
-            onTouchStart={e => e.stopPropagation()}
-            style={{
-              position:"absolute", left:0, right:0, top:740,
-              display:"flex", justifyContent:"center",
-              fontSize:12, fontWeight:800, letterSpacing:"6px",
-              color:"#fff", textTransform:"uppercase", cursor:"pointer",
-              zIndex:7,
-            }}
-          >Connect</div>
-        )}
-
-        {/* Waiting status at 522px */}
+        {/* Waiting status (Figma 385:7132) -- shown after auto-connect, right
+            below the "Join with Code" label. */}
         {isWaiting && (
           <div style={{
-            position:"absolute", left:0, right:0, top:522,
+            position:"absolute", left:0, right:0, top:386,
             display:"flex", justifyContent:"center",
             fontSize:10, letterSpacing:"3px", fontWeight:400,
             color:"rgba(255,255,255,0.5)", textTransform:"uppercase",
