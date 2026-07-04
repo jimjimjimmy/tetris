@@ -481,6 +481,7 @@ function makeInitState2P() {
     playerSide:  null,
     aiLevel:     loadSettings().level,
     paused:      false,           // game starts playing immediately
+    oppPaused:   false,           // online: the OTHER player paused (freeze + scrim)
     demoLeft:    DEMO_DURATION_S,
     summary:     null,
     // Most-recent territory gain for the "+N" right-side indicator
@@ -1385,7 +1386,7 @@ function TetrisGame2P() {
 
   // BGM playback control via sfx object.
   React.useEffect(() => {
-    const ph = state.phase, pa = state.paused, su = state.summary;
+    const ph = state.phase, pa = state.paused || state.oppPaused, su = state.summary;
     if (!settings.soundFX) { sfx.bgmStop(); return; }
     const vol = settings.volume / 5;
     if (ph === "playing" && !pa && !su) {
@@ -1396,7 +1397,7 @@ function TetrisGame2P() {
     } else {
       sfx.bgmStop();
     }
-  }, [state.phase, state.paused, state.summary, settings.soundFX, settings.volume]);
+  }, [state.phase, state.paused, state.oppPaused, state.summary, settings.soundFX, settings.volume]);
 
   // Pause BGM when the app is backgrounded / screen locked; resume when
   // it returns to foreground -- but only if music was on before hiding.
@@ -1481,7 +1482,7 @@ function TetrisGame2P() {
     const id = setInterval(() => {
       setState(s => {
         if (s.phase !== "playing") return s;
-        if (s.paused || s.summary) return s;
+        if (s.paused || s.oppPaused || s.summary) return s;
         let { board, aiTick, p1, p1Next, p1NextNext, p2, p2Next, p2NextNext, p1Lines, p2Lines, boundary } = s;
         const aiCfg = AI_LEVEL_CONFIG[s.aiLevel] || AI_LEVEL_CONFIG[3];
         let n1 = 0, n2 = 0;
@@ -1872,7 +1873,7 @@ function TetrisGame2P() {
   const applyP1 = React.useCallback((action) => {
     if (TEST_PROBE && driftActs[action] != null) { driftActs[action]++; writeDriftProbe(driftLastSnap); }
     setState(s => {
-      if (s.phase !== "playing" || s.paused || s.summary) return s;
+      if (s.phase !== "playing" || s.paused || s.oppPaused || s.summary) return s;
       const { p1, board, boundary } = s;
       // Lock-delay reset: if the piece is currently in the lock-pending
       // window AND we haven't blown the reset cap, a successful input
@@ -1940,7 +1941,7 @@ function TetrisGame2P() {
   const applyP2 = React.useCallback((action) => {
     if (TEST_PROBE && driftActs[action] != null) { driftActs[action]++; writeDriftProbe(driftLastSnap); }
     setState(s => {
-      if (s.phase !== "playing" || s.paused || s.summary) return s;
+      if (s.phase !== "playing" || s.paused || s.oppPaused || s.summary) return s;
       const { p2, board, boundary } = s;
       const lockReset = (piece) => {
         if (piece.lockPendingTs == null) return {};
@@ -2010,7 +2011,15 @@ function TetrisGame2P() {
   React.useEffect(() => {
     const onKey = (e) => {
       if (e.key === "0") setState(makeInitState2P());
-      else if (e.key === "p" || e.key === "P") { setState(s => ({...s, paused: !s.paused})); return; }
+      else if (e.key === "p" || e.key === "P") {
+        setState(s => {
+          if (s.oppPaused) return s; // opponent holds the pause; can't override
+          const next = !s.paused;
+          if (s.online) netSend({ k: "pause", paused: next });
+          return { ...s, paused: next };
+        });
+        return;
+      }
       const side = playerSideRef.current;
       const apply = side === 2 ? applyP2 : applyP1;
       if      (e.key === "ArrowLeft")  apply("left");
@@ -2455,6 +2464,9 @@ function TetrisGame2P() {
           }
           return s;
         });
+      } else if (msg.k === "pause") {
+        // Opponent paused/resumed -> freeze OUR game + show the scrim (or clear).
+        setState(s => s.online ? { ...s, oppPaused: !!msg.paused } : s);
       } else if (msg.type === "opponent_left") {
         // Mark opponent-left during an active match OR on the game-over screen
         // (so the disconnect overlay covers REMATCH -- prevents rematching into
@@ -3022,7 +3034,10 @@ function TetrisGame2P() {
   // sidebar so this is defensive but harmless).
   const togglePause = (e) => {
     if (e && e.stopPropagation) e.stopPropagation();
-    setState(s => ({...s, paused: !s.paused}));
+    if (state.oppPaused) return; // opponent holds the pause; can't override
+    const next = !state.paused;
+    if (state.online) netSend({ k: "pause", paused: next }); // sync to opponent
+    setState(s => ({...s, paused: next}));
   };
 
   // ── Match / set outcome handlers ──────────────────────────────────────
@@ -3637,7 +3652,7 @@ function TetrisGame2P() {
             {/* Resume + Restart at 599px, gap:40 */}
             <div style={{position:"absolute",left:0,right:0,top:599,display:"flex",flexDirection:"column",alignItems:"center",gap:40}}>
               <span
-                onPointerDown={()=>setState(s=>({...s,paused:false}))}
+                onPointerDown={()=>{ if(state.online) netSend({k:"pause",paused:false}); setState(s=>({...s,paused:false})); }}
                 onTouchStart={e=>e.stopPropagation()}
                 style={{fontSize:12,fontWeight:600,letterSpacing:"6px",color:"#fff",textTransform:"uppercase",cursor:"pointer"}}
               >Resume</span>
@@ -3650,6 +3665,22 @@ function TetrisGame2P() {
           </div>
         );
       })()}
+
+      {/* OPPONENT PAUSED scrim (online) -- the other player paused, so our
+          game is frozen too. Interim 50% black scrim + label; final design TBD.
+          Hidden when WE are the one paused (our own PAUSED menu shows instead). */}
+      {state.oppPaused && !paused && !summary && phase === "playing" && (
+        <div style={{
+          position:"absolute", inset:0, background:"rgba(0,0,0,0.5)", zIndex:45,
+          display:"flex", alignItems:"center", justifyContent:"center",
+          fontFamily:"'Inter',sans-serif", color:"#fff",
+        }}>
+          <span style={{
+            fontSize:16, fontWeight:500, letterSpacing:"6px",
+            textTransform:"uppercase", opacity:0.8,
+          }}>Opponent Paused</span>
+        </div>
+      )}
 
       {/* DEMO COMPLETE summary overlay */}
       {summary && (

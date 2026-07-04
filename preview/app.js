@@ -566,6 +566,8 @@ function makeInitState2P() {
     aiLevel: loadSettings().level,
     paused: false,
     // game starts playing immediately
+    oppPaused: false,
+    // online: the OTHER player paused (freeze + scrim)
     demoLeft: DEMO_DURATION_S,
     summary: null,
     // Most-recent territory gain for the "+N" right-side indicator
@@ -1788,7 +1790,7 @@ function TetrisGame2P() {
   // BGM playback control via sfx object.
   React.useEffect(() => {
     const ph = state.phase,
-      pa = state.paused,
+      pa = state.paused || state.oppPaused,
       su = state.summary;
     if (!settings.soundFX) {
       sfx.bgmStop();
@@ -1803,7 +1805,7 @@ function TetrisGame2P() {
     } else {
       sfx.bgmStop();
     }
-  }, [state.phase, state.paused, state.summary, settings.soundFX, settings.volume]);
+  }, [state.phase, state.paused, state.oppPaused, state.summary, settings.soundFX, settings.volume]);
 
   // Pause BGM when the app is backgrounded / screen locked; resume when
   // it returns to foreground -- but only if music was on before hiding.
@@ -1895,7 +1897,7 @@ function TetrisGame2P() {
     const id = setInterval(() => {
       setState(s => {
         if (s.phase !== "playing") return s;
-        if (s.paused || s.summary) return s;
+        if (s.paused || s.oppPaused || s.summary) return s;
         let {
           board,
           aiTick,
@@ -2474,7 +2476,7 @@ function TetrisGame2P() {
       writeDriftProbe(driftLastSnap);
     }
     setState(s => {
-      if (s.phase !== "playing" || s.paused || s.summary) return s;
+      if (s.phase !== "playing" || s.paused || s.oppPaused || s.summary) return s;
       const {
         p1,
         board,
@@ -2590,7 +2592,7 @@ function TetrisGame2P() {
       writeDriftProbe(driftLastSnap);
     }
     setState(s => {
-      if (s.phase !== "playing" || s.paused || s.summary) return s;
+      if (s.phase !== "playing" || s.paused || s.oppPaused || s.summary) return s;
       const {
         p2,
         board,
@@ -2705,10 +2707,18 @@ function TetrisGame2P() {
   React.useEffect(() => {
     const onKey = e => {
       if (e.key === "0") setState(makeInitState2P());else if (e.key === "p" || e.key === "P") {
-        setState(s => ({
-          ...s,
-          paused: !s.paused
-        }));
+        setState(s => {
+          if (s.oppPaused) return s; // opponent holds the pause; can't override
+          const next = !s.paused;
+          if (s.online) netSend({
+            k: "pause",
+            paused: next
+          });
+          return {
+            ...s,
+            paused: next
+          };
+        });
         return;
       }
       const side = playerSideRef.current;
@@ -3315,6 +3325,12 @@ function TetrisGame2P() {
           }
           return s;
         });
+      } else if (msg.k === "pause") {
+        // Opponent paused/resumed -> freeze OUR game + show the scrim (or clear).
+        setState(s => s.online ? {
+          ...s,
+          oppPaused: !!msg.paused
+        } : s);
       } else if (msg.type === "opponent_left") {
         // Mark opponent-left during an active match OR on the game-over screen
         // (so the disconnect overlay covers REMATCH -- prevents rematching into
@@ -4134,9 +4150,15 @@ function TetrisGame2P() {
   // sidebar so this is defensive but harmless).
   const togglePause = e => {
     if (e && e.stopPropagation) e.stopPropagation();
+    if (state.oppPaused) return; // opponent holds the pause; can't override
+    const next = !state.paused;
+    if (state.online) netSend({
+      k: "pause",
+      paused: next
+    }); // sync to opponent
     setState(s => ({
       ...s,
-      paused: !s.paused
+      paused: next
     }));
   };
 
@@ -4889,10 +4911,16 @@ function TetrisGame2P() {
         gap: 40
       }
     }, /*#__PURE__*/React.createElement("span", {
-      onPointerDown: () => setState(s => ({
-        ...s,
-        paused: false
-      })),
+      onPointerDown: () => {
+        if (state.online) netSend({
+          k: "pause",
+          paused: false
+        });
+        setState(s => ({
+          ...s,
+          paused: false
+        }));
+      },
       onTouchStart: e => e.stopPropagation(),
       style: {
         fontSize: 12,
@@ -4914,7 +4942,27 @@ function TetrisGame2P() {
         cursor: "pointer"
       }
     }, state.online ? "Quit" : "Restart")));
-  })(), summary && /*#__PURE__*/React.createElement("div", {
+  })(), state.oppPaused && !paused && !summary && phase === "playing" && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      inset: 0,
+      background: "rgba(0,0,0,0.5)",
+      zIndex: 45,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      fontFamily: "'Inter',sans-serif",
+      color: "#fff"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 16,
+      fontWeight: 500,
+      letterSpacing: "6px",
+      textTransform: "uppercase",
+      opacity: 0.8
+    }
+  }, "Opponent Paused")), summary && /*#__PURE__*/React.createElement("div", {
     style: {
       position: "absolute",
       inset: 0,
