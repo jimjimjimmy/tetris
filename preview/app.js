@@ -117,8 +117,8 @@ const AI_LEVEL_CONFIG = {
 // THIS file state (one behind HEAD after the commit lands); update it
 // just before each commit.
 const APP_VERSION = "v0.1";
-const APP_COMMIT = "45291ba";
-const APP_BUILD_DATE = "2026-07-04T00:47:36";
+const APP_COMMIT = "33b8f2f";
+const APP_BUILD_DATE = "2026-07-04T01:17:09";
 
 // Default fall interval (used as a fallback when state.aiLevel is invalid).
 // Real tick rate comes from AI_LEVEL_CONFIG[aiLevel].tickMs, looked up at
