@@ -2615,7 +2615,7 @@ function TetrisGame2P() {
           position:"absolute",left:0,right:0,top:419,
           display:"flex",justifyContent:"center",
           fontSize:16,fontWeight:500,letterSpacing:"8px",
-          opacity:0.3,textTransform:"uppercase",
+          opacity:0.3,textTransform:"uppercase",paddingLeft:"8px",
         }}>Room</div>
         {/* "-> Full <-" decorative row at 448px */}
         <div style={{
@@ -2634,7 +2634,7 @@ function TetrisGame2P() {
           <span
             onPointerDown={()=>{ disconnectRoom(); navTo(()=>{ setStartKey(0); setState(s=>({...makeInitState2P()})); }); }}
             onTouchStart={e=>e.stopPropagation()}
-            style={{fontSize:12,fontWeight:600,letterSpacing:"6px",color:"#fff",textTransform:"uppercase",cursor:"pointer"}}
+            style={{fontSize:12,fontWeight:600,letterSpacing:"6px",marginRight:"-6px",color:"#fff",textTransform:"uppercase",cursor:"pointer"}}
           >Menu</span>
         </div>
       </div>
@@ -2670,7 +2670,7 @@ function TetrisGame2P() {
           position:"absolute",left:0,right:0,top:419,
           display:"flex",justifyContent:"center",
           fontSize:16,fontWeight:500,letterSpacing:"8px",
-          opacity:0.3,textTransform:"uppercase",
+          opacity:0.3,textTransform:"uppercase",paddingLeft:"8px",
         }}>Start in</div>
         {/* "- - -> N <- - -" row at 441px (Figma 377:6744) -- big number where
             the PAUSED word sits, mirrored dashes + arrows. */}
@@ -2779,7 +2779,7 @@ function TetrisGame2P() {
           {/* "Join with Code" label */}
           <span style={{
             fontSize:10, letterSpacing:"5px", fontWeight:400,
-            opacity:0.5, textTransform:"uppercase", color:"#fff",
+            opacity:0.5, textTransform:"uppercase", color:"#fff", marginRight:"-5px",
           }}>Join with Code</span>
         </div>
 
@@ -2820,11 +2820,13 @@ function TetrisGame2P() {
                     }}
                   >
                     <span style={{
-                      width:"100%", textAlign:"center", color:"#fff", opacity:0.5,
-                      textTransform:"uppercase",
+                      color:"#fff", opacity:0.5, textTransform:"uppercase",
                       fontSize: isDel ? 16 : 40,
                       fontWeight: isDel ? 600 : 100,
                       letterSpacing: isDel ? "4.8px" : "20px",
+                      // optical center: strip the trailing letter-spacing so the
+                      // glyph sits at the true center of the flex key (not left).
+                      marginRight: isDel ? "-4.8px" : "-20px",
                     }}>{isDel ? "Del" : k}</span>
                   </div>
                 );
@@ -3762,7 +3764,7 @@ function TetrisGame2P() {
               position:"absolute",left:0,right:0,top:419,
               display:"flex",justifyContent:"center",
               fontSize:16,fontWeight:500,letterSpacing:"8px",
-              opacity:0.3,textTransform:"uppercase",
+              opacity:0.3,textTransform:"uppercase",paddingLeft:"8px",
             }}>Connection</div>
             {/* "→ Lost ←" decorative row at 448px */}
             <div style={{
@@ -3781,7 +3783,7 @@ function TetrisGame2P() {
               <span
                 onPointerDown={()=>{ disconnectRoom(); navTo(()=>{ setStartKey(0); setState(s=>({...makeInitState2P()})); }); }}
                 onTouchStart={e=>e.stopPropagation()}
-                style={{fontSize:12,fontWeight:600,letterSpacing:"6px",color:"#fff",textTransform:"uppercase",cursor:"pointer"}}
+                style={{fontSize:12,fontWeight:600,letterSpacing:"6px",marginRight:"-6px",color:"#fff",textTransform:"uppercase",cursor:"pointer"}}
               >Menu</span>
             </div>
           </div>
@@ -3824,14 +3826,14 @@ function TetrisGame2P() {
                 position:"absolute",left:0,right:0,top:496,
                 display:"flex",flexDirection:"column",alignItems:"center",gap:12,
               }}>
-                <span style={{fontSize:11,fontWeight:400,letterSpacing:"2px",opacity:0.3,textTransform:"uppercase",fontVariantNumeric:"tabular-nums"}}>Will forfeit game in {forfeitLeft} sec</span>
+                <span style={{fontSize:11,fontWeight:400,letterSpacing:"2px",opacity:0.3,textTransform:"uppercase",fontVariantNumeric:"tabular-nums",marginRight:"-2px"}}>Will forfeit game in {forfeitLeft} sec</span>
               </div>
             ) : (
               <div style={{
                 position:"absolute",left:0,right:0,top:496,
                 display:"flex",flexDirection:"column",alignItems:"center",gap:12,
               }}>
-                <span style={{fontSize:12,fontWeight:600,letterSpacing:"6px",opacity:0.3,textTransform:"uppercase"}}>Best of 3</span>
+                <span style={{fontSize:12,fontWeight:600,letterSpacing:"6px",opacity:0.3,textTransform:"uppercase",marginRight:"-6px"}}>Best of 3</span>
                 <div style={{display:"flex",gap:16,alignItems:"center"}}>
                   {[...Array(3)].map((_,i)=>{
                     const myW  = playerSide===1 ? p1Wins : p2Wins;
@@ -3852,12 +3854,12 @@ function TetrisGame2P() {
               <span
                 onPointerDown={()=>{ if(state.online) netSend({k:"pause",paused:false}); setState(s=>({...s,paused:false})); }}
                 onTouchStart={e=>e.stopPropagation()}
-                style={{fontSize:12,fontWeight:600,letterSpacing:"6px",color:"#fff",textTransform:"uppercase",cursor:"pointer"}}
+                style={{fontSize:12,fontWeight:600,letterSpacing:"6px",marginRight:"-6px",color:"#fff",textTransform:"uppercase",cursor:"pointer"}}
               >Resume</span>
               <span
                 onPointerDown={handleMenu}
                 onTouchStart={e=>e.stopPropagation()}
-                style={{fontSize:12,fontWeight:400,letterSpacing:"6px",color:"rgba(255,255,255,0.3)",textTransform:"uppercase",cursor:"pointer"}}
+                style={{fontSize:12,fontWeight:400,letterSpacing:"6px",marginRight:"-6px",color:"rgba(255,255,255,0.3)",textTransform:"uppercase",cursor:"pointer"}}
               >{state.online ? "Quit" : "Restart"}</span>
             </div>
           </div>
@@ -3888,7 +3890,7 @@ function TetrisGame2P() {
               position:"absolute",left:0,right:0,top:419,
               display:"flex",justifyContent:"center",
               fontSize:16,fontWeight:500,letterSpacing:"8px",
-              opacity:0.3,textTransform:"uppercase",
+              opacity:0.3,textTransform:"uppercase",paddingLeft:"8px",
             }}>Opponent</div>
             {/* "- - - -> Paused <- - - -" row at 448px (Figma 376:6654) */}
             <div style={{
@@ -3909,14 +3911,14 @@ function TetrisGame2P() {
               position:"absolute",left:0,right:0,top:496,
               display:"flex",justifyContent:"center",
             }}>
-              <span style={{fontSize:11,fontWeight:400,letterSpacing:"2px",opacity:0.3,textTransform:"uppercase",fontVariantNumeric:"tabular-nums"}}>Opponent will forfeit in {forfeitLeft} sec</span>
+              <span style={{fontSize:11,fontWeight:400,letterSpacing:"2px",opacity:0.3,textTransform:"uppercase",fontVariantNumeric:"tabular-nums",marginRight:"-2px"}}>Opponent will forfeit in {forfeitLeft} sec</span>
             </div>
             {/* Menu at 599px (Figma 376:6667) -- leaves the match. */}
             <div style={{position:"absolute",left:0,right:0,top:599,display:"flex",justifyContent:"center"}}>
               <span
                 onPointerDown={()=>{ disconnectRoom(); setState(s=>({...makeInitState2P()})); }}
                 onTouchStart={e=>e.stopPropagation()}
-                style={{fontSize:12,fontWeight:600,letterSpacing:"6px",color:"#fff",textTransform:"uppercase",cursor:"pointer"}}
+                style={{fontSize:12,fontWeight:600,letterSpacing:"6px",marginRight:"-6px",color:"#fff",textTransform:"uppercase",cursor:"pointer"}}
               >Menu</span>
             </div>
           </div>
@@ -4025,7 +4027,7 @@ function TetrisGame2P() {
               position:"absolute",left:0,right:0,top:496,
               display:"flex",flexDirection:"column",alignItems:"center",gap:12,
             }}>
-              <span style={{fontSize:12,fontWeight:600,letterSpacing:"6px",opacity:0.3,textTransform:"uppercase"}}>Best of 3</span>
+              <span style={{fontSize:12,fontWeight:600,letterSpacing:"6px",opacity:0.3,textTransform:"uppercase",marginRight:"-6px"}}>Best of 3</span>
               <Pips p1={p1} p2={p2}/>
             </div>
             {/* Actions at 599px */}
@@ -4036,13 +4038,13 @@ function TetrisGame2P() {
               <span
                 onPointerDown={onPrimary}
                 onTouchStart={e=>e.stopPropagation()}
-                style={{fontSize:12,fontWeight:600,letterSpacing:"6px",color:"#fff",textTransform:"uppercase",cursor:"pointer"}}
+                style={{fontSize:12,fontWeight:600,letterSpacing:"6px",marginRight:"-6px",color:"#fff",textTransform:"uppercase",cursor:"pointer"}}
               >{primary}</span>
               {secondary && (
                 <span
                   onPointerDown={onSecondary}
                   onTouchStart={e=>e.stopPropagation()}
-                  style={{fontSize:12,fontWeight:400,letterSpacing:"6px",color:"rgba(255,255,255,0.3)",textTransform:"uppercase",cursor:"pointer"}}
+                  style={{fontSize:12,fontWeight:400,letterSpacing:"6px",marginRight:"-6px",color:"rgba(255,255,255,0.3)",textTransform:"uppercase",cursor:"pointer"}}
                 >{secondary}</span>
               )}
             </div>

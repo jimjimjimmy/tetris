@@ -552,6 +552,16 @@ The top line is the truth (that is what is on GitHub). If git ever prints
       at top 386 (keypad hidden once isWaiting). Active-slot highlight (white
       underline + blinking caret on the next-empty slot) kept as-is per Jimmy.
       Visual diff vs all three Figma states: none.
+    - OPTICAL CENTERING (per Jimmy): letter-spacing adds trailing space after
+      the last glyph, pushing CENTERED text left by ls/2. Fixed app-wide on
+      standalone centered text: shrink-to-fit spans (parent flex-center) get
+      marginRight:"-{ls}px"; full-width justify-center divs holding text
+      directly get paddingLeft:"{ls}px" (border-box shifts the center right by
+      ls/2). Applied to the keypad digits/DEL, Start in, Opponent, Connection,
+      Room, Join with Code, Best of 3, and the Resume/Restart/Quit/Menu buttons
+      + forfeit captions. Mirrored dash-arrow rows (ResultRow, Paused) already
+      compensate their center word. This is an intentional deviation from the
+      Figma renders, which themselves show the un-compensated left shift.
   - Per-level fall speed (5c16db7): AI_LEVEL_CONFIG now carries tickMs
     per level: 1=600, 2=440, 3=320, 4=220, 5=140. ~1.5x faster per
     level, 4.3x speedup L1->L5. Tick useEffect deps include
