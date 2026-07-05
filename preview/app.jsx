@@ -3913,7 +3913,7 @@ function TetrisGame2P() {
               display:"flex",flexDirection:"column",alignItems:"center",gap:6,
             }}>
               <span style={{fontSize:11,fontWeight:400,letterSpacing:"2px",opacity:0.3,textTransform:"uppercase",marginRight:"-2px"}}>If opponent doesn't resume</span>
-              <span style={{fontSize:11,fontWeight:400,letterSpacing:"2px",opacity:0.3,textTransform:"uppercase",fontVariantNumeric:"tabular-nums",marginRight:"-2px"}}>in {forfeitLeft} sec, game will be forfeited</span>
+              <span style={{fontSize:11,fontWeight:400,letterSpacing:"2px",opacity:0.3,textTransform:"uppercase",fontVariantNumeric:"tabular-nums",marginRight:"-2px"}}>in {forfeitLeft} sec, considered a forfeit</span>
             </div>
             {/* Menu at 599px (Figma 376:6667) -- leaves the match. */}
             <div style={{position:"absolute",left:0,right:0,top:599,display:"flex",justifyContent:"center"}}>

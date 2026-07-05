@@ -5415,7 +5415,7 @@ function TetrisGame2P() {
         fontVariantNumeric: "tabular-nums",
         marginRight: "-2px"
       }
-    }, "in ", forfeitLeft, " sec, game will be forfeited")), /*#__PURE__*/React.createElement("div", {
+    }, "in ", forfeitLeft, " sec, considered a forfeit")), /*#__PURE__*/React.createElement("div", {
       style: {
         position: "absolute",
         left: 0,
