@@ -5215,7 +5215,7 @@ function TetrisGame2P() {
         textTransform: "uppercase",
         marginRight: "-2px"
       }
-    }, "game will be forfeited")) : /*#__PURE__*/React.createElement("div", {
+    }, "you forfeit the game")) : /*#__PURE__*/React.createElement("div", {
       style: {
         position: "absolute",
         left: 0,
@@ -5415,7 +5415,7 @@ function TetrisGame2P() {
         fontVariantNumeric: "tabular-nums",
         marginRight: "-2px"
       }
-    }, "in ", forfeitLeft, " sec, considered a forfeit")), /*#__PURE__*/React.createElement("div", {
+    }, "in ", forfeitLeft, " sec, you win the game")), /*#__PURE__*/React.createElement("div", {
       style: {
         position: "absolute",
         left: 0,
