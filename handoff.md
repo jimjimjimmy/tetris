@@ -3,83 +3,91 @@
 ## What this is
 Personal 2-player mobile Tetris (`jimjimjimmy/tetris`), Capacitor iOS wrap.
 Generated on the CODE machine (`/Users/jimmyche/.../Dropbox/.../Tetris`).
-This session focused on the online (2 Players) flow polish + the iOS keyboard
-saga; a parallel background session ("forfeit timer") landed alongside it.
+This session: swapped in the new ARCH RIVAL logo lockup and removed the now-dead
+`@capacitor/keyboard` plugin. Both committed + pushed.
 
 ## Current state
-HEAD = `a926206`; footer/APP_COMMIT = `10d3490`. Local == origin/main (pushed).
+HEAD = `aa122e2`; footer/APP_COMMIT = `1cbe0bd`. Local == origin/main (pushed).
 
-Landed since the keyboard fix (`1fca9ed`), newest first:
-- **In-app numeric keypad** (`ca8ec53`, `96cd7ad`): the room-code text `<input>`
-  was REPLACED with an on-screen keypad (Figma Enter Code `385:6362`),
-  auto-connects on the 4th digit. This removes the OS keyboard from the code
-  screen entirely -> the whole "iOS keyboard slides / Back button moves up"
-  problem is now moot there.
-- **Pre-match START IN countdown** (`9920fbc`) before the game begins; also runs
-  on rematch (`c1522e0`). This is the 377:6670 countdown that was requested.
-- **Auto-forfeit on pause** (`1d0cd8e`, `4f0bcd3`, `69c01a5`, `723f536`,
-  `10d3490`): online pause was RE-ENABLED (reverses the earlier MVP "hide pause
-  in 2P"), with an auto-forfeit timer + countdown shown to both players and
-  POV-worded captions. This was the `task_aeeecb81` background task.
-- **Optical centering** (`11bbc4b`, `db19e9a`) of standalone letter-spaced text
-  + the shared room code / 2P share-screen labels.
-- Earlier this session (still in history): numeric room codes, Room-Full
-  screen, opponent-paused overlay (376:6580), online best-of-3 "Play Game N",
-  and the native `@capacitor/keyboard` resize:none fix (`5623347`).
+Landed this session (newest first):
+- **`aa122e2`** - stamp bump (APP_COMMIT `1cbe0bd`, build date `2026-07-04T21:57:14`).
+- **`1cbe0bd`** - two changes in one content commit:
+  - **ARCH RIVAL logo** (Figma `390:7389`, "Arch Rival" variant in Start Screen
+    `390:7258`): `RivalLogo` is now a 220 x 69.805 two-path inline SVG - grey
+    "ARCH" (white `#ffffff` @ `fillOpacity 0.3`, top) stacked over orange "RIVAL"
+    (`#FF6600`, bottom). Replaced the old single-line 220 x 31.95 wordmark.
+    Wrapper `top` moved 391 -> 346 on BOTH the Single + 2 Players tabs. Verified
+    pixel-exact in the browser preview (measured top 346, w 220, h 69.8,
+    centeredX 201). DIFF vs Figma: none.
+  - **Removed `@capacitor/keyboard`**: the plugin dep (package.json /
+    package-lock.json), the `Keyboard: { resize: "none" }` block in
+    `capacitor.config.json`, the native keyboard-pin `useEffect` in `app.jsx`,
+    and the dead input-focus early-return in `FullscreenGame.recalc`. All dead
+    since the Enter-Code screen switched to the in-app numeric keypad (no OS
+    keyboard is ever summoned). App boots clean, no console errors.
 
-Reconciliation point: the native `@capacitor/keyboard` fix is likely now
-REDUNDANT on the code screen since the in-app keypad means no OS keyboard is
-summoned there. It's harmless (guarded) but see Open questions.
+## Gandalf build note (IMPORTANT - dep removed this session)
+Gandalf already pulled + ran `cap sync` successfully: `cap sync` correctly shows
+only 3 plugins (haptics, splash-screen, status-bar) - `@capacitor/keyboard` is
+gone from the iOS project, so the build is fine. BUT the `npm install` step
+errored (`EINVALIDTAGNAME`) because the pasted command had an inline `#` comment
+and zsh interactive does NOT treat `#` as a comment - npm read `#` as a package
+arg. No harm done (npm rejected before touching node_modules), but a stale
+`node_modules/@capacitor/keyboard` folder is still on disk (unreferenced, does
+not affect the build). To tidy it, re-run `npm install` with NO inline comments.
 
-## Files changed (areas touched across the recent commits)
+## Files changed this session
 | File | Status | What changed |
 |------|--------|-------------|
-| preview/app.jsx | committed | Source of truth: keypad, countdown, forfeit, pause, optical centering, keyboard guards |
+| preview/app.jsx | committed | New ARCH RIVAL `RivalLogo` SVG; both logo wrappers top 391->346; removed keyboard effect + recalc input guard; stamp bump |
 | preview/app.js | committed | Compiled output (npm run build) |
-| preview/index.html | committed | #root align-items flex-start (top-anchor) + caret/ellipsis keyframes |
-| capacitor.config.json | committed | Added `Keyboard: { resize: "none" }` |
-| package.json / package-lock.json | committed | Added `@capacitor/keyboard@^8.0.5` |
-| CLAUDE.md | committed | Notes for keyboard-stable frame, forfeit, ROWS_2P/BDY_2P fix |
-| store-screenshots/ | UNTRACKED | 01-gameplay / 02-countdown / 03-keypad PNGs (App Store) - not committed |
+| capacitor.config.json | committed | Removed `Keyboard: { resize: "none" }` |
+| package.json / package-lock.json | committed | Removed `@capacitor/keyboard` dep |
+| CLAUDE.md | committed | Updated `RivalLogo` entry to the Arch Rival lockup (220x69.805, top 346) |
+| store-screenshots/ | UNTRACKED | 3 App Store PNGs (01-gameplay/02-countdown/03-keypad), now flattened to no-alpha, 1320x2868. Left untracked. |
 
 ## Uncommitted work
-Only `store-screenshots/` is untracked (3 App Store PNGs). Not committed - it's
-a pending decision (see below). Tree is otherwise clean.
+Only `store-screenshots/` is untracked. Tree is otherwise clean.
 
 ## Open questions / decisions pending
-1. `store-screenshots/` - commit to the repo, or add to .gitignore? (App Store
-   assets; decide if they belong in git.)
-2. `@capacitor/keyboard` + `resize:"none"` - now that the code screen uses an
-   in-app keypad (no OS keyboard), is the plugin still needed anywhere? If no
-   other screen uses a real text input it can be removed (or left as harmless
-   insurance). Removing = dep change + Gandalf npm install + cap sync.
-3. Device confirmation still pending: in-app keypad + START IN countdown +
-   auto-forfeit have NOT been eyeball-confirmed on a real device this session.
+1. `store-screenshots/` - still untracked. Decided this session that git vs
+   gitignore does NOT affect App Store upload (you upload via App Store Connect
+   / Transporter from disk). Leaving untracked. Revisit only if you want them
+   versioned for Gandalf.
+2. App Store screenshots: all 3 are 1320x2868 (iPhone 6.9" required size) and
+   were flattened to strip the macOS alpha channel (Apple wants no alpha).
+   Ready to upload. If App Store Connect asks for iPad shots, either add 13"
+   iPad screenshots (2064x2752 / 2048x2732) or set `TARGETED_DEVICE_FAMILY = 1`
+   (iPhone-only) so it stops asking - NOT yet checked which the project uses.
 
 ## What to do next
-1. Rebuild on Gandalf and device-verify: (a) Enter-Code screen uses the in-app
-   keypad with NO OS keyboard / no Back-button movement; (b) START IN countdown
-   plays before the match and on rematch; (c) pause -> opponent sees forfeit
-   countdown, and a timed-out pause forfeits correctly (2-device test).
-2. Resolve the two decisions above (store-screenshots gitignore; keep/remove
-   @capacitor/keyboard).
-3. Then continue remaining online polish: Connection-Failed/timeout state was
-   proposed but not built; reconnect + rematch-consent were deferred.
+1. On Gandalf: `npm install` (clean, no comment) to prune the leftover
+   `node_modules/@capacitor/keyboard`, then rebuild to Shadowfax and confirm the
+   ARCH RIVAL logo shows on the start screen.
+2. Device-verify the earlier-session online flow that was never eyeballed on
+   hardware: in-app keypad, START IN countdown, 2-device pause -> forfeit.
+3. Continue online polish: Connection-Failed / timeout state (proposed, not
+   built); reconnect + rematch-consent (deferred).
 
 ## How to resume
+On the CODE machine (this one):
 ```bash
-cd ~/Developer/tetris   # Gandalf build clone (NOT the Dropbox copy)
+cd "/Users/jimmyche/Library/CloudStorage/Dropbox/04 Projects/AI Shared/Tetris"
 git pull
-npm install             # required: @capacitor/keyboard is a new dep this session
-npx cap sync ios
-npx cap open ios        # build to "Shadowfax"
+# edit preview/app.jsx -> npm run build -> bump APP_COMMIT + APP_BUILD_DATE -> build again -> commit BOTH
 ```
-On the code machine: edit `preview/app.jsx`, `npm run build`, bump
-APP_COMMIT/APP_BUILD_DATE, commit BOTH app.jsx + app.js.
+On Gandalf (build-only clone, NOT the Dropbox copy):
+```bash
+cd ~/Developer/tetris
+git pull
+npm install
+npx cap sync ios
+npx cap open ios   # build to Shadowfax
+```
 
 ## Machine / account notes
 - Generated on the CODE machine. Gandalf is build-only (`~/Developer/tetris`).
-- Personal repo - push with the explicit token:
+- Personal repo - push with the explicit token form:
 ```bash
 GITHUB_TOKEN=$(gh auth token --hostname github.com -u jimjimjimmy 2>/dev/null)
 git push "https://jimjimjimmy:${GITHUB_TOKEN}@github.com/jimjimjimmy/tetris.git" main
