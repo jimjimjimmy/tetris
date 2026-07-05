@@ -1,4 +1,4 @@
-# Arch Rival - App Store Submission Worksheet
+# Rrival - App Store Submission Worksheet
 
 Copy-paste sheet for filling out App Store Connect. All fields approved 2026-07-04.
 
@@ -6,11 +6,11 @@ Copy-paste sheet for filling out App Store Connect. All fields approved 2026-07-
 
 | Field | Value |
 |-------|-------|
-| App Name | `Arch Rival` |
+| App Name | `Rrival` |
 | Subtitle | `Two-player territorial Tetris` |
 | Bundle ID | `com.typographic.drift` |
 | Primary Category | Games > Puzzle |
-| Secondary Category | Games > Arcade |
+| Secondary Category | Games > Casual |
 | Content Rights | Does NOT contain third-party content |
 
 ## Version 1.0 Information
@@ -24,7 +24,7 @@ Play head-to-head with a friend using a 4-digit room code, or take on the AI. Cl
 ### Description
 
 ```
-Arch Rival is a two-player Tetris duel on a shared board.
+Rrival is a two-player Tetris duel on a shared board.
 
 Instead of racing for high scores, you're fighting for territory. Each row you clear pushes the boundary line into your opponent's side of the board. Squeeze them to zero rows to win. They're doing the same to you.
 

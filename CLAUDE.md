@@ -690,18 +690,18 @@ The top line is the truth (that is what is on GitHub). If git ever prints
 ### Components
 - `NextPieceDisplay` - renders upcoming P1 piece using 18px cells. Shows "NEXT" label above.
 - `CompactNext` - compact piece preview for 37px NEXT strips. 7px cells, no text label.
-- `RivalLogo` - the ARCH RIVAL lockup (inline SVG, 220 x 69.805). Two stacked
-  paths: "ARCH" (white `#ffffff` @ `fillOpacity 0.3`, top, viewBox y 0-21.8)
-  over "RIVAL" (`#FF6600`, bottom, viewBox y 38-69.8). This is the "Arch Rival"
-  variant from Figma `390:7389` (in Start Screen `390:7258`); it REPLACED the
-  earlier single-line 220 x 31.95 orange RIVAL wordmark. SVG was fetched from
-  the Figma MCP asset server and inlined (no localhost URL committed).
-  Positioned via a centered flex container at **top 346** on BOTH the Single +
-  2 Players tabs (measured exact: top 346, w 220, h 69.8, centeredX 201). Rows
+- `RivalLogo` - the RVAL wordmark (inline SVG, 285.405 x 48, viewBox
+  `284.114 x 46.7568`, single `#FF6600` path). Figma `396:7487` (node
+  `I396:7618;397:7674`). REPLACED the Arch Rival two-line lockup on
+  2026-07-04 to match the new App Store name (RVAL). Positioned via a
+  centered flex container at **top 367** on BOTH the Single + 2 Players
+  tabs (measured exact: top 367, w 285.39, h 48, centeredX 201). Rows
   below are unchanged (mode toggle 448, direction 514, difficulty 618,
-  icons 754). Game name is RIVAL, but the app id (`com.typographic.drift`) and
-  Capacitor `appName` were NOT renamed - visual wordmark only. Earlier history:
-  the wordmark replaced the original "drift" text (nodes `hidden` in design).
+  icons 754). App id (`com.typographic.drift`) and Capacitor `appName`
+  (`Rival`) are UNCHANGED - visual wordmark only. History: RVAL replaced
+  the ARCH RIVAL lockup (220x69.805 two-path at top 346), which itself
+  replaced the earlier single-line 220 x 31.95 RIVAL wordmark, which
+  replaced the original "drift" text.
 - 2 Players room code: the large code letters (`fontSize:40`) render at
   `opacity:0.5` per the updated `269:7487` design.
 

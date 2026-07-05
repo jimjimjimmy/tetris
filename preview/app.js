@@ -836,35 +836,23 @@ const ArrowL = ({
   d: "M5.09091 10.1818L0 5.09091L5.09091 0L5.96591 0.863636L2.36364 4.46591H11.6932V5.71591H2.36364L5.96591 9.30682L5.09091 10.1818Z",
   fill: "white"
 }));
-// RIVAL wordmark logo (Figma 352:6358 / 352:6375). Replaces the old "drift"
-// text on any screen that showed the game name. 220 x 31.95, #FF6600.
-// Arch Rival lockup (Figma 390:7389 "Arch Rival" variant, 220 x 69.805).
-// Two paths: "ARCH" (white @ 0.3 opacity, top) stacked over "RIVAL" (#FF6600).
+// RVAL wordmark (Figma 396:7487, node I396:7618;397:7674). Single-line
+// orange wordmark at 285.405 x 48 (viewBox 284.114 x 46.7568), #FF6600.
+// Replaced the Arch Rival two-line lockup on 2026-07-04 to match the new
+// App Store name.
 const RivalLogo = () => /*#__PURE__*/React.createElement("svg", {
-  width: "220",
-  height: "69.8047",
-  viewBox: "0 0 220 69.8047",
+  width: "285.405",
+  height: "48",
+  viewBox: "0 0 284.114 46.7568",
   fill: "none",
   style: {
     display: "block"
   },
   xmlns: "http://www.w3.org/2000/svg"
-}, /*#__PURE__*/React.createElement("g", {
-  clipPath: "url(#clip0_archrival)"
 }, /*#__PURE__*/React.createElement("path", {
-  d: "M78.3921 21.8359H72.6704L61.1851 7.27148L49.6987 21.8359H43.978L61.1851 0L78.3921 21.8359ZM110.928 4.58594H92.1929V21.8359H87.6938V0.109375H110.928V4.58594ZM143.486 0.109375V4.58594H124.728V17.3379H143.486V21.8359H120.23V0.109375H143.486ZM157.287 8.66895H171.523V0.109375H176.021V8.66895H176.022V13.167H176.021V21.8359H171.523V13.167H157.287V21.8359H152.788V0.109375H157.287V8.66895Z",
-  fill: "#ffffff",
-  fillOpacity: "0.3"
-}), /*#__PURE__*/React.createElement("path", {
-  d: "M97.7383 59.2139L114.465 37.9893H122.784L97.7383 69.8047L72.6709 37.9893H81.0117L97.7383 59.2139ZM33.8457 44.54H6.55078V69.6523H0V37.9893H33.8457V44.54ZM56.8613 37.9893V69.6523H50.3105V37.9893H56.8613ZM192.705 63.1016H220V69.6523H186.154V37.9893H192.705V63.1016ZM172.593 69.6514H164.252L147.547 48.4268L130.82 69.6514H122.479L147.547 37.8359L172.593 69.6514Z",
+  d: "M81.6094 0.223633L105.98 31.2568L130.351 0.223633H142.473L105.98 46.7568L69.4561 0.223633H81.6094ZM49.3135 9.81152H9.54492V46.5654H0V0.223633H49.3135V9.81152ZM215.043 46.5654H202.89L178.551 15.501L154.181 46.5654H142.027L178.551 0L215.043 46.5654ZM244.345 36.9775H284.114V46.5654H234.8V0.223633H244.345V36.9775Z",
   fill: "#FF6600"
-})), /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("clipPath", {
-  id: "clip0_archrival"
-}, /*#__PURE__*/React.createElement("rect", {
-  width: "220",
-  height: "69.8047",
-  fill: "white"
-}))));
+}));
 function InfoIcon({
   size = ICON_SIZE
 }) {
@@ -4042,7 +4030,7 @@ function TetrisGame2P() {
           position: "absolute",
           left: 0,
           right: 0,
-          top: 346,
+          top: 367,
           display: "flex",
           justifyContent: "center",
           ...di(0)
@@ -4213,7 +4201,7 @@ function TetrisGame2P() {
         position: "absolute",
         left: 0,
         right: 0,
-        top: 346,
+        top: 367,
         display: "flex",
         justifyContent: "center",
         ...di(0)
