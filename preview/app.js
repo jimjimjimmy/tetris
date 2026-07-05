@@ -5194,7 +5194,7 @@ function TetrisGame2P() {
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
-        gap: 12
+        gap: 6
       }
     }, /*#__PURE__*/React.createElement("span", {
       style: {
@@ -5206,7 +5206,16 @@ function TetrisGame2P() {
         fontVariantNumeric: "tabular-nums",
         marginRight: "-2px"
       }
-    }, "Will forfeit game in ", forfeitLeft, " sec")) : /*#__PURE__*/React.createElement("div", {
+    }, "Resume in ", forfeitLeft, " sec or"), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 11,
+        fontWeight: 400,
+        letterSpacing: "2px",
+        opacity: 0.3,
+        textTransform: "uppercase",
+        marginRight: "-2px"
+      }
+    }, "game will be forfeited")) : /*#__PURE__*/React.createElement("div", {
       style: {
         position: "absolute",
         left: 0,
@@ -5383,9 +5392,20 @@ function TetrisGame2P() {
         right: 0,
         top: 496,
         display: "flex",
-        justifyContent: "center"
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 6
       }
     }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 11,
+        fontWeight: 400,
+        letterSpacing: "2px",
+        opacity: 0.3,
+        textTransform: "uppercase",
+        marginRight: "-2px"
+      }
+    }, "If opponent doesn't resume"), /*#__PURE__*/React.createElement("span", {
       style: {
         fontSize: 11,
         fontWeight: 400,
@@ -5395,7 +5415,7 @@ function TetrisGame2P() {
         fontVariantNumeric: "tabular-nums",
         marginRight: "-2px"
       }
-    }, "Opponent will forfeit in ", forfeitLeft, " sec")), /*#__PURE__*/React.createElement("div", {
+    }, "in ", forfeitLeft, " sec, game will be forfeited")), /*#__PURE__*/React.createElement("div", {
       style: {
         position: "absolute",
         left: 0,

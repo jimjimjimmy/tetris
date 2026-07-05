@@ -3824,9 +3824,10 @@ function TetrisGame2P() {
             {state.online ? (
               <div style={{
                 position:"absolute",left:0,right:0,top:496,
-                display:"flex",flexDirection:"column",alignItems:"center",gap:12,
+                display:"flex",flexDirection:"column",alignItems:"center",gap:6,
               }}>
-                <span style={{fontSize:11,fontWeight:400,letterSpacing:"2px",opacity:0.3,textTransform:"uppercase",fontVariantNumeric:"tabular-nums",marginRight:"-2px"}}>Will forfeit game in {forfeitLeft} sec</span>
+                <span style={{fontSize:11,fontWeight:400,letterSpacing:"2px",opacity:0.3,textTransform:"uppercase",fontVariantNumeric:"tabular-nums",marginRight:"-2px"}}>Resume in {forfeitLeft} sec or</span>
+                <span style={{fontSize:11,fontWeight:400,letterSpacing:"2px",opacity:0.3,textTransform:"uppercase",marginRight:"-2px"}}>game will be forfeited</span>
               </div>
             ) : (
               <div style={{
@@ -3909,9 +3910,10 @@ function TetrisGame2P() {
                 win is coming if the opponent doesn't resume in time. */}
             <div style={{
               position:"absolute",left:0,right:0,top:496,
-              display:"flex",justifyContent:"center",
+              display:"flex",flexDirection:"column",alignItems:"center",gap:6,
             }}>
-              <span style={{fontSize:11,fontWeight:400,letterSpacing:"2px",opacity:0.3,textTransform:"uppercase",fontVariantNumeric:"tabular-nums",marginRight:"-2px"}}>Opponent will forfeit in {forfeitLeft} sec</span>
+              <span style={{fontSize:11,fontWeight:400,letterSpacing:"2px",opacity:0.3,textTransform:"uppercase",marginRight:"-2px"}}>If opponent doesn't resume</span>
+              <span style={{fontSize:11,fontWeight:400,letterSpacing:"2px",opacity:0.3,textTransform:"uppercase",fontVariantNumeric:"tabular-nums",marginRight:"-2px"}}>in {forfeitLeft} sec, game will be forfeited</span>
             </div>
             {/* Menu at 599px (Figma 376:6667) -- leaves the match. */}
             <div style={{position:"absolute",left:0,right:0,top:599,display:"flex",justifyContent:"center"}}>
