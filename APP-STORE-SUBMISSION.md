@@ -43,7 +43,7 @@ FEATURES
 - Five AI difficulty levels in solo.
 - No accounts, no ads, no tracking.
 
-For questions or feedback: arch.rival@typographic.com
+For questions or feedback: rval@typographic.com
 ```
 
 ### Keywords (100 chars max)
@@ -104,7 +104,7 @@ After the first submission answers this once, it will not re-prompt on subsequen
 |-------|-------|
 | First name | Jimmy |
 | Last name | Chen |
-| Email | `arch.rival@typographic.com` |
+| Email | `rval@typographic.com` |
 | Phone | (fill in) |
 | Demo account | not required |
 
@@ -121,7 +121,7 @@ Two-player multiplayer connects via a 4-digit room code. To test the ONLINE mode
 - [x] App icon 1024x1024, no alpha
 - [x] Splash 2732x2732, no alpha
 - [x] Support + Privacy pages live on GitHub Pages
-- [x] Support email `arch.rival@typographic.com` receiving mail
+- [x] Support email `rval@typographic.com` receiving mail
 - [ ] Gandalf rebuild + Xcode General panel confirms iPad slot is gone
 - [ ] Archive + upload via Xcode Cloud or Xcode Organizer to TestFlight
 - [ ] Bump `CURRENT_PROJECT_VERSION` before each TestFlight upload
