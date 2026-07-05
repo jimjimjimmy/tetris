@@ -4053,6 +4053,7 @@ function TetrisGame2P() {
           fontSize: 40,
           fontWeight: 300,
           letterSpacing: "20px",
+          marginRight: "-20px",
           color: "#fff",
           opacity: 0.5,
           textTransform: "uppercase"
@@ -4068,7 +4069,15 @@ function TetrisGame2P() {
           fontWeight: 600,
           textTransform: "uppercase"
         }
-      }, /*#__PURE__*/React.createElement("span", null, "Share your code"), /*#__PURE__*/React.createElement("span", null, "with opponent"))), /*#__PURE__*/React.createElement("div", {
+      }, /*#__PURE__*/React.createElement("span", {
+        style: {
+          marginRight: "-3px"
+        }
+      }, "Share your code"), /*#__PURE__*/React.createElement("span", {
+        style: {
+          marginRight: "-3px"
+        }
+      }, "with opponent"))), /*#__PURE__*/React.createElement("div", {
         style: {
           position: "absolute",
           left: 0,
@@ -4084,6 +4093,7 @@ function TetrisGame2P() {
         style: {
           fontSize: 10,
           letterSpacing: "5px",
+          marginRight: "-5px",
           fontWeight: 600,
           opacity: 0.3,
           textTransform: "uppercase"
@@ -4108,6 +4118,7 @@ function TetrisGame2P() {
         style: {
           fontSize: 12,
           letterSpacing: "3.6px",
+          marginRight: "-3.6px",
           fontWeight: 400,
           opacity: 0.5,
           textTransform: "uppercase",

@@ -2949,7 +2949,7 @@ function TetrisGame2P() {
             ...di(1),
           }}>
             <span style={{
-              fontSize:40, fontWeight:300, letterSpacing:"20px",
+              fontSize:40, fontWeight:300, letterSpacing:"20px", marginRight:"-20px",
               color:"#fff", opacity:0.5, textTransform:"uppercase",
             }}>{myCode}</span>
             <div style={{
@@ -2957,8 +2957,8 @@ function TetrisGame2P() {
               opacity:0.3, fontSize:10, letterSpacing:"3px",
               fontWeight:600, textTransform:"uppercase",
             }}>
-              <span>Share your code</span>
-              <span>with opponent</span>
+              <span style={{marginRight:"-3px"}}>Share your code</span>
+              <span style={{marginRight:"-3px"}}>with opponent</span>
             </div>
           </div>
           {/* OR + JOIN WITH CODE at 611px */}
@@ -2967,7 +2967,7 @@ function TetrisGame2P() {
             display:"flex", flexDirection:"column", alignItems:"center", gap:24,
             ...di(2),
           }}>
-            <span style={{fontSize:10,letterSpacing:"5px",fontWeight:600,opacity:0.3,textTransform:"uppercase"}}>or</span>
+            <span style={{fontSize:10,letterSpacing:"5px",marginRight:"-5px",fontWeight:600,opacity:0.3,textTransform:"uppercase"}}>or</span>
             <span
               onPointerDown={()=>{
                 setJoinCode("");
@@ -2983,7 +2983,7 @@ function TetrisGame2P() {
               }}
               onTouchStart={e=>e.stopPropagation()}
               style={{
-                fontSize:12, letterSpacing:"3.6px", fontWeight:400,
+                fontSize:12, letterSpacing:"3.6px", marginRight:"-3.6px", fontWeight:400,
                 opacity:0.5, textTransform:"uppercase", cursor:"pointer",
               }}
             >Join with Code</span>
