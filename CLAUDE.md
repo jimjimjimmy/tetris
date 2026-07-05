@@ -977,9 +977,8 @@ All scenarios PASS. Two bugs found and fixed during the run:
 - Disconnect during countdown: opponent_left / ws.onclose now also fire for
   phase `"countdown"`; the disconnect resolves to the "Connection Lost" overlay
   once the countdown flips to playing (<=5s), so no play-vs-ghost.
-- Applies to the INITIAL match ("ready") only; REMATCH still starts instantly
-  (buildFreshOnline -> playing). Extend to rematch by routing it through the
-  same phase if desired.
+- Applies to BOTH the initial match ("ready") AND rematch -- each routes
+  through the "countdown" phase so every online game starts in lockstep.
 - Verified live (two-iframe harness): host waits on share screen until P2 joins,
   then the countdown shows "START IN 5..4..3..2..1" and flips to playing;
   number sequence sampled 5->1; visual matches Figma 377:6670 (DIFF none).

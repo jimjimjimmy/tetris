@@ -2479,7 +2479,10 @@ function TetrisGame2P() {
         setP1Wins(setWasClinched ? 0 : np1);
         setP2Wins(setWasClinched ? 0 : np2);
         if (settings.soundFX) sfx.bgmPlay(settings.volume / 5);
-        setState(() => buildFreshOnline(msg.seed, onlineRoleRef.current));
+        // Rematch runs the same shared "START IN N" countdown as the initial
+        // match (parity) so both phones restart in lockstep.
+        setState(() => ({ ...buildFreshOnline(msg.seed, onlineRoleRef.current),
+                          phase: "countdown", countdownLeft: COUNTDOWN_SECS }));
       } else if (msg.k === "mv") {
         // Opponent's piece moved -- render it directly on our board.
         setState(s => {
@@ -2970,16 +2973,10 @@ function TetrisGame2P() {
             <span style={{fontSize:10,letterSpacing:"5px",marginRight:"-5px",fontWeight:600,opacity:0.3,textTransform:"uppercase"}}>or</span>
             <span
               onPointerDown={()=>{
+                // Go to the Enter-Code screen (on-screen keypad -- no OS
+                // keyboard, so no focus()/flushSync needed anymore).
                 setJoinCode("");
-                // Land on the Enter-Code screen already focused so the keyboard
-                // slides straight up. iOS only opens the keyboard for a focus()
-                // made INSIDE the user gesture, so mount the screen synchronously
-                // (flushSync) and focus the field in this same tap -- a navTo
-                // delay would drop the gesture activation and the keyboard would
-                // stay down. The Enter-Code content still animates in via di().
-                ReactDOM.flushSync(()=>setState(s=>({...s,phase:"online"})));
-                const inp=document.getElementById("join-code-input");
-                if(inp) inp.focus();
+                setState(s=>({...s,phase:"online"}));
               }}
               onTouchStart={e=>e.stopPropagation()}
               style={{
