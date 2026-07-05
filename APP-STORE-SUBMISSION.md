@@ -1,4 +1,4 @@
-# Rrival - App Store Submission Worksheet
+# RVAL - App Store Submission Worksheet
 
 Copy-paste sheet for filling out App Store Connect. All fields approved 2026-07-04.
 
@@ -6,7 +6,7 @@ Copy-paste sheet for filling out App Store Connect. All fields approved 2026-07-
 
 | Field | Value |
 |-------|-------|
-| App Name | `Rrival` |
+| App Name | `RVAL` |
 | Subtitle | `Two-player territorial Tetris` |
 | Bundle ID | `com.typographic.drift` |
 | Primary Category | Games > Puzzle |
@@ -24,7 +24,7 @@ Play head-to-head with a friend using a 4-digit room code, or take on the AI. Cl
 ### Description
 
 ```
-Rrival is a two-player Tetris duel on a shared board.
+RVAL is a two-player Tetris duel on a shared board.
 
 Instead of racing for high scores, you're fighting for territory. Each row you clear pushes the boundary line into your opponent's side of the board. Squeeze them to zero rows to win. They're doing the same to you.
 
