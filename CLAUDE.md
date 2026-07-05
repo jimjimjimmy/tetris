@@ -690,17 +690,18 @@ The top line is the truth (that is what is on GitHub). If git ever prints
 ### Components
 - `NextPieceDisplay` - renders upcoming P1 piece using 18px cells. Shows "NEXT" label above.
 - `CompactNext` - compact piece preview for 37px NEXT strips. 7px cells, no text label.
-- `RivalLogo` - the RIVAL wordmark (inline SVG, 220 x 31.95, #FF6600). Replaced
-  the old "drift" text wordmark on the start screen (both Single + 2 Players
-  tabs). Figma: `352:6358` (@ `247:5857`) / `352:6375` (@ `269:7487`); the old
-  `drift` text nodes are `hidden` in the design. SVG was fetched from the Figma
-  MCP asset server and inlined (no localhost URL committed). Positioned via a
-  centered flex container at **top 391** on BOTH tabs. The Single screen
-  (`247:5857`) is the canonical reference for ALL Rival placement - the
-  2 Players frame's slightly different Y was a design slip, so both tabs use
-  391 for consistency (no jump on tab switch). Game name is now RIVAL, but the app id
-  (`com.typographic.drift`) and Capacitor `appName` were NOT renamed - visual
-  wordmark only.
+- `RivalLogo` - the ARCH RIVAL lockup (inline SVG, 220 x 69.805). Two stacked
+  paths: "ARCH" (white `#ffffff` @ `fillOpacity 0.3`, top, viewBox y 0-21.8)
+  over "RIVAL" (`#FF6600`, bottom, viewBox y 38-69.8). This is the "Arch Rival"
+  variant from Figma `390:7389` (in Start Screen `390:7258`); it REPLACED the
+  earlier single-line 220 x 31.95 orange RIVAL wordmark. SVG was fetched from
+  the Figma MCP asset server and inlined (no localhost URL committed).
+  Positioned via a centered flex container at **top 346** on BOTH the Single +
+  2 Players tabs (measured exact: top 346, w 220, h 69.8, centeredX 201). Rows
+  below are unchanged (mode toggle 448, direction 514, difficulty 618,
+  icons 754). Game name is RIVAL, but the app id (`com.typographic.drift`) and
+  Capacitor `appName` were NOT renamed - visual wordmark only. Earlier history:
+  the wordmark replaced the original "drift" text (nodes `hidden` in design).
 - 2 Players room code: the large code letters (`fontSize:40`) render at
   `opacity:0.5` per the updated `269:7487` design.
 

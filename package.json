@@ -16,7 +16,6 @@
     "@capacitor/core": "latest",
     "@capacitor/haptics": "latest",
     "@capacitor/ios": "latest",
-    "@capacitor/keyboard": "^8.0.5",
     "@capacitor/splash-screen": "latest",
     "@capacitor/status-bar": "latest"
   },

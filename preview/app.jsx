@@ -660,10 +660,20 @@ const ArrowL = ({opacity=1}) => (
 );
 // RIVAL wordmark logo (Figma 352:6358 / 352:6375). Replaces the old "drift"
 // text on any screen that showed the game name. 220 x 31.95, #FF6600.
+// Arch Rival lockup (Figma 390:7389 "Arch Rival" variant, 220 x 69.805).
+// Two paths: "ARCH" (white @ 0.3 opacity, top) stacked over "RIVAL" (#FF6600).
 const RivalLogo = () => (
-  <svg width="220" height="31.9463" viewBox="0 0 220 31.9463" fill="none"
+  <svg width="220" height="69.8047" viewBox="0 0 220 69.8047" fill="none"
     style={{display:"block"}} xmlns="http://www.w3.org/2000/svg">
-    <path d="M97.7393 21.3555L114.466 0.152344H122.785L97.7393 31.9463L72.6709 0.152344H81.0127L97.7393 21.3555ZM33.8457 6.70312H6.55078V31.8154H0V0.152344H33.8457V6.70312ZM56.8613 0.152344V31.8154H50.3105V0.152344H56.8613ZM172.594 31.8154H164.252L147.548 10.5908L130.821 31.8154H122.479L147.548 0L172.594 31.8154ZM192.705 25.2646H220V31.8154H186.154V0.152344H192.705V25.2646Z" fill="#FF6600"/>
+    <g clipPath="url(#clip0_archrival)">
+      <path d="M78.3921 21.8359H72.6704L61.1851 7.27148L49.6987 21.8359H43.978L61.1851 0L78.3921 21.8359ZM110.928 4.58594H92.1929V21.8359H87.6938V0.109375H110.928V4.58594ZM143.486 0.109375V4.58594H124.728V17.3379H143.486V21.8359H120.23V0.109375H143.486ZM157.287 8.66895H171.523V0.109375H176.021V8.66895H176.022V13.167H176.021V21.8359H171.523V13.167H157.287V21.8359H152.788V0.109375H157.287V8.66895Z" fill="#ffffff" fillOpacity="0.3"/>
+      <path d="M97.7383 59.2139L114.465 37.9893H122.784L97.7383 69.8047L72.6709 37.9893H81.0117L97.7383 59.2139ZM33.8457 44.54H6.55078V69.6523H0V37.9893H33.8457V44.54ZM56.8613 37.9893V69.6523H50.3105V37.9893H56.8613ZM192.705 63.1016H220V69.6523H186.154V37.9893H192.705V63.1016ZM172.593 69.6514H164.252L147.547 48.4268L130.82 69.6514H122.479L147.547 37.8359L172.593 69.6514Z" fill="#FF6600"/>
+    </g>
+    <defs>
+      <clipPath id="clip0_archrival">
+        <rect width="220" height="69.8047" fill="white"/>
+      </clipPath>
+    </defs>
   </svg>
 );
 
@@ -2931,11 +2941,10 @@ function TetrisGame2P() {
           <div style={driftGrid} />
           <BgVignette/>
           <React.Fragment key={`${startTab}-${startKey}`}>
-          {/* RIVAL logo - Single screen (247:5857) is the reference for all
-              Rival placement: top 391, centered. */}
+          {/* Arch Rival logo (Figma 390:7389) - box 220x69.805, top 346, centered. */}
           <div style={{
             position:"absolute", left:0, right:0,
-            top:391,
+            top:346,
             display:"flex", justifyContent:"center",
             ...di(0),
           }}>
@@ -3042,10 +3051,10 @@ function TetrisGame2P() {
         <div style={driftGrid} />
         <BgVignette/>
         <React.Fragment key={`${startTab}-${startKey}`}>
-        {/* RIVAL logo (Figma 352:6358 @ 247:5857, top 391) */}
+        {/* Arch Rival logo (Figma 390:7389) - box 220x69.805, top 346, centered. */}
         <div style={{
           position:"absolute", left:0, right:0,
-          top:391,
+          top:346,
           display:"flex", justifyContent:"center",
           ...di(0),
         }}>
@@ -4136,12 +4145,6 @@ function FullscreenGame() {
     // body bg. Trade-off: vertical play space is always fully visible,
     // which is the priority for a Tetris-style game.
     const recalc = () => {
-      // While a text input is focused the on-screen keyboard shrinks the
-      // viewport; skip the rescale so the frame (and the Back button on the
-      // Enter-Code screen) stay at the same coordinates instead of jumping
-      // smaller when the keyboard slides in. Restored on blur (fires resize).
-      const ae = document.activeElement;
-      if (ae && ae.tagName === "INPUT") return;
       const root = document.getElementById("root");
       const w = (root && root.clientWidth)  || window.innerWidth;
       const h = (root && root.clientHeight) || window.innerHeight;
@@ -4167,43 +4170,6 @@ function FullscreenGame() {
       document.removeEventListener("touchmove", prevent);
       document.removeEventListener("gesturestart", prevent);
     };
-  }, []);
-
-  // Keep the keyboard from moving the frame at the NATIVE level (Capacitor
-  // iOS/WKWebView). resize:"none" makes the keyboard a pure overlay -- the
-  // webview never resizes -- and setScroll(disabled) stops WKWebView's
-  // keyboard-avoidance from scrolling the content up. Together these pin the
-  // frame (and the top-left Back button) regardless of the keyboard, and remove
-  // the re-focus slide glitch the old JS scroll-pin caused by fighting iOS.
-  // Guarded -> no-op in the browser/preview (no Capacitor bridge). resize is
-  // ALSO set in capacitor.config.json; this adds the scroll lock + is a fallback.
-  useEffect(() => {
-    // The Capacitor bridge can inject window.Capacitor.Plugins slightly AFTER
-    // React mounts, so a one-shot call here may run before Keyboard exists and
-    // silently no-op -- leaving the scroll-lock unset and letting iOS scroll
-    // the frame (and the top-left Back button) up when the code input is
-    // focused. Poll briefly until the plugin is present, then apply.
-    const apply = () => {
-      const K = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Keyboard;
-      if (!K) return false;
-      try { K.setResizeMode && K.setResizeMode({ mode: "none" }); } catch (e) {}
-      try { K.setScroll && K.setScroll({ isDisabled: true }); } catch (e) {}
-      // Belt-and-suspenders: if iOS still nudges the webview scroll to reveal
-      // the focused input, snap it back to the top ONCE per keyboard-show. This
-      // is event-driven (not the continuous scroll-pin that caused the old
-      // re-focus slide jank), so it pins the frame without fighting focus.
-      try {
-        K.addListener && K.addListener("keyboardDidShow", () => {
-          window.scrollTo(0, 0);
-          if (document.scrollingElement) document.scrollingElement.scrollTop = 0;
-        });
-      } catch (e) {}
-      return true;
-    };
-    if (apply()) return;
-    let tries = 0;
-    const iv = setInterval(() => { if (apply() || ++tries > 20) clearInterval(iv); }, 100);
-    return () => clearInterval(iv);
   }, []);
 
   return (
