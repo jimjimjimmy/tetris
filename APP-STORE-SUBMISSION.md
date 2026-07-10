@@ -65,8 +65,21 @@ tetris,puzzle,blocks,multiplayer,2player,online,arcade,tetromino,rival,duel,frie
 | Field | Value |
 |-------|-------|
 | Version | `1.0` |
-| Build | `1` (bumps per TestFlight upload) |
+| Build | `3` (bumps per TestFlight upload; shipped as 1.0(3)) |
 | Copyright | `2026 Jimmy Chen` (App Store adds ©) |
+
+### Versioning convention (for future updates)
+
+Marketing version = `CFBundleShortVersionString` in Xcode = what users see.
+
+- **`1.0.x`** = bug fix / hotfix (e.g. `1.0.1`, `1.0.2`)
+- **`1.x`** = feature update (e.g. `1.1`, `1.2`)
+- **`2.0`** = major redesign / breaking change
+
+Rules:
+- Every TestFlight or App Store upload must **increase** the build number (`CURRENT_PROJECT_VERSION`) monotonically. Duplicates are rejected.
+- Marketing version must be **>= the last submitted marketing version** — App Store Connect blocks going backwards.
+- Build number can reset when marketing version bumps (e.g. `1.1(1)` after `1.0(3)`) or keep incrementing (`1.1(4)`). Either is fine — just keep the (version, build) pair unique.
 
 ## Screenshots
 
