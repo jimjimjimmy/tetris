@@ -1,13 +1,18 @@
 # Tetris - Project Context
 
-> **CROSS-MACHINE RULE (read first).** Only ONE Mac commits/pushes: the code
-> machine (`/Users/jimmyche/.../Dropbox/.../Tetris`). **Gandalf is BUILD-ONLY**
-> and works from `~/Developer/tetris` - a clone that lives OUTSIDE Dropbox.
-> On Gandalf: `git pull` to update, `npm install`/`npx cap sync ios` if deps
-> changed, then build to "Shadowfax" in Xcode. Do NOT commit/push from Gandalf,
-> do NOT build from the Dropbox copy, and never run two editing sessions on the
-> same repo. (A git repo inside Dropbox corrupts `.git` - that is why Gandalf
-> re-cloned outside it.) Details in "Cross-machine collaboration" below.
+> **CROSS-MACHINE RULE (read first).** As of 2026-07-10, **Gandalf is the
+> primary machine for RVAL** and does BOTH edit and build. Work happens in the
+> Developer clone `~/Developer/tetris` (OUTSIDE Dropbox - never edit/build from
+> the Dropbox copy, which stays as an archival mirror only). Commit and push
+> from Gandalf using the jimjimjimmy explicit-token form documented below. If
+> another Mac ever needs to touch the repo, hand the writer role off via a
+> handoff.md + `git push` from Gandalf, then `git pull` on the other Mac
+> before it touches anything.
+>
+> (Historical note: prior convention was code machine at
+> `/Users/jimmyche/.../Dropbox/.../Tetris` as the writer and Gandalf as
+> build-only. That flipped after the RVAL 1.0(3) ship, when it became clear
+> Gandalf was doing everything anyway - Xcode, Shadowfax, App Store Connect.)
 
 <!--
   IMPORTANT: KEEP THIS FILE CURRENT
