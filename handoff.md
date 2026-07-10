@@ -56,12 +56,25 @@ stamp).
 
 ## Uncommitted work
 
-1. **Xcode project housekeeping** (`project.pbxproj`, `App.xcscheme`) - cosmetic,
-   from Xcode's "Update to recommended settings" prompt. Zero behavioral impact.
-   Recommend committing next session to keep the tree clean.
-2. **7 gameplay MP4s in `store-screenshots/`** - untracked. Decide what to
-   version. If you keep them in git, add a short commit; if not, add to
-   `.gitignore` under `store-screenshots/*.mp4`.
+None. Both leftovers were resolved in `81fa5ae`:
+- Xcode housekeeping churn (`project.pbxproj`, `App.xcscheme`) committed as-is.
+- Gameplay MP4s added to `.gitignore` (`store-screenshots/*.mp4`). They live
+  on Gandalf disk only; not versioned.
+
+Everything else was already committed. Both clones on Gandalf
+(`~/Developer/tetris` and the Dropbox copy) are at `81fa5ae` clean.
+
+## To any other machine reading this
+
+The **other Mac's clone** (code machine at `/Users/jimmyche/.../Tetris`) will
+be stale until it runs:
+```bash
+cd "/Users/jimmyche/Library/CloudStorage/Dropbox/04 Projects/AI Shared/Tetris"
+git checkout -- .    # discard any stale uncommitted diffs
+git pull
+```
+Per the new convention (top of CLAUDE.md), the other Mac should NOT edit or
+push RVAL from here on - Gandalf is the primary. Sync-only.
 
 ## Open questions / decisions pending
 
