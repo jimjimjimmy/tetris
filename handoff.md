@@ -66,7 +66,7 @@ Everything else was already committed. Both clones on Gandalf
 
 ## To any other machine reading this
 
-The **other Mac's clone** (code machine at `/Users/jimmyche/.../Tetris`) will
+The **other Mac's clone** (MacFQ at `/Users/jimmyche/.../Tetris`) will
 be stale until it runs:
 ```bash
 cd "/Users/jimmyche/Library/CloudStorage/Dropbox/04 Projects/AI Shared/Tetris"
@@ -120,7 +120,7 @@ git pull
 ls store-screenshots/
 ```
 
-On the code machine (Dropbox copy at `/Users/jimmyche/.../Tetris`):
+On the MacFQ (Dropbox copy at `/Users/jimmyche/.../Tetris`):
 ```bash
 cd "/Users/jimmyche/Library/CloudStorage/Dropbox/04 Projects/AI Shared/Tetris"
 git pull

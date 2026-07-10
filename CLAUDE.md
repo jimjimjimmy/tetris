@@ -9,7 +9,7 @@
 > handoff.md + `git push` from Gandalf, then `git pull` on the other Mac
 > before it touches anything.
 >
-> (Historical note: prior convention was code machine at
+> (Historical note: prior convention was MacFQ at
 > `/Users/jimmyche/.../Dropbox/.../Tetris` as the writer and Gandalf as
 > build-only. That flipped after the RVAL 1.0(3) ship, when it became clear
 > Gandalf was doing everything anyway - Xcode, Shadowfax, App Store Connect.)
@@ -326,7 +326,7 @@ Only ONE Mac edits/commits at a time. Hand the baton through GitHub.
 **Mantra: PULL before you start. PUSH when you stop.**
 
 HAND OFF to Gandalf (you want to work on Gandalf):
-1. On the CODE Mac - save + send your latest to GitHub:
+1. On the MacFQ - save + send your latest to GitHub:
    ```bash
    git commit -am "wip" 2>/dev/null; \
    GITHUB_TOKEN=$(gh auth token --hostname github.com -u jimjimjimmy 2>/dev/null) && \
@@ -340,9 +340,9 @@ HAND OFF to Gandalf (you want to work on Gandalf):
    Work there. When done, push from Gandalf using the SAME two lines from step 1
    (run them inside `~/Developer/tetris`).
 
-HAND BACK to the code Mac:
+HAND BACK to the MacFQ:
 1. On GANDALF: push (the commands from step 1, run in `~/Developer/tetris`).
-2. On the CODE Mac: `git pull` BEFORE you touch anything.
+2. On the MacFQ: `git pull` BEFORE you touch anything.
 
 GOLDEN RULES (these prevent every problem we hit):
 - PULL before you start, PUSH when you stop. Every time.
@@ -358,7 +358,7 @@ If you are ever unsure "did my change make it across?":
 git pull && git log --oneline -3
 ```
 The top line is the truth (that is what is on GitHub). If git ever prints
-"CONFLICT", STOP and ask Claude on the code Mac - do not force anything.
+"CONFLICT", STOP and ask Claude on the MacFQ - do not force anything.
 
 ### node_modules is PER-MACHINE - never sync it via Dropbox
 - `node_modules` is gitignored but lives inside the Dropbox folder, so Dropbox
@@ -371,7 +371,7 @@ The top line is the truth (that is what is on GitHub). If git ever prints
 - Fix: each Mac keeps its OWN local node_modules and Dropbox ignores it. Set on
   EACH machine (in the project root):
   `xattr -w com.dropbox.ignored 1 node_modules`
-  (already set on the code machine). Note: setting it removes the shared copy
+  (already set on the MacFQ). Note: setting it removes the shared copy
   from Dropbox + the other Mac, which is fine - run `npm install` locally there.
 - After any pull/sync (or a fresh checkout) on a machine, run
   `npm install && npx cap sync ios` locally before building. Do NOT rely on
