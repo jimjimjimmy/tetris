@@ -1,94 +1,140 @@
-# Handoff - Tetris (Rival) - 2026-07-04
+# Handoff - RVAL (jimjimjimmy/tetris) - 2026-07-09
 
 ## What this is
-Personal 2-player mobile Tetris (`jimjimjimmy/tetris`), Capacitor iOS wrap.
-Generated on the CODE machine (`/Users/jimmyche/.../Dropbox/.../Tetris`).
-This session: swapped in the new ARCH RIVAL logo lockup and removed the now-dead
-`@capacitor/keyboard` plugin. Both committed + pushed.
+
+RVAL - the two-player territorial Tetris app. Personal repo `jimjimjimmy/tetris`,
+Capacitor iOS wrap. This session (on Gandalf, `~/Developer/tetris`): shipped 1.0
+to the App Store, then produced a set of gameplay demo videos for portfolio /
+App Store preview use.
+
+**Status:** version 1.0 (build 3) is LIVE on the App Store (approved, published).
+Bundle ID `com.typographic.drift`, marketing name `RVAL`.
 
 ## Current state
-HEAD = `aa122e2`; footer/APP_COMMIT = `1cbe0bd`. Local == origin/main (pushed).
 
-Landed this session (newest first):
-- **`aa122e2`** - stamp bump (APP_COMMIT `1cbe0bd`, build date `2026-07-04T21:57:14`).
-- **`1cbe0bd`** - two changes in one content commit:
-  - **ARCH RIVAL logo** (Figma `390:7389`, "Arch Rival" variant in Start Screen
-    `390:7258`): `RivalLogo` is now a 220 x 69.805 two-path inline SVG - grey
-    "ARCH" (white `#ffffff` @ `fillOpacity 0.3`, top) stacked over orange "RIVAL"
-    (`#FF6600`, bottom). Replaced the old single-line 220 x 31.95 wordmark.
-    Wrapper `top` moved 391 -> 346 on BOTH the Single + 2 Players tabs. Verified
-    pixel-exact in the browser preview (measured top 346, w 220, h 69.8,
-    centeredX 201). DIFF vs Figma: none.
-  - **Removed `@capacitor/keyboard`**: the plugin dep (package.json /
-    package-lock.json), the `Keyboard: { resize: "none" }` block in
-    `capacitor.config.json`, the native keyboard-pin `useEffect` in `app.jsx`,
-    and the dead input-focus early-return in `FullscreenGame.recalc`. All dead
-    since the Enter-Code screen switched to the in-app numeric keypad (no OS
-    keyboard is ever summoned). App boots clean, no console errors.
+Working / shipped:
+- **App is live in the App Store as RVAL 1.0 (3)** with the RVAL wordmark, all
+  metadata, screenshots, support/privacy pages, categorized Puzzle + Casual.
+- Support email: `rval@typographic.com` (was `arch.rival@...`, swapped mid-session).
+- 7 gameplay demo MP4s in `store-screenshots/` (see file list below). Two of
+  them are flagged with an `OK ` prefix in the filename - those are the user's
+  chosen keepers:
+  - `OK rval-gameplay-3.mp4` (20s, tug-of-war, 6 boundary shifts)
+  - `OK rval-gameplay-5.mp4` (19.4s, dominant local +2 with drama)
 
-## Gandalf build note (IMPORTANT - dep removed this session)
-Gandalf already pulled + ran `cap sync` successfully: `cap sync` correctly shows
-only 3 plugins (haptics, splash-screen, status-bar) - `@capacitor/keyboard` is
-gone from the iOS project, so the build is fine. BUT the `npm install` step
-errored (`EINVALIDTAGNAME`) because the pasted command had an inline `#` comment
-and zsh interactive does NOT treat `#` as a comment - npm read `#` as a package
-arg. No harm done (npm rejected before touching node_modules), but a stale
-`node_modules/@capacitor/keyboard` folder is still on disk (unreferenced, does
-not affect the build). To tidy it, re-run `npm install` with NO inline comments.
+Uncommitted in-tree:
+- `ios/App/App.xcodeproj/project.pbxproj` and `App.xcscheme` have small
+  cosmetic Xcode "recommended settings" churn (`LastUpgradeCheck`
+  `2650`->`2660`, `LastUpgradeVersion` `1600`->`2660`,
+  `TARGETED_DEVICE_FAMILY` string `"1"` -> integer `1`). No behavior change.
+  Safe to commit or leave.
+- 5 of the 7 gameplay MP4s are untracked. Decide: keep in git, gitignore, or
+  move to Dropbox.
+
+Known regressions introduced this session: **none in shipped code**. All AI /
+TEST_SPEED hacks used for video capture were reverted; `preview/app.jsx` and
+`preview/app.js` match the last committed version (`c34429c` + the `24414df`
+stamp).
 
 ## Files changed this session
+
 | File | Status | What changed |
 |------|--------|-------------|
-| preview/app.jsx | committed | New ARCH RIVAL `RivalLogo` SVG; both logo wrappers top 391->346; removed keyboard effect + recalc input guard; stamp bump |
-| preview/app.js | committed | Compiled output (npm run build) |
-| capacitor.config.json | committed | Removed `Keyboard: { resize: "none" }` |
-| package.json / package-lock.json | committed | Removed `@capacitor/keyboard` dep |
-| CLAUDE.md | committed | Updated `RivalLogo` entry to the Arch Rival lockup (220x69.805, top 346) |
-| store-screenshots/ | UNTRACKED | 3 App Store PNGs (01-gameplay/02-countdown/03-keypad), now flattened to no-alpha, 1320x2868. Left untracked. |
+| ios/App/App.xcodeproj/project.pbxproj | committed (`a646516`, `da6c0aa`, `c34429c`) + small unstaged churn | iPhone-only; build number bumped 1 -> 2 -> 3; small Xcode housekeeping (uncommitted) |
+| ios/App/App/Info.plist | committed (`da6c0aa`) | `ITSAppUsesNonExemptEncryption = false` to skip encryption prompt |
+| preview/app.jsx | committed (`b60553b`, `24414df`) | RVAL wordmark component replaced ARCH RIVAL lockup; APP_COMMIT + build date bumped |
+| preview/app.js | committed (`b60553b`, `24414df`) | Rebuilt output |
+| assets/splash.svg | committed (`b60553b`) | Splash wordmark swapped to RVAL |
+| ios/App/App/Assets.xcassets/Splash.imageset/*.png | committed (`b60553b`) | 6 splash PNGs regenerated (2732x2732, no alpha) |
+| ios/App/App/public/app.js | committed (`c34429c`) | `cap sync ios` output - the KEY fix that made build 3 actually ship RVAL (build 2 shipped stale public/) |
+| support.html | committed (`a646516`, `aff6695`) | Created; email later swapped to `rval@typographic.com` |
+| privacy.html | committed (`a646516`, `aff6695`) | Created; same email swap |
+| index.html | committed (`a646516`) | Root redirect title `DRIFT` -> `Arch Rival` |
+| APP-STORE-SUBMISSION.md | committed (`bfe0fc5`, `4bc69cf`, `aff6695`, `eb1762c`) | Worksheet created + iterated (RVAL name, email, versioning conventions) |
+| CLAUDE.md | committed (`b60553b`) | `RivalLogo` entry rewritten for RVAL |
+| store-screenshots/rval-gameplay*.mp4 | UNTRACKED (7 files) | Portfolio / App Store preview clips generated via puppeteer + ffmpeg |
 
 ## Uncommitted work
-Only `store-screenshots/` is untracked. Tree is otherwise clean.
+
+1. **Xcode project housekeeping** (`project.pbxproj`, `App.xcscheme`) - cosmetic,
+   from Xcode's "Update to recommended settings" prompt. Zero behavioral impact.
+   Recommend committing next session to keep the tree clean.
+2. **7 gameplay MP4s in `store-screenshots/`** - untracked. Decide what to
+   version. If you keep them in git, add a short commit; if not, add to
+   `.gitignore` under `store-screenshots/*.mp4`.
 
 ## Open questions / decisions pending
-1. `store-screenshots/` - still untracked. Decided this session that git vs
-   gitignore does NOT affect App Store upload (you upload via App Store Connect
-   / Transporter from disk). Leaving untracked. Revisit only if you want them
-   versioned for Gandalf.
-2. App Store screenshots: all 3 are 1320x2868 (iPhone 6.9" required size) and
-   were flattened to strip the macOS alpha channel (Apple wants no alpha).
-   Ready to upload. If App Store Connect asks for iPad shots, either add 13"
-   iPad screenshots (2064x2752 / 2048x2732) or set `TARGETED_DEVICE_FAMILY = 1`
-   (iPhone-only) so it stops asking - NOT yet checked which the project uses.
+
+1. **Gameplay video final selection.** User marked 2 as "OK" (files prefixed
+   `OK rval-gameplay-3.mp4` and `OK rval-gameplay-5.mp4`). No decision yet on
+   the other 5 - delete, keep as backups, or archive.
+2. **Xcode "Update to recommended settings" prompt** - was flagged during
+   Archive; ignored to avoid interrupting the ship. Should be reviewed and
+   applied when there's time.
+3. **EU trader status** in App Store Connect - the banner was showing on the
+   Apps page. Not blocking US distribution; must be resolved for EU
+   distribution. Answer will be "not a trader" if you're an individual dev.
+4. **Post-mortem: cap sync gap.** Session hit a real problem where build 2
+   uploaded with stale `ios/App/App/public/` because `npx cap sync ios` was
+   not run between the RVAL source swap and Archive. Fixed for build 3 and
+   documented in memory (`feedback_capacitor_cap_sync_before_archive.md`) so
+   the pattern doesn't repeat.
+5. **Xcode Cloud** - is configured (per CLAUDE.md `ci_scripts/`), but we shipped
+   via local Archive from Gandalf, not Cloud. Consider validating Cloud path
+   for future updates.
 
 ## What to do next
-1. On Gandalf: `npm install` (clean, no comment) to prune the leftover
-   `node_modules/@capacitor/keyboard`, then rebuild to Shadowfax and confirm the
-   ARCH RIVAL logo shows on the start screen.
-2. Device-verify the earlier-session online flow that was never eyeballed on
-   hardware: in-app keypad, START IN countdown, 2-device pause -> forfeit.
-3. Continue online polish: Connection-Failed / timeout state (proposed, not
-   built); reconnect + rematch-consent (deferred).
+
+1. **Commit or discard the Xcode housekeeping churn** in `project.pbxproj` and
+   `App.xcscheme`. One-liner commit if you want it clean.
+2. **Decide on the 7 gameplay MP4s** - pick keepers, decide git tracking vs
+   gitignore.
+3. **Resolve the EU trader status banner** in App Store Connect when convenient.
+4. **v1.0.1 plan** (whenever it's needed): for a hotfix, bump
+   `CFBundleShortVersionString` to `1.0.1`, bump `CURRENT_PROJECT_VERSION`
+   to `4`, edit source, `npm run build`, **`npx cap sync ios`**, verify
+   `ios/App/App/public/app.js` has the change, Archive, upload, attach in
+   App Store Connect. (Versioning notes are in `APP-STORE-SUBMISSION.md`.)
+5. **Portfolio case study** - user mentioned wanting to write one up. Gameplay
+   videos are ready; write-up not started.
 
 ## How to resume
-On the CODE machine (this one):
-```bash
-cd "/Users/jimmyche/Library/CloudStorage/Dropbox/04 Projects/AI Shared/Tetris"
-git pull
-# edit preview/app.jsx -> npm run build -> bump APP_COMMIT + APP_BUILD_DATE -> build again -> commit BOTH
-```
-On Gandalf (build-only clone, NOT the Dropbox copy):
+
+On Gandalf (this machine, build-only clone at `~/Developer/tetris`):
 ```bash
 cd ~/Developer/tetris
 git pull
-npm install
-npx cap sync ios
-npx cap open ios   # build to Shadowfax
+ls store-screenshots/
+```
+
+On the code machine (Dropbox copy at `/Users/jimmyche/.../Tetris`):
+```bash
+cd "/Users/jimmyche/Library/CloudStorage/Dropbox/04 Projects/AI Shared/Tetris"
+git pull
+```
+
+For any code edit that changes `preview/app.jsx`:
+```bash
+# edit preview/app.jsx
+npm run build          # writes preview/app.js
+npx cap sync ios       # copies preview/app.js -> ios/App/App/public/app.js  <-- REQUIRED for iOS builds
+grep -o "<expected-string>" ios/App/App/public/app.js  # verify sync landed
+# bump APP_COMMIT + APP_BUILD_DATE per CLAUDE.md two-commit pattern
+# then Archive in Xcode
 ```
 
 ## Machine / account notes
-- Generated on the CODE machine. Gandalf is build-only (`~/Developer/tetris`).
-- Personal repo - push with the explicit token form:
-```bash
-GITHUB_TOKEN=$(gh auth token --hostname github.com -u jimjimjimmy 2>/dev/null)
-git push "https://jimjimjimmy:${GITHUB_TOKEN}@github.com/jimjimjimmy/tetris.git" main
-```
+
+- Session ran on **Gandalf** (`~/Developer/tetris`). Per CLAUDE.md, Gandalf is
+  build-only from the Developer clone, NOT the Dropbox copy. This session did
+  commit and push directly from Gandalf, which worked cleanly.
+- Personal repo; push with the explicit token form:
+  ```bash
+  GITHUB_TOKEN=$(gh auth token --hostname github.com -u jimjimjimmy 2>/dev/null)
+  git push "https://jimjimjimmy:${GITHUB_TOKEN}@github.com/jimjimjimmy/tetris.git" main
+  ```
+- App Store account: Jimmy Chen team ID `32S35BUK9J`. Bundle ID
+  `com.typographic.drift` (unchanged for identity continuity even though
+  marketing name is now RVAL).
+- Support email `rval@typographic.com` is the canonical contact for App Review,
+  support page, and privacy page.
