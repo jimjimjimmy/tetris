@@ -1,2 +1,5 @@
 node_modules/
 .DS_Store
+
+# Portfolio / App Store preview videos (large, keep out of repo)
+store-screenshots/*.mp4
