@@ -180,8 +180,27 @@ GITHUB_TOKEN=$(gh auth token --hostname github.com -u jimjimjimmy 2>/dev/null)
 git push "https://jimjimjimmy:${GITHUB_TOKEN}@github.com/jimjimjimmy/tetris.git" main
 ```
 
+### Version identity - APP_VERSION vs APP_COMMIT / APP_BUILD_DATE (2026-07-10+)
+App went **1.0 / released** on 2026-07-10. `APP_VERSION` now follows
+conventional semver (`MAJOR.MINOR.PATCH`, e.g. `v1.0`, next fix -> `v1.0.1`,
+next feature -> `v1.1`, breaking/relaunch -> `v2.0`) - bump it manually at
+each release milestone, not every commit.
+
+Where each constant shows up is now split:
+- `APP_VERSION` - shown in **Settings** (bottom, centered). Always visible,
+  App Store and internal builds alike. This is the ONLY version info an
+  end user ever sees.
+- `APP_COMMIT` / `APP_BUILD_DATE` - shown at the **start screen bottom-right**
+  (commit hash + relative build time, e.g. "b60553b" / "5d ago"), gated by
+  `SHOW_BUILD_STAMP` (top of `app.jsx`). This is INTERNAL-BUILD-ONLY debug
+  info for confirming which build a device is running:
+  - `SHOW_BUILD_STAMP = true` (default) for dev/preview/internal builds.
+  - `SHOW_BUILD_STAMP = false` **REQUIRED before every official App Store
+    archive/push** - the entire bottom-right row disappears; App Store
+    builds carry no commit hash or build timestamp anywhere in the UI.
+
 ### REQUIRED before every commit - BUILD + update version stamps
-The `APP_COMMIT` / `APP_BUILD_DATE` constants now live in `preview/app.jsx`.
+The `APP_COMMIT` / `APP_BUILD_DATE` constants live in `preview/app.jsx`.
 Any commit that changes the game MUST:
 1. Edit `preview/app.jsx` (the source).
 2. `npm run build` to regenerate `preview/app.js` (the shipped file).
@@ -200,7 +219,12 @@ CRITICAL: never commit `app.jsx` without a matching `npm run build` of
 `app.js`, or the app ships stale code. The old em-dash / localhost pre-commit
 greps now target `preview/app.jsx` (and the compiled `app.js`).
 
-The "3h ago" footer display is driven by APP_BUILD_DATE. If it shows a negative or large number, the date was set in UTC instead of local time.
+The "5d ago" footer display is driven by APP_BUILD_DATE. If it shows a negative or large number, the date was set in UTC instead of local time.
+
+### REQUIRED additional step before an App Store archive
+Set `SHOW_BUILD_STAMP = false` in `preview/app.jsx`, `npm run build`, commit
+BOTH files, archive/submit. Flip it back to `true` afterward (same two-file
+commit) so the next internal/dev build keeps showing the debug stamp.
 
 > This machine has two GitHub accounts (jimjimjimmy personal + JimmyChe_floqast work).
 > Always use the explicit token form above or git will use the wrong account and get a 403.
@@ -626,7 +650,7 @@ The top line is the truth (that is what is on GitHub). If git ever prints
     call sites. No haptics on AI moves (human piece-type change detection).
   - P1_LOCKED_COLOR "#b1b2b3" (bright). P2_LOCKED_COLOR "#4a4a4a" (dark, fully opaque). Human player always renders as bright regardless of side chosen; AI always renders dark. cellColor map computed at render from playerSide state.
   - GHOST_COLOR "rgba(177,178,179,0.075)". LANE_COLOR "rgba(255,255,255,0.10)". Both rgba for background-agnostic theming.
-  - APP_BUILD_DATE constant (ISO datetime string). relTime() helper renders as "Xs ago / Xm ago / Xh ago / Xd ago / Mon D / Mon D, YYYY". Version stamp: font 12, flex space-between, build date on right.
+  - APP_BUILD_DATE constant (ISO datetime string). relTime() helper renders as "Xs ago / Xm ago / Xh ago / Xd ago / Mon D / Mon D, YYYY". Start-screen debug stamp (commit + relTime, flex space-between, bottom-right) is internal-build-only, gated by SHOW_BUILD_STAMP -- see "Version identity" section above. APP_VERSION itself lives in Settings, not here.
   - CompactNext: 7px cells, no label, both 37px NEXT strips.
   - Debug key "0" resets.
   - TEST_SPEED: same global flag. ALWAYS false before push.

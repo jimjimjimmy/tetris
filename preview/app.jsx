@@ -56,14 +56,24 @@ const AI_LEVEL_CONFIG  = {
   5: { randomRatio: 0.00, aiPeriod: 1, holePenalty: 100, bumpPenalty: 6,   maxHPenalty: 10,  coverageBonus: 42, linePts: 1200, tickMs: 140  },
 };
 
-// Build identity shown at the bottom of the start screen so any device
-// can confirm which version it is running. Bump APP_VERSION manually at
-// milestones. APP_COMMIT is the short hash of the commit that introduced
-// THIS file state (one behind HEAD after the commit lands); update it
-// just before each commit.
-const APP_VERSION    = "v0.1";
+// Build identity, shown in Settings (APP_VERSION) and, for internal builds
+// only, at the bottom of the start screen (APP_COMMIT + APP_BUILD_DATE -- see
+// SHOW_BUILD_STAMP below). App went 1.0 / released on 2026-07-10; APP_VERSION
+// now follows conventional semver (MAJOR.MINOR.PATCH) from here on -- bump
+// PATCH for fixes, MINOR for features, MAJOR for breaking/App-Store-relaunch
+// changes. APP_COMMIT is the short hash of the commit that introduced THIS
+// file state (one behind HEAD after the commit lands); update it just before
+// each commit.
+const APP_VERSION    = "v1.0";
 const APP_COMMIT     = "b60553b";
 const APP_BUILD_DATE = "2026-07-04T23:30:30";
+
+// Bottom-right debug stamp (commit hash + relative build time) on the start
+// screen -- dev/preview only, so either Mac can confirm which build is
+// running at a glance. The user-facing APP_VERSION lives in Settings instead
+// (see SettingsScreen) and is never gated off. Set false right before an
+// official App Store archive/push -- official builds carry no debug stamp.
+const SHOW_BUILD_STAMP = true;
 
 // Default fall interval (used as a fallback when state.aiLevel is invalid).
 // Real tick rate comes from AI_LEVEL_CONFIG[aiLevel].tickMs, looked up at
@@ -1206,6 +1216,17 @@ function SettingsScreen({ settings, onUpdate, onClose, initialSection, exiting }
           }}
         >Done</div>
       </div>
+
+      {/* Version -- moved here from the start screen (2026-07-10) so it's
+          always reachable, dev and App Store builds alike. */}
+      <div style={{
+        position: "absolute", left: 0, right: 0,
+        bottom: "max(20px,env(safe-area-inset-bottom))",
+        textAlign: "center",
+        fontFamily: inter, fontSize: 10, fontWeight: 500,
+        letterSpacing: 2, color: "rgba(255,255,255,0.2)",
+        pointerEvents: "none",
+      }}>{APP_VERSION}</div>
     </div>
   );
 }
@@ -3007,7 +3028,8 @@ function TetrisGame2P() {
               <GearIcon />
             </div>
           </div>
-          {/* Version stamp */}
+          {/* Dev build stamp -- SHOW_BUILD_STAMP gates it off for App Store builds */}
+          {SHOW_BUILD_STAMP && (
           <div style={{
             position:"absolute", left:0, right:0,
             bottom:"max(20px,env(safe-area-inset-bottom))",
@@ -3016,9 +3038,10 @@ function TetrisGame2P() {
             letterSpacing:2, color:"rgba(255,255,255,0.2)",
             pointerEvents:"none",
           }}>
-            <span>{APP_VERSION} &nbsp;•&nbsp; {APP_COMMIT}</span>
+            <span>{APP_COMMIT}</span>
             <span>{relTime(APP_BUILD_DATE)}</span>
           </div>
+          )}
           </React.Fragment>
         </div>
       );
@@ -3126,7 +3149,8 @@ function TetrisGame2P() {
             <GearIcon />
           </div>
         </div>
-        {/* Version stamp */}
+        {/* Dev build stamp -- SHOW_BUILD_STAMP gates it off for App Store builds */}
+        {SHOW_BUILD_STAMP && (
         <div style={{
           position:"absolute", left:0, right:0,
           bottom:"max(20px,env(safe-area-inset-bottom))",
@@ -3135,9 +3159,10 @@ function TetrisGame2P() {
           letterSpacing:2, color:"rgba(255,255,255,0.2)",
           pointerEvents:"none",
         }}>
-          <span>{APP_VERSION} &nbsp;•&nbsp; {APP_COMMIT}</span>
+          <span>{APP_COMMIT}</span>
           <span>{relTime(APP_BUILD_DATE)}</span>
         </div>
+        )}
         </React.Fragment>
         {/* Settings overlay */}
         {showSettings && (
