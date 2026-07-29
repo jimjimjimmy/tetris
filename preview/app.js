@@ -2690,6 +2690,15 @@ function TetrisGame2P() {
         board,
         boundary
       } = s;
+      // Drift (solo-only): wrap columns before validating so the player's
+      // own gestures keep working while a piece is near or crossing the
+      // seam, instead of an unwrapped out-of-range column silently
+      // rejecting every move/rotate attempt. wrapX keeps the stored anchor
+      // normalized the same way driftPiece does. Both are no-ops when
+      // drift is off or online.
+      const driftOn = !s.online && settings.drift;
+      const wrapCells = cells => driftOn ? cells.map(([c, r]) => [wrapCol(c), r]) : cells;
+      const wrapX = x => driftOn ? wrapCol(x) : x;
       // Lock-delay reset: if the piece is currently in the lock-pending
       // window AND we haven't blown the reset cap, a successful input
       // resets the timer so the player can slide along the edge.
@@ -2708,14 +2717,14 @@ function TetrisGame2P() {
         // 4-tall I-piece rotate near the floor/boundary where a centered
         // rotation would clip out of bounds. First-valid wins.
         for (const [dx, dy] of ROT_KICKS) {
-          if (isValid2P(getCells(p1.type, nr, p1.x + dx, p1.y + dy), board, boundary, 1)) {
+          if (isValid2P(wrapCells(getCells(p1.type, nr, p1.x + dx, p1.y + dy)), board, boundary, 1)) {
             haptic.light();
             return {
               ...s,
               p1: {
                 ...p1,
                 rot: nr,
-                x: p1.x + dx,
+                x: wrapX(p1.x + dx),
                 y: p1.y + dy,
                 ...lockReset(p1)
               }
@@ -2723,25 +2732,25 @@ function TetrisGame2P() {
           }
         }
       } else if (action === "left") {
-        if (isValid2P(getCells(p1.type, p1.rot, p1.x - 1, p1.y), board, boundary, 1)) {
+        if (isValid2P(wrapCells(getCells(p1.type, p1.rot, p1.x - 1, p1.y)), board, boundary, 1)) {
           haptic.light();
           return {
             ...s,
             p1: {
               ...p1,
-              x: p1.x - 1,
+              x: wrapX(p1.x - 1),
               ...lockReset(p1)
             }
           };
         }
       } else if (action === "right") {
-        if (isValid2P(getCells(p1.type, p1.rot, p1.x + 1, p1.y), board, boundary, 1)) {
+        if (isValid2P(wrapCells(getCells(p1.type, p1.rot, p1.x + 1, p1.y)), board, boundary, 1)) {
           haptic.light();
           return {
             ...s,
             p1: {
               ...p1,
-              x: p1.x + 1,
+              x: wrapX(p1.x + 1),
               ...lockReset(p1)
             }
           };
@@ -2752,7 +2761,7 @@ function TetrisGame2P() {
         // frame. Hard drop bypasses lock-delay extension -- the timer is
         // set to a past instant so the next tick locks immediately.
         let y = p1.y;
-        while (isValid2P(getCells(p1.type, p1.rot, p1.x, y - 1), board, boundary, 1)) {
+        while (isValid2P(wrapCells(getCells(p1.type, p1.rot, p1.x, y - 1)), board, boundary, 1)) {
           y--;
         }
         if (y !== p1.y) {
@@ -2775,7 +2784,7 @@ function TetrisGame2P() {
       } else if (action === "soft") {
         // Soft drop for P1: one row UP (y-1), with natural travel toward boundary.
         // Refreshes the lock-delay timer like any other successful input.
-        if (isValid2P(getCells(p1.type, p1.rot, p1.x, p1.y - 1), board, boundary, 1)) {
+        if (isValid2P(wrapCells(getCells(p1.type, p1.rot, p1.x, p1.y - 1)), board, boundary, 1)) {
           haptic.light();
           return {
             ...s,
@@ -2789,7 +2798,7 @@ function TetrisGame2P() {
       }
       return s;
     });
-  }, []);
+  }, [settings.drift]);
 
   // applyP2: mirror of applyP1 for the P2 piece (falls DOWN). The
   // "boost-toward-boundary" gesture for P2 is DOWN; the unsupported
@@ -2806,6 +2815,11 @@ function TetrisGame2P() {
         board,
         boundary
       } = s;
+      // Drift (solo-only): see applyP1 -- same wrap-before-validate pattern
+      // so P2's own gestures keep working near/through the seam too.
+      const driftOn = !s.online && settings.drift;
+      const wrapCells = cells => driftOn ? cells.map(([c, r]) => [wrapCol(c), r]) : cells;
+      const wrapX = x => driftOn ? wrapCol(x) : x;
       const lockReset = piece => {
         if (piece.lockPendingTs == null) return {};
         if ((piece.lockResets || 0) >= MAX_LOCK_RESETS) return {};
@@ -2819,14 +2833,14 @@ function TetrisGame2P() {
         // Wall kick (mirror of P1): ROT_KICKS, horizontal first then
         // vertical/diagonal so a 4-tall I-piece rotates near the ceiling/boundary.
         for (const [dx, dy] of ROT_KICKS) {
-          if (isValid2P(getCells(p2.type, nr, p2.x + dx, p2.y + dy), board, boundary, 2)) {
+          if (isValid2P(wrapCells(getCells(p2.type, nr, p2.x + dx, p2.y + dy)), board, boundary, 2)) {
             haptic.light();
             return {
               ...s,
               p2: {
                 ...p2,
                 rot: nr,
-                x: p2.x + dx,
+                x: wrapX(p2.x + dx),
                 y: p2.y + dy,
                 ...lockReset(p2)
               }
@@ -2834,25 +2848,25 @@ function TetrisGame2P() {
           }
         }
       } else if (action === "left") {
-        if (isValid2P(getCells(p2.type, p2.rot, p2.x - 1, p2.y), board, boundary, 2)) {
+        if (isValid2P(wrapCells(getCells(p2.type, p2.rot, p2.x - 1, p2.y)), board, boundary, 2)) {
           haptic.light();
           return {
             ...s,
             p2: {
               ...p2,
-              x: p2.x - 1,
+              x: wrapX(p2.x - 1),
               ...lockReset(p2)
             }
           };
         }
       } else if (action === "right") {
-        if (isValid2P(getCells(p2.type, p2.rot, p2.x + 1, p2.y), board, boundary, 2)) {
+        if (isValid2P(wrapCells(getCells(p2.type, p2.rot, p2.x + 1, p2.y)), board, boundary, 2)) {
           haptic.light();
           return {
             ...s,
             p2: {
               ...p2,
-              x: p2.x + 1,
+              x: wrapX(p2.x + 1),
               ...lockReset(p2)
             }
           };
@@ -2861,7 +2875,7 @@ function TetrisGame2P() {
         // Hard drop DOWN: same pattern as P1's hard drop UP. Bypass
         // lock-delay extension by setting the timer to a past instant.
         let y = p2.y;
-        while (isValid2P(getCells(p2.type, p2.rot, p2.x, y + 1), board, boundary, 2)) {
+        while (isValid2P(wrapCells(getCells(p2.type, p2.rot, p2.x, y + 1)), board, boundary, 2)) {
           y++;
         }
         if (y !== p2.y) {
@@ -2882,7 +2896,7 @@ function TetrisGame2P() {
       } else if (action === "soft") {
         // Soft drop for P2: one row DOWN (y+1), with natural travel toward boundary.
         // Refreshes the lock-delay timer like any other successful input.
-        if (isValid2P(getCells(p2.type, p2.rot, p2.x, p2.y + 1), board, boundary, 2)) {
+        if (isValid2P(wrapCells(getCells(p2.type, p2.rot, p2.x, p2.y + 1)), board, boundary, 2)) {
           haptic.light();
           return {
             ...s,
@@ -2896,7 +2910,7 @@ function TetrisGame2P() {
       }
       return s;
     });
-  }, []);
+  }, [settings.drift]);
 
   // playerSideRef mirrors state.playerSide for closure-free access inside
   // the keyboard and touch-gesture event handlers (which run outside the
