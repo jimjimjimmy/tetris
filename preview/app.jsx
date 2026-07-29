@@ -421,42 +421,24 @@ function shiftBoardDrift(board, dir) {
   });
 }
 
-// Min/max column offset a piece occupies at a given rotation (SHAPES
-// entries are not all anchored at dc=0 -- e.g. vertical I is dc=2 for
-// every cell -- so the wrap teleport below needs the real footprint,
-// not an assumed 0-based one).
-function pieceColRange(type, rot) {
-  let min = Infinity, max = -Infinity;
-  for (const [dc] of SHAPES[type][rot]) {
-    if (dc < min) min = dc;
-    if (dc > max) max = dc;
-  }
-  return [min, max];
-}
-
-// Shifts an active piece's anchor by `dir` against the already-shifted
-// board. If the plain shift keeps every cell in bounds and clear, use it.
-// Otherwise the piece's leading edge has reached the seam -- teleport the
-// WHOLE piece flush against the entry edge on the opposite side (dir>0
-// overflows right -> enters flush left; dir<0 overflows left -> enters
-// flush right), using the piece's actual column footprint so multi-column
-// pieces relocate as one rigid unit instead of freezing at the wall. This
-// never straddles the seam mid-piece, so every other collision/render call
-// site stays untouched. If neither works this tick, the piece holds --
-// the ground drifts under it instead.
+// Shifts an active piece's anchor by `dir`, wrapping it the same way the
+// board itself wraps (wrapCol keeps the anchor in [0,COLS) every tick, no
+// special-casing per direction). The piece's CELLS can still individually
+// land outside [0,COLS) when its footprint pokes past the seam (e.g. an
+// anchor of 9 with a 4-wide piece) -- wrapping each cell's column before
+// validating against the (already drift-shifted) board is what lets the
+// piece genuinely straddle the seam, Pac-Man style, instead of teleporting
+// as a whole unit. Reuses isValid2P unmodified: once columns are wrapped
+// they're always in range, so its existing bounds/occupancy/boundary
+// checks apply exactly as before. Holds in place if the wrapped landing
+// cells are blocked (occupied or wrong territory) -- the ground drifts
+// under it instead.
 function driftPiece(p, board, boundary, player, dir) {
   if (!p) return p;
-  const simple = { ...p, x: p.x + dir };
-  if (isValid2P(getCells(simple.type, simple.rot, simple.x, simple.y), board, boundary, player)) {
-    return simple;
-  }
-  const [minDc, maxDc] = pieceColRange(p.type, p.rot);
-  const wrappedX = dir > 0 ? -minDc : (COLS - 1 - maxDc);
-  const wrapped = { ...p, x: wrappedX };
-  if (isValid2P(getCells(wrapped.type, wrapped.rot, wrapped.x, wrapped.y), board, boundary, player)) {
-    return wrapped;
-  }
-  return p;
+  const next = { ...p, x: wrapCol(p.x + dir) };
+  const cells = getCells(next.type, next.rot, next.x, next.y).map(([c, r]) => [wrapCol(c), r]);
+  if (!isValid2P(cells, board, boundary, player)) return p;
+  return next;
 }
 
 function clearP1_2P(board, bdy) {
@@ -1608,6 +1590,14 @@ function TetrisGame2P() {
         // game-over grace window resolves.
         const runP1 = !s.online ? true : (s.playerSide === 1 && !s.iDied);
         const runP2 = !s.online ? true : (s.playerSide === 2 && !s.iDied);
+        // Drift (solo-only): while active, the gravity/lock fall-check below
+        // must wrap columns before validating, or a piece that's currently
+        // straddling the seam (some cells >= COLS from a drift tick) would
+        // read as permanently "out of bounds" and false-lock the instant it
+        // starts crossing. wrapCells is a no-op for any non-straddling piece,
+        // so this changes nothing when drift is off.
+        const driftOn = !s.online && settings.drift;
+        const wrapCells = cells => driftOn ? cells.map(([c, r]) => [wrapCol(c), r]) : cells;
         // Track which rows were full at lock time so we can flash them
         // briefly after they're cleared. Filled per-side just before
         // clearP*_2P runs (board still has the full rows at that moment).
@@ -1812,7 +1802,7 @@ function TetrisGame2P() {
         // elapsed. Successful human input during this window resets the
         // timer (handled inside applyP1), up to MAX_LOCK_RESETS.
         if (runP1) {
-        if (isValid2P(getCells(p1.type, p1.rot, p1.x, p1.y - 1), board, boundary, 1)) {
+        if (isValid2P(wrapCells(getCells(p1.type, p1.rot, p1.x, p1.y - 1)), board, boundary, 1)) {
           p1 = { ...p1, y: p1.y - 1, lockPendingTs: null, lockResets: 0 };
         } else {
           const nowMs = Date.now();
@@ -1821,7 +1811,7 @@ function TetrisGame2P() {
             p1 = { ...p1, lockPendingTs: nowMs };
           } else if (nowMs - p1.lockPendingTs >= LOCK_DELAY_MS) {
             // Grace period elapsed -- commit the lock.
-            board = lockPiece2P(board, getCells(p1.type, p1.rot, p1.x, p1.y), CELL_P1);
+            board = lockPiece2P(board, wrapCells(getCells(p1.type, p1.rot, p1.x, p1.y)), CELL_P1);
             // Snapshot the full rows in P1 territory BEFORE the clear
             // mutates the board, for the line-clear flash overlay.
             for (let r = boundary; r < ROWS_2P; r++) {
@@ -1848,14 +1838,14 @@ function TetrisGame2P() {
 
         // P2 physics (mirror of P1, falling DOWN toward boundary).
         if (runP2) {
-        if (isValid2P(getCells(p2.type, p2.rot, p2.x, p2.y + 1), board, boundary, 2)) {
+        if (isValid2P(wrapCells(getCells(p2.type, p2.rot, p2.x, p2.y + 1)), board, boundary, 2)) {
           p2 = { ...p2, y: p2.y + 1, lockPendingTs: null, lockResets: 0 };
         } else {
           const nowMs = Date.now();
           if (p2.lockPendingTs == null) {
             p2 = { ...p2, lockPendingTs: nowMs };
           } else if (nowMs - p2.lockPendingTs >= LOCK_DELAY_MS) {
-            board = lockPiece2P(board, getCells(p2.type, p2.rot, p2.x, p2.y), CELL_P2);
+            board = lockPiece2P(board, wrapCells(getCells(p2.type, p2.rot, p2.x, p2.y)), CELL_P2);
             for (let r = 0; r < boundary; r++) {
               if (board[r].every(v => v !== CELL_EMPTY)) clearedRowsThisTick.push(r);
             }
@@ -1909,7 +1899,7 @@ function TetrisGame2P() {
       });
     }, TEST_SPEED ? 110 : (state.online ? ONLINE_TICK_MS : (AI_LEVEL_CONFIG[state.aiLevel]?.tickMs || TICK_MS_DEFAULT)));
     return () => clearInterval(id);
-  }, [state.aiLevel, state.online]);
+  }, [state.aiLevel, state.online, settings.drift]);
 
   // ── Drift (solo-only prototype) ────────────────────────────────────────
   // Gated on !online + settings.drift so this can never touch the networked
@@ -3323,11 +3313,18 @@ function TetrisGame2P() {
   // Active pieces -- BOTH players -- render at the same translucent color
   // (ACTIVE_COLOR = opacity 0.5). The Figma design uses a single base color
   // and only varies opacity to distinguish locked vs active and per-player.
+  // Drift (solo-only): wrap columns so a piece currently straddling the
+  // seam renders split across both edges instead of the overflow cells
+  // just being dropped. wrapCol is a no-op for any in-range column, so
+  // this is harmless whenever drift is off or nothing is straddling.
+  const activeCol = settings.drift ? wrapCol : (c => c);
   getCells(p1.type, p1.rot, p1.x, p1.y).forEach(([c, r]) => {
-    if (r >= 0 && r < ROWS_2P && c >= 0 && c < COLS) grid[r][c] = ACTIVE_COLOR;
+    const wc = activeCol(c);
+    if (r >= 0 && r < ROWS_2P && wc >= 0 && wc < COLS) grid[r][wc] = ACTIVE_COLOR;
   });
   getCells(p2.type, p2.rot, p2.x, p2.y).forEach(([c, r]) => {
-    if (r >= 0 && r < ROWS_2P && c >= 0 && c < COLS) grid[r][c] = ACTIVE_COLOR;
+    const wc = activeCol(c);
+    if (r >= 0 && r < ROWS_2P && wc >= 0 && wc < COLS) grid[r][wc] = ACTIVE_COLOR;
   });
 
   // Pause toggle for the on-screen pause button. Stops touch from
