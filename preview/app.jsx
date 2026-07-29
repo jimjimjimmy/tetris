@@ -465,8 +465,17 @@ function clearP2_2P(board, bdy) {
 // Extracted verbatim from the tick so the online network handler can reuse
 // the exact same boundary math for REMOTE line-clears. Eviction respawns draw
 // from nextPiece() (seeded in online, Math.random in solo).
-function shiftBoundary2P(g, n1, n2) {
+// `wrap` (solo-drift-only, always falsy for the online lk handler): without
+// it, a piece currently straddling the seam would read as "invalid" purely
+// from its own out-of-range raw columns and get wrongly evicted/respawned on
+// ANY line clear anywhere on the board, not just ones that actually displace
+// it -- a false-positive with nothing to do with the boundary shift itself.
+function shiftBoundary2P(g, n1, n2, wrap) {
   let { board, boundary, p1, p1Next, p1NextNext, p2, p2Next, p2NextNext, lastGain } = g;
+  const evictCells = p => {
+    const cells = getCells(p.type, p.rot, p.x, p.y);
+    return wrap ? cells.map(([c, r]) => [wrapCol(c), r]) : cells;
+  };
 
   let newBdy = boundary - n1 + n2;
   let winner = null, phase = "playing";
@@ -497,11 +506,11 @@ function shiftBoundary2P(g, n1, n2) {
     }
     board = next;
 
-    if (!isValid2P(getCells(p1.type, p1.rot, p1.x, p1.y), board, newBdy, 1)) {
+    if (!isValid2P(evictCells(p1), board, newBdy, 1)) {
       p1 = { type: p1Next, rot: 0, x: spawnX(p1Next), y: p1SpawnY2P(p1Next), lockPendingTs: null, lockResets: 0 };
       p1Next = p1NextNext; p1NextNext = nextPiece(1);
     }
-    if (!isValid2P(getCells(p2.type, p2.rot, p2.x, p2.y), board, newBdy, 2)) {
+    if (!isValid2P(evictCells(p2), board, newBdy, 2)) {
       p2 = { type: p2Next, rot: 0, x: spawnX(p2Next), y: 0, lockPendingTs: null, lockResets: 0 };
       p2Next = p2NextNext; p2NextNext = nextPiece(2);
     }
@@ -1693,11 +1702,11 @@ function TetrisGame2P() {
           }
           if (p1.rot !== bestRot1) {
             const nr = (p1.rot + 1) % 4;
-            if (isValid2P(getCells(p1.type, nr, p1.x, p1.y), board, boundary, 1)) p1 = { ...p1, rot: nr };
+            if (isValid2P(wrapCells(getCells(p1.type, nr, p1.x, p1.y)), board, boundary, 1)) p1 = { ...p1, rot: nr };
           } else if (p1.x < bestX1) {
-            if (isValid2P(getCells(p1.type, p1.rot, p1.x + 1, p1.y), board, boundary, 1)) p1 = { ...p1, x: p1.x + 1 };
+            if (isValid2P(wrapCells(getCells(p1.type, p1.rot, p1.x + 1, p1.y)), board, boundary, 1)) p1 = { ...p1, x: p1.x + 1 };
           } else if (p1.x > bestX1) {
-            if (isValid2P(getCells(p1.type, p1.rot, p1.x - 1, p1.y), board, boundary, 1)) p1 = { ...p1, x: p1.x - 1 };
+            if (isValid2P(wrapCells(getCells(p1.type, p1.rot, p1.x - 1, p1.y)), board, boundary, 1)) p1 = { ...p1, x: p1.x - 1 };
           }
         }
 
@@ -1786,11 +1795,11 @@ function TetrisGame2P() {
           }
           if (p2.rot !== bestRot2) {
             const nr = (p2.rot + 1) % 4;
-            if (isValid2P(getCells(p2.type, nr, p2.x, p2.y), board, boundary, 2)) p2 = { ...p2, rot: nr };
+            if (isValid2P(wrapCells(getCells(p2.type, nr, p2.x, p2.y)), board, boundary, 2)) p2 = { ...p2, rot: nr };
           } else if (p2.x < bestX2) {
-            if (isValid2P(getCells(p2.type, p2.rot, p2.x + 1, p2.y), board, boundary, 2)) p2 = { ...p2, x: p2.x + 1 };
+            if (isValid2P(wrapCells(getCells(p2.type, p2.rot, p2.x + 1, p2.y)), board, boundary, 2)) p2 = { ...p2, x: p2.x + 1 };
           } else if (p2.x > bestX2) {
-            if (isValid2P(getCells(p2.type, p2.rot, p2.x - 1, p2.y), board, boundary, 2)) p2 = { ...p2, x: p2.x - 1 };
+            if (isValid2P(wrapCells(getCells(p2.type, p2.rot, p2.x - 1, p2.y)), board, boundary, 2)) p2 = { ...p2, x: p2.x - 1 };
           }
         }
 
@@ -1872,7 +1881,7 @@ function TetrisGame2P() {
         // network handler so REMOTE line-clears use the identical math).
         const sh = shiftBoundary2P(
           { board, boundary, p1, p1Next, p1NextNext, p2, p2Next, p2NextNext, lastGain: s.lastGain },
-          n1, n2
+          n1, n2, driftOn
         );
 
         // In ONLINE mode, when the LOCAL player locks a piece, bump lockStamp
@@ -3291,20 +3300,30 @@ function TetrisGame2P() {
   if (playerSide === 1 || playerSide === 2) {
     const piece     = playerSide === 1 ? p1 : p2;
     const ghostStep = playerSide === 1 ? -1 : +1;  // P1 floats UP, P2 falls DOWN
+    // Drift (solo-only): wrap columns so the ghost preview and lane
+    // highlight still work correctly while the piece is straddling the
+    // seam, instead of the unwrapped out-of-range columns making every
+    // validity check fail and the ghost silently vanish.
+    const gCol = settings.drift ? wrapCol : (c => c);
     let gy = piece.y;
-    while (isValid2P(getCells(piece.type, piece.rot, piece.x, gy + ghostStep), board, boundary, playerSide)) {
+    while (isValid2P(getCells(piece.type, piece.rot, piece.x, gy + ghostStep).map(([c, r]) => [gCol(c), r]), board, boundary, playerSide)) {
       gy += ghostStep;
     }
     if (gy !== piece.y) {
       getCells(piece.type, piece.rot, piece.x, gy).forEach(([c, r]) => {
-        if (r >= 0 && r < ROWS_2P && c >= 0 && c < COLS && !grid[r][c]) {
-          grid[r][c] = GHOST_COLOR;
+        const wc = gCol(c);
+        if (r >= 0 && r < ROWS_2P && wc >= 0 && wc < COLS && !grid[r][wc]) {
+          grid[r][wc] = GHOST_COLOR;
         }
       });
     }
+    // Lane guide uses the RAW (unwrapped) span, clamped to the visible
+    // board -- wrapping first would make a straddling piece's columns
+    // (e.g. {9,0,1,2}) span min=0/max=9, drawing guides across the whole
+    // board instead of the true, shrinking sliver still on each side.
     const pCells = getCells(piece.type, piece.rot, piece.x, piece.y);
-    const lMinC  = Math.min(...pCells.map(([c]) => c));
-    const lMaxC  = Math.max(...pCells.map(([c]) => c));
+    const lMinC  = Math.max(0, Math.min(...pCells.map(([c]) => c)));
+    const lMaxC  = Math.min(COLS - 1, Math.max(...pCells.map(([c]) => c)));
     const topRow = playerSide === 1 ? boundary : 0;
     const botRow = playerSide === 1 ? ROWS_2P : boundary;
     laneData = { minC: lMinC, maxC: lMaxC, topPx: topRow * CELL, hPx: (botRow - topRow) * CELL };
