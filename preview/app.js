@@ -260,6 +260,13 @@ const GAIN_FADE_MS = 1500;
 const LOCK_DELAY_MS = 250;
 const MAX_LOCK_RESETS = 5;
 
+// Drift (solo-only prototype, Settings > Game > Drift, default OFF): the
+// whole shared board -- locked stack + both active pieces -- scrolls one
+// column every DRIFT_TICK_MS and wraps at the seam (col 9 <-> col 0,
+// Pac-Man style). Fixed direction/speed for v1 -- not player-tunable yet.
+const DRIFT_TICK_MS = 2200;
+const DRIFT_DIR = 1; // +1 = rightward
+
 // Line clear flash: how long a white overlay sits on each just-cleared
 // row's OLD pixel position. Adds visual weight to clears that would
 // otherwise be instant. Stack-follows-boundary already moves the cells
@@ -408,6 +415,67 @@ function lockPiece2P(board, cells, value) {
     if (r >= 0 && r < ROWS_2P && c >= 0 && c < COLS) next[r][c] = value;
   }
   return next;
+}
+
+// ── Drift helpers (pure) ────────────────────────────────────────────────
+function wrapCol(c) {
+  return (c % COLS + COLS) % COLS;
+}
+
+// Shifts every locked cell one column in `dir`, wrapping at the seam.
+function shiftBoardDrift(board, dir) {
+  return board.map(row => {
+    const next = Array(COLS).fill(CELL_EMPTY);
+    for (let c = 0; c < COLS; c++) {
+      if (row[c] !== CELL_EMPTY) next[wrapCol(c + dir)] = row[c];
+    }
+    return next;
+  });
+}
+
+// Min/max column offset a piece occupies at a given rotation (SHAPES
+// entries are not all anchored at dc=0 -- e.g. vertical I is dc=2 for
+// every cell -- so the wrap teleport below needs the real footprint,
+// not an assumed 0-based one).
+function pieceColRange(type, rot) {
+  let min = Infinity,
+    max = -Infinity;
+  for (const [dc] of SHAPES[type][rot]) {
+    if (dc < min) min = dc;
+    if (dc > max) max = dc;
+  }
+  return [min, max];
+}
+
+// Shifts an active piece's anchor by `dir` against the already-shifted
+// board. If the plain shift keeps every cell in bounds and clear, use it.
+// Otherwise the piece's leading edge has reached the seam -- teleport the
+// WHOLE piece flush against the entry edge on the opposite side (dir>0
+// overflows right -> enters flush left; dir<0 overflows left -> enters
+// flush right), using the piece's actual column footprint so multi-column
+// pieces relocate as one rigid unit instead of freezing at the wall. This
+// never straddles the seam mid-piece, so every other collision/render call
+// site stays untouched. If neither works this tick, the piece holds --
+// the ground drifts under it instead.
+function driftPiece(p, board, boundary, player, dir) {
+  if (!p) return p;
+  const simple = {
+    ...p,
+    x: p.x + dir
+  };
+  if (isValid2P(getCells(simple.type, simple.rot, simple.x, simple.y), board, boundary, player)) {
+    return simple;
+  }
+  const [minDc, maxDc] = pieceColRange(p.type, p.rot);
+  const wrappedX = dir > 0 ? -minDc : COLS - 1 - maxDc;
+  const wrapped = {
+    ...p,
+    x: wrappedX
+  };
+  if (isValid2P(getCells(wrapped.type, wrapped.rot, wrapped.x, wrapped.y), board, boundary, player)) {
+    return wrapped;
+  }
+  return p;
 }
 function clearP1_2P(board, bdy) {
   const terr = board.slice(bdy);
@@ -1289,7 +1357,8 @@ function loadSettings() {
     haptics: true,
     hapticIntensity: "medium",
     level: AI_LEVEL_DEFAULT,
-    direction: 1
+    direction: 1,
+    drift: false
   };
   try {
     return {
@@ -1568,7 +1637,24 @@ function SettingsScreen({
       userSelect: "none",
       padding: "17px 0"
     }
-  }, label))))), /*#__PURE__*/React.createElement("div", {
+  }, label))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      minHeight: 44,
+      gap: 16
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: rowLbl
+  }, "Drift"), [false, true].map(v => /*#__PURE__*/React.createElement("div", {
+    key: String(v),
+    onPointerDown: () => onUpdate("drift", v),
+    onTouchStart: e => e.stopPropagation(),
+    style: {
+      ...opt(settings.drift === v),
+      padding: "17px 0"
+    }
+  }, v ? "ON" : "Off"))))), /*#__PURE__*/React.createElement("div", {
     style: {
       position: "absolute",
       left: 0,
@@ -2412,6 +2498,30 @@ function TetrisGame2P() {
     }, TEST_SPEED ? 110 : state.online ? ONLINE_TICK_MS : AI_LEVEL_CONFIG[state.aiLevel]?.tickMs || TICK_MS_DEFAULT);
     return () => clearInterval(id);
   }, [state.aiLevel, state.online]);
+
+  // ── Drift (solo-only prototype) ────────────────────────────────────────
+  // Gated on !online + settings.drift so this can never touch the networked
+  // path -- the toggle defaults OFF, so nothing here changes existing
+  // behavior unless a player explicitly opts in from Settings.
+  React.useEffect(() => {
+    if (state.online || !settings.drift) return;
+    const id = setInterval(() => {
+      setState(s => {
+        if (s.online || s.phase !== "playing") return s;
+        if (s.paused || s.oppPaused || s.summary) return s;
+        const board = shiftBoardDrift(s.board, DRIFT_DIR);
+        const p1 = driftPiece(s.p1, board, s.boundary, 1, DRIFT_DIR);
+        const p2 = driftPiece(s.p2, board, s.boundary, 2, DRIFT_DIR);
+        return {
+          ...s,
+          board,
+          p1,
+          p2
+        };
+      });
+    }, DRIFT_TICK_MS);
+    return () => clearInterval(id);
+  }, [state.online, settings.drift]);
 
   // ── Online networking: broadcast local events ─────────────────────────
   // netSend: JSON-encode + push over the live socket (no-op if not open).
@@ -4673,7 +4783,25 @@ function TetrisGame2P() {
       background: "rgba(0, 0, 0, 0.18)",
       pointerEvents: "none"
     }
+  }), settings.drift && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      inset: 0,
+      backgroundImage: "radial-gradient(circle 1px at 4px 4px, rgba(255,255,255,0.10), transparent 60%)",
+      backgroundSize: "48px 48px",
+      animation: "driftStarsFar 34s linear infinite",
+      pointerEvents: "none"
+    }
   }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      inset: 0,
+      backgroundImage: "radial-gradient(circle 1.4px at 6px 6px, rgba(255,255,255,0.18), transparent 60%)",
+      backgroundSize: "64px 64px",
+      animation: "driftStarsNear 18s linear infinite",
+      pointerEvents: "none"
+    }
+  })), /*#__PURE__*/React.createElement("div", {
     style: {
       position: "absolute",
       left: DASH_LEFT_X,

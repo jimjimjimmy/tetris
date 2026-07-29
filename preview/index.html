@@ -82,6 +82,13 @@
        apart): "." -> ".." -> "..." -> loop. dot1 is always shown. */
     @keyframes ellipDot2 { 0%, 33% { opacity: 0; } 34%, 100% { opacity: 1; } }
     @keyframes ellipDot3 { 0%, 66% { opacity: 0; } 67%, 100% { opacity: 1; } }
+    /* Drift parallax starfield (Settings > Game > Drift, prototype, default
+       OFF). Two dot layers scroll the same direction as the board drift,
+       slower than the board itself, so the board reads as riding a surface
+       rather than sliding over a static backdrop. Loop distance = exactly
+       one background-size tile so the position reset is invisible. */
+    @keyframes driftStarsFar  { from { background-position: 0 0; } to { background-position: 48px 0; } }
+    @keyframes driftStarsNear { from { background-position: 0 0; } to { background-position: 64px 0; } }
   </style>
 </head>
 <body>
