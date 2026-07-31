@@ -4813,7 +4813,7 @@ function TetrisGame2P() {
     style: {
       position: "absolute",
       inset: 0,
-      backgroundImage: "radial-gradient(circle 1px at 4px 4px, rgba(255,255,255,0.10), transparent 60%)",
+      backgroundImage: "radial-gradient(circle 1.5px at 4px 4px, rgba(255,255,255,0.32), transparent 65%)",
       backgroundSize: "48px 48px",
       animation: "driftStarsFar 34s linear infinite",
       pointerEvents: "none"
@@ -4822,7 +4822,7 @@ function TetrisGame2P() {
     style: {
       position: "absolute",
       inset: 0,
-      backgroundImage: "radial-gradient(circle 1.4px at 6px 6px, rgba(255,255,255,0.18), transparent 60%)",
+      backgroundImage: "radial-gradient(circle 2.2px at 6px 6px, rgba(255,255,255,0.55), transparent 65%)",
       backgroundSize: "64px 64px",
       animation: "driftStarsNear 18s linear infinite",
       pointerEvents: "none"
