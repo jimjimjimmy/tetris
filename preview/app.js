@@ -267,6 +267,36 @@ const MAX_LOCK_RESETS = 5;
 const DRIFT_TICK_MS = 2200;
 const DRIFT_DIR = 1; // +1 = rightward
 
+// Drift parallax starfield: two layers of randomly-scattered dots (NOT a
+// repeating small tile -- that read as a visible grid). Built once at module
+// load as an SVG data-URI background-image, seeded so the scatter is
+// deterministic and reproducible. The whole SVG (sized to the full frame)
+// IS the repeat unit for the CSS background-position scroll animation
+// (see driftStarsFar/Near keyframes in index.html), so it tiles seamlessly
+// without ever looking like a grid.
+function seededRandom(seed) {
+  let s = seed;
+  return () => {
+    s = s * 16807 % 2147483647;
+    return (s - 1) / 2147483646;
+  };
+}
+function buildStarfieldUrl(count, seed, rMin, rMax, aMin, aMax, w, h) {
+  const rand = seededRandom(seed);
+  let circles = "";
+  for (let i = 0; i < count; i++) {
+    const cx = (rand() * w).toFixed(1);
+    const cy = (rand() * h).toFixed(1);
+    const r = (rMin + rand() * (rMax - rMin)).toFixed(2);
+    const a = (aMin + rand() * (aMax - aMin)).toFixed(2);
+    circles += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="white" fill-opacity="${a}"/>`;
+  }
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">${circles}</svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+}
+const STARFIELD_FAR_URL = buildStarfieldUrl(70, 7919, 0.5, 1.1, 0.15, 0.35, FRAME_W, GAME_2P_H);
+const STARFIELD_NEAR_URL = buildStarfieldUrl(35, 104729, 1.0, 1.9, 0.35, 0.65, FRAME_W, GAME_2P_H);
+
 // Line clear flash: how long a white overlay sits on each just-cleared
 // row's OLD pixel position. Adds visual weight to clears that would
 // otherwise be instant. Stack-follows-boundary already moves the cells
@@ -4813,8 +4843,8 @@ function TetrisGame2P() {
     style: {
       position: "absolute",
       inset: 0,
-      backgroundImage: "radial-gradient(circle 1.5px at 4px 4px, rgba(255,255,255,0.32), transparent 65%)",
-      backgroundSize: "48px 48px",
+      backgroundImage: STARFIELD_FAR_URL,
+      backgroundSize: `${FRAME_W}px ${GAME_2P_H}px`,
       animation: "driftStarsFar 34s linear infinite",
       pointerEvents: "none"
     }
@@ -4822,8 +4852,8 @@ function TetrisGame2P() {
     style: {
       position: "absolute",
       inset: 0,
-      backgroundImage: "radial-gradient(circle 2.2px at 6px 6px, rgba(255,255,255,0.55), transparent 65%)",
-      backgroundSize: "64px 64px",
+      backgroundImage: STARFIELD_NEAR_URL,
+      backgroundSize: `${FRAME_W}px ${GAME_2P_H}px`,
       animation: "driftStarsNear 18s linear infinite",
       pointerEvents: "none"
     }
