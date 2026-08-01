@@ -15,6 +15,14 @@
   <script src="vendor/react.production.min.js"></script>
   <script src="vendor/react-dom.production.min.js"></script>
   <style>
+    /* Screen-transition slide distance -- single source of truth for
+       driftIn/driftOut/driftInLeft/driftOutRight/slideInLeft below. Change
+       these two values to retune every content slide+fade transition at
+       once instead of editing five separate keyframe blocks. */
+    :root {
+      --transition-dist: 50px;
+      --transition-dist-slow: 40px;
+    }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
       width: 100%;
@@ -65,12 +73,12 @@
       overflow: hidden;
     }
     @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-    @keyframes driftIn  { from { opacity: 0; transform: translateX(40px); } to { opacity: 1; transform: translateX(0); } }
-    @keyframes driftOut { from { opacity: 1; transform: translateX(0); }            to { opacity: 0; transform: translateX(-40px); } }
+    @keyframes driftIn  { from { opacity: 0; transform: translateX(var(--transition-dist)); } to { opacity: 1; transform: translateX(0); } }
+    @keyframes driftOut { from { opacity: 1; transform: translateX(0); }            to { opacity: 0; transform: translateX(calc(-1 * var(--transition-dist))); } }
     @keyframes slideIn  { from { transform: translateX(24px); }                                                          to { transform: translateX(0); } }
-    @keyframes driftInLeft { from { opacity: 0; transform: translateX(-40px); } to { opacity: 1; transform: translateX(0); } }
-    @keyframes driftOutRight { from { opacity: 1; transform: translateX(0); } to { opacity: 0; transform: translateX(40px); } }
-    @keyframes slideInLeft { from { transform: translateX(-32px); } to { transform: translateX(0); } }
+    @keyframes driftInLeft { from { opacity: 0; transform: translateX(calc(-1 * var(--transition-dist))); } to { opacity: 1; transform: translateX(0); } }
+    @keyframes driftOutRight { from { opacity: 1; transform: translateX(0); } to { opacity: 0; transform: translateX(var(--transition-dist)); } }
+    @keyframes slideInLeft { from { transform: translateX(calc(-1 * var(--transition-dist-slow))); } to { transform: translateX(0); } }
     /* Full-page screen transitions (start/online/playing swaps). Directional:
        incoming enters from the right moving left; outgoing exits to the right. */
     @keyframes pageInRight  { from { opacity: 0; transform: translateX(100%); } to { opacity: 1; transform: translateX(0); } }
