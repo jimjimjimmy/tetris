@@ -120,8 +120,8 @@ const AI_LEVEL_CONFIG = {
 // file state (one behind HEAD after the commit lands); update it just before
 // each commit.
 const APP_VERSION = "v1.0";
-const APP_COMMIT = "21eb754";
-const APP_BUILD_DATE = "2026-08-02T02:59:41";
+const APP_COMMIT = "415dff7";
+const APP_BUILD_DATE = "2026-08-02T04:15:30";
 
 // Bottom-right debug stamp (commit hash + relative build time) on the start
 // screen -- dev/preview only, so either Mac can confirm which build is
@@ -259,6 +259,17 @@ const GAIN_FADE_MS = 1500;
 // lock without the human getting another reset.
 const LOCK_DELAY_MS = 250;
 const MAX_LOCK_RESETS = 5;
+
+// Screen-transition content slide+fade duration -- single source of truth
+// for every di() helper below (Settings, Instructions, both start-screen
+// tabs, online/join-code screen) plus their exit animations. The distance
+// these travel is the paired --transition-dist / --transition-dist-slow
+// CSS custom properties in index.html. Change ONE of these four values
+// (2 here, 2 there) to retune every screen transition at once instead of
+// hunting down each call site.
+const TRANSITION_MS = 360; // driftIn / driftOut / driftInLeft / driftOutRight
+const TRANSITION_SLOW_MS = 300; // slideInLeft, and the setTimeout unmount
+// delays that must match its duration
 
 // Drift (solo-only prototype, Settings > Game > Drift, default OFF): the
 // whole shared board -- locked stack + both active pieces -- scrolls one
@@ -1441,7 +1452,7 @@ function SettingsScreen({
     userSelect: "none"
   });
   const di = n => exiting ? {} : {
-    animation: `driftIn 0.18s ease ${n * 50}ms both`
+    animation: `driftIn ${TRANSITION_MS}ms ease ${n * 50}ms both`
   };
   return /*#__PURE__*/React.createElement("div", {
     style: {
@@ -1453,7 +1464,7 @@ function SettingsScreen({
       zIndex: 100,
       userSelect: "none",
       WebkitUserSelect: "none",
-      animation: exiting ? "driftOutRight 0.15s ease both" : undefined
+      animation: exiting ? `driftOutRight ${TRANSITION_SLOW_MS}ms ease both` : undefined
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -1765,7 +1776,7 @@ function InstructionsScreen({
     ...di(n)
   });
   const di = n => exiting ? {} : {
-    animation: `driftIn 0.18s ease ${n * 50}ms both`
+    animation: `driftIn ${TRANSITION_MS}ms ease ${n * 50}ms both`
   };
   return /*#__PURE__*/React.createElement("div", {
     style: {
@@ -1777,7 +1788,7 @@ function InstructionsScreen({
       zIndex: 100,
       userSelect: "none",
       WebkitUserSelect: "none",
-      animation: exiting ? "driftOutRight 0.15s ease both" : undefined
+      animation: exiting ? `driftOutRight ${TRANSITION_SLOW_MS}ms ease both` : undefined
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -1985,7 +1996,7 @@ function TetrisGame2P() {
       setShowSettings(false);
       setSettingsSection(null);
       setSettingsExiting(false);
-    }, 150);
+    }, TRANSITION_SLOW_MS);
   };
   const openInstructions = () => {
     setShowInstructions(true);
@@ -1996,7 +2007,7 @@ function TetrisGame2P() {
     setTimeout(() => {
       setShowInstructions(false);
       setInstructionsExiting(false);
-    }, 150);
+    }, TRANSITION_SLOW_MS);
   };
 
   // Screen-to-screen navigation with a full-page directional slide.
@@ -3882,7 +3893,7 @@ function TetrisGame2P() {
     // pattern): the bg stays put, elements drift in from the right; on back-nav
     // (navExiting) they drift back out to the right.
     const di = n => ({
-      animation: navExiting ? "driftOutRight 0.18s ease both" : `driftIn 0.18s ease ${n * 45}ms both`
+      animation: navExiting ? `driftOutRight ${TRANSITION_MS}ms ease both` : `driftIn ${TRANSITION_MS}ms ease ${n * 45}ms both`
     });
     return /*#__PURE__*/React.createElement("div", {
       style: {
@@ -4179,7 +4190,7 @@ function TetrisGame2P() {
       // content: drift in on enter, drift out right on back. FADE nav
       // (start<->game) still animates the whole root (see root style below).
       const di = n => ({
-        animation: navExiting && navMode === "slide" ? "driftOutRight 0.18s ease both" : `${startKey > 0 ? "slideInLeft 0.15s" : "driftIn 0.18s"} ease ${n * 45}ms both`
+        animation: navExiting && navMode === "slide" ? `driftOutRight ${TRANSITION_MS}ms ease both` : `${startKey > 0 ? `slideInLeft ${TRANSITION_SLOW_MS}ms` : `driftIn ${TRANSITION_MS}ms`} ease ${n * 45}ms both`
       });
       return /*#__PURE__*/React.createElement("div", {
         style: {
@@ -4368,7 +4379,7 @@ function TetrisGame2P() {
     // SLIDE nav (start<->online) keeps the bg static, animates only content;
     // FADE nav (start<->game) animates the whole root (see root style below).
     const di = n => ({
-      animation: navExiting && navMode === "slide" ? "driftOutRight 0.18s ease both" : `${startKey > 0 ? "slideInLeft 0.15s" : "driftIn 0.18s"} ease ${n * 45}ms both`
+      animation: navExiting && navMode === "slide" ? `driftOutRight ${TRANSITION_MS}ms ease both` : `${startKey > 0 ? `slideInLeft ${TRANSITION_SLOW_MS}ms` : `driftIn ${TRANSITION_MS}ms`} ease ${n * 45}ms both`
     });
     return /*#__PURE__*/React.createElement("div", {
       style: {
