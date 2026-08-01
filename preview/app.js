@@ -4196,7 +4196,25 @@ function TetrisGame2P() {
         }
       }, /*#__PURE__*/React.createElement("div", {
         style: driftGrid
-      }), /*#__PURE__*/React.createElement(BgVignette, null), /*#__PURE__*/React.createElement(React.Fragment, {
+      }), /*#__PURE__*/React.createElement(BgVignette, null), settings.drift && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+        style: {
+          position: "absolute",
+          inset: 0,
+          backgroundImage: STARFIELD_FAR_URL,
+          backgroundSize: `${FRAME_W}px ${GAME_2P_H}px`,
+          animation: "driftStarsFar 34s linear infinite",
+          pointerEvents: "none"
+        }
+      }), /*#__PURE__*/React.createElement("div", {
+        style: {
+          position: "absolute",
+          inset: 0,
+          backgroundImage: STARFIELD_NEAR_URL,
+          backgroundSize: `${FRAME_W}px ${GAME_2P_H}px`,
+          animation: "driftStarsNear 18s linear infinite",
+          pointerEvents: "none"
+        }
+      })), /*#__PURE__*/React.createElement(React.Fragment, {
         key: `${startTab}-${startKey}`
       }, /*#__PURE__*/React.createElement("div", {
         style: {
@@ -4367,7 +4385,25 @@ function TetrisGame2P() {
       }
     }, /*#__PURE__*/React.createElement("div", {
       style: driftGrid
-    }), /*#__PURE__*/React.createElement(BgVignette, null), /*#__PURE__*/React.createElement(React.Fragment, {
+    }), /*#__PURE__*/React.createElement(BgVignette, null), settings.drift && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "absolute",
+        inset: 0,
+        backgroundImage: STARFIELD_FAR_URL,
+        backgroundSize: `${FRAME_W}px ${GAME_2P_H}px`,
+        animation: "driftStarsFar 34s linear infinite",
+        pointerEvents: "none"
+      }
+    }), /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "absolute",
+        inset: 0,
+        backgroundImage: STARFIELD_NEAR_URL,
+        backgroundSize: `${FRAME_W}px ${GAME_2P_H}px`,
+        animation: "driftStarsNear 18s linear infinite",
+        pointerEvents: "none"
+      }
+    })), /*#__PURE__*/React.createElement(React.Fragment, {
       key: `${startTab}-${startKey}`
     }, /*#__PURE__*/React.createElement("div", {
       style: {

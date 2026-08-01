@@ -3086,6 +3086,26 @@ function TetrisGame2P() {
               content Fragment) so only the content animates, not the grid. */}
           <div style={driftGrid} />
           <BgVignette/>
+          {/* Drift parallax starfield on the start screen too (prototype,
+              same settings.drift gate as in-game). */}
+          {settings.drift && (
+            <React.Fragment>
+              <div style={{
+                position: "absolute", inset: 0,
+                backgroundImage: STARFIELD_FAR_URL,
+                backgroundSize: `${FRAME_W}px ${GAME_2P_H}px`,
+                animation: "driftStarsFar 34s linear infinite",
+                pointerEvents: "none",
+              }} />
+              <div style={{
+                position: "absolute", inset: 0,
+                backgroundImage: STARFIELD_NEAR_URL,
+                backgroundSize: `${FRAME_W}px ${GAME_2P_H}px`,
+                animation: "driftStarsNear 18s linear infinite",
+                pointerEvents: "none",
+              }} />
+            </React.Fragment>
+          )}
           <React.Fragment key={`${startTab}-${startKey}`}>
           {/* RVAL logo (Figma 396:7487) - box 285.405x48, top 367, centered. */}
           <div style={{
@@ -3198,6 +3218,29 @@ function TetrisGame2P() {
             content Fragment) so only the content animates, not the grid. */}
         <div style={driftGrid} />
         <BgVignette/>
+        {/* Drift parallax starfield on the start screen too (prototype,
+            same settings.drift gate as in-game -- see TetrisGame2P's
+            playing-screen background stack for the full explanation).
+            Same STARFIELD_FAR_URL/NEAR_URL + FRAME_W x GAME_2P_H tile as
+            the game screen, since this frame is the identical size. */}
+        {settings.drift && (
+          <React.Fragment>
+            <div style={{
+              position: "absolute", inset: 0,
+              backgroundImage: STARFIELD_FAR_URL,
+              backgroundSize: `${FRAME_W}px ${GAME_2P_H}px`,
+              animation: "driftStarsFar 34s linear infinite",
+              pointerEvents: "none",
+            }} />
+            <div style={{
+              position: "absolute", inset: 0,
+              backgroundImage: STARFIELD_NEAR_URL,
+              backgroundSize: `${FRAME_W}px ${GAME_2P_H}px`,
+              animation: "driftStarsNear 18s linear infinite",
+              pointerEvents: "none",
+            }} />
+          </React.Fragment>
+        )}
         <React.Fragment key={`${startTab}-${startKey}`}>
         {/* RVAL logo (Figma 396:7487) - box 285.405x48, top 367, centered. */}
         <div style={{
