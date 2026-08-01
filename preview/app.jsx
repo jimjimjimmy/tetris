@@ -127,6 +127,24 @@ const WINS_TO_WIN  = 2;   // best-of-3: first player to reach this wins the set
 const SIDEBAR_X        = 320;
 const SIDEBAR_W        = 82;
 const ICON_SIZE        = 24;
+// Invisible tap-target padding for the info/gear icons. The visual icon
+// stays ICON_SIZE (24px, matches Figma exactly) but a 24px hit box is well
+// under Apple's 44pt HIG minimum -- on real devices this reads as taps
+// "doing nothing" when a thumb lands a few px outside the SVG's exact
+// box. ICON_HIT_PAD extends the invisible padding around the icon on all
+// sides so ICON_SIZE + ICON_HIT_PAD*2 = 44. Applied via padding+negative
+// margin (flex layout sites) or padding+position offset (absolute sites)
+// so it never shifts the icon's visual position or surrounding spacing.
+const ICON_HIT_PAD      = (44 - ICON_SIZE) / 2;
+// Same idea for bare-text action buttons (Menu/Resume/Restart/Quit/Back/
+// Rematch etc.) that render with no padding at all -- just a ~14-17px line
+// of 12px text, well under the 44pt target. TEXT_HIT_PAD is applied as
+// vertical padding + equal negative margin (padding: `${TEXT_HIT_PAD}px 0`,
+// marginTop/marginBottom: -TEXT_HIT_PAD) so the invisible hit box grows to
+// >=44px tall while the visible text's position and surrounding flex gap
+// stay pixel-identical (matches the technique already used for
+// Settings' Cancel/Done, which bakes 17px into their container's `top`).
+const TEXT_HIT_PAD      = 17;
 const ICON_INFO_X      = 349;
 const ICON_INFO_Y      = 32;
 const ICON_GEAR_X      = 349;
@@ -1191,7 +1209,7 @@ function SettingsScreen({ settings, onUpdate, onClose, initialSection, exiting }
               <div key={String(v)}
                 onPointerDown={() => onUpdate("soundFX", v)}
                 onTouchStart={e => e.stopPropagation()}
-                style={{...opt(settings.soundFX === v), padding: "17px 0"}}
+                style={{...opt(settings.soundFX === v), padding: "17px 8px", marginLeft: -8, marginRight: -8}}
               >{v ? "ON" : "Off"}</div>
             ))}
           </div>
@@ -1203,7 +1221,7 @@ function SettingsScreen({ settings, onUpdate, onClose, initialSection, exiting }
               <div key={n}
                 onPointerDown={() => onUpdate("volume", n)}
                 onTouchStart={e => e.stopPropagation()}
-                style={{...opt(settings.volume === n), padding: "17px 0"}}
+                style={{...opt(settings.volume === n), padding: "17px 17px", marginLeft: -17, marginRight: -17}}
               >{n}</div>
             ))}
           </div>
@@ -1220,7 +1238,7 @@ function SettingsScreen({ settings, onUpdate, onClose, initialSection, exiting }
               <div key={String(v)}
                 onPointerDown={() => onUpdate("haptics", v)}
                 onTouchStart={e => e.stopPropagation()}
-                style={{...opt(settings.haptics === v), padding: "17px 0"}}
+                style={{...opt(settings.haptics === v), padding: "17px 8px", marginLeft: -8, marginRight: -8}}
               >{v ? "ON" : "Off"}</div>
             ))}
           </div>
@@ -1238,6 +1256,7 @@ function SettingsScreen({ settings, onUpdate, onClose, initialSection, exiting }
                   opacity: settings.hapticIntensity === val ? 1 : 0.3,
                   cursor: "pointer", userSelect: "none",
                   display: "flex", alignItems: "center",
+                  padding: "0 8px", marginLeft: -8, marginRight: -8,
                 }}
               >{label}</div>
             ))}
@@ -1255,7 +1274,7 @@ function SettingsScreen({ settings, onUpdate, onClose, initialSection, exiting }
               <div key={n}
                 onPointerDown={() => onUpdate("level", n)}
                 onTouchStart={e => e.stopPropagation()}
-                style={{...opt(settings.level === n), padding: "17px 0"}}
+                style={{...opt(settings.level === n), padding: "17px 17px", marginLeft: -17, marginRight: -17}}
               >{n}</div>
             ))}
           </div>
@@ -1272,7 +1291,7 @@ function SettingsScreen({ settings, onUpdate, onClose, initialSection, exiting }
                   letterSpacing: "2px", color: "#fff", textTransform: "uppercase",
                   opacity: settings.direction === s ? 1 : 0.3,
                   cursor: "pointer", userSelect: "none",
-                  padding: "17px 0",
+                  padding: "17px 8px", marginLeft: -8, marginRight: -8,
                 }}
               >{label}</div>
             ))}
@@ -1285,7 +1304,7 @@ function SettingsScreen({ settings, onUpdate, onClose, initialSection, exiting }
               <div key={String(v)}
                 onPointerDown={() => onUpdate("drift", v)}
                 onTouchStart={e => e.stopPropagation()}
-                style={{...opt(settings.drift === v), padding: "17px 0"}}
+                style={{...opt(settings.drift === v), padding: "17px 8px", marginLeft: -8, marginRight: -8}}
               >{v ? "ON" : "Off"}</div>
             ))}
           </div>
@@ -2804,7 +2823,7 @@ function TetrisGame2P() {
           <span
             onPointerDown={()=>{ disconnectRoom(); navTo(()=>{ setStartKey(0); setState(s=>({...makeInitState2P()})); }); }}
             onTouchStart={e=>e.stopPropagation()}
-            style={{fontSize:12,fontWeight:600,letterSpacing:"6px",marginRight:"-6px",color:"#fff",textTransform:"uppercase",cursor:"pointer"}}
+            style={{fontSize:12,fontWeight:600,letterSpacing:"6px",marginRight:"-6px",color:"#fff",textTransform:"uppercase",cursor:"pointer",padding:`${TEXT_HIT_PAD}px 0`,marginTop:-TEXT_HIT_PAD,marginBottom:-TEXT_HIT_PAD}}
           >Menu</span>
         </div>
       </div>
@@ -2892,13 +2911,13 @@ function TetrisGame2P() {
             opacity:1); the inner holds the steady 50% opacity. Split across two
             elements because an animation's opacity fill overrides an inline
             opacity on the SAME element -- compounded, the final render is 0.5. */}
-        <div style={{ position:"absolute", left:29, top:82, ...di(0) }}>
+        <div style={{ position:"absolute", left:29-ICON_HIT_PAD, top:82-ICON_HIT_PAD, ...di(0) }}>
           <div
             onPointerDown={() => { disconnectRoom(); setJoinCode(""); setStartTab("2players"); navTo(() => { setStartKey(0); setState(s => ({...s, phase:"start"})); }, "slide"); }}
             onTouchStart={e => e.stopPropagation()}
             style={{
               display:"flex", alignItems:"center", gap:8,
-              opacity:0.5, cursor:"pointer",
+              opacity:0.5, cursor:"pointer", padding:ICON_HIT_PAD,
             }}
           >
             <ArrowL/>
@@ -3180,14 +3199,14 @@ function TetrisGame2P() {
             <div
               onPointerDown={()=>openInstructions()}
               onTouchStart={e=>e.stopPropagation()}
-              style={{color:"#fff",opacity:0.3,cursor:"pointer"}}
+              style={{color:"#fff",opacity:0.3,cursor:"pointer",padding:ICON_HIT_PAD,margin:-ICON_HIT_PAD}}
             >
               <InfoIcon />
             </div>
             <div
               onPointerDown={()=>openSettings()}
               onTouchStart={e=>e.stopPropagation()}
-              style={{color:"#fff",opacity:0.3,cursor:"pointer"}}
+              style={{color:"#fff",opacity:0.3,cursor:"pointer",padding:ICON_HIT_PAD,margin:-ICON_HIT_PAD}}
             >
               <GearIcon />
             </div>
@@ -3324,14 +3343,14 @@ function TetrisGame2P() {
           <div
             onPointerDown={()=>openInstructions()}
             onTouchStart={e=>e.stopPropagation()}
-            style={{color:"#fff",opacity:0.3,cursor:"pointer"}}
+            style={{color:"#fff",opacity:0.3,cursor:"pointer",padding:ICON_HIT_PAD,margin:-ICON_HIT_PAD}}
           >
             <InfoIcon />
           </div>
           <div
             onPointerDown={()=>openSettings()}
             onTouchStart={e=>e.stopPropagation()}
-            style={{color:"#fff",opacity:0.3,cursor:"pointer"}}
+            style={{color:"#fff",opacity:0.3,cursor:"pointer",padding:ICON_HIT_PAD,margin:-ICON_HIT_PAD}}
           >
             <GearIcon />
           </div>
@@ -3877,8 +3896,9 @@ function TetrisGame2P() {
         onTouchStart={e => e.stopPropagation()}
         style={{
         position: "absolute",
-        left: ICON_INFO_X, top: `calc(${ICON_INFO_Y}px + env(safe-area-inset-top))`,
-        width: ICON_SIZE, height: ICON_SIZE,
+        left: ICON_INFO_X - ICON_HIT_PAD,
+        top: `calc(${ICON_INFO_Y - ICON_HIT_PAD}px + env(safe-area-inset-top))`,
+        width: ICON_SIZE, height: ICON_SIZE, padding: ICON_HIT_PAD,
         color: "#fff", opacity: CHROME_OPACITY,
         cursor: "pointer",
       }}>
@@ -3891,8 +3911,9 @@ function TetrisGame2P() {
         onTouchStart={e => e.stopPropagation()}
         style={{
           position: "absolute",
-          left: ICON_GEAR_X, top: `calc(${ICON_GEAR_Y}px + env(safe-area-inset-top))`,
-          width: ICON_SIZE, height: ICON_SIZE,
+          left: ICON_GEAR_X - ICON_HIT_PAD,
+          top: `calc(${ICON_GEAR_Y - ICON_HIT_PAD}px + env(safe-area-inset-top))`,
+          width: ICON_SIZE, height: ICON_SIZE, padding: ICON_HIT_PAD,
           color: "#fff", opacity: CHROME_OPACITY,
           cursor: "pointer",
         }}>
@@ -4040,7 +4061,7 @@ function TetrisGame2P() {
               <span
                 onPointerDown={()=>{ disconnectRoom(); navTo(()=>{ setStartKey(0); setState(s=>({...makeInitState2P()})); }); }}
                 onTouchStart={e=>e.stopPropagation()}
-                style={{fontSize:12,fontWeight:600,letterSpacing:"6px",marginRight:"-6px",color:"#fff",textTransform:"uppercase",cursor:"pointer"}}
+                style={{fontSize:12,fontWeight:600,letterSpacing:"6px",marginRight:"-6px",color:"#fff",textTransform:"uppercase",cursor:"pointer",padding:`${TEXT_HIT_PAD}px 0`,marginTop:-TEXT_HIT_PAD,marginBottom:-TEXT_HIT_PAD}}
               >Menu</span>
             </div>
           </div>
@@ -4112,12 +4133,12 @@ function TetrisGame2P() {
               <span
                 onPointerDown={()=>{ if(state.online) netSend({k:"pause",paused:false}); setState(s=>({...s,paused:false})); }}
                 onTouchStart={e=>e.stopPropagation()}
-                style={{fontSize:12,fontWeight:600,letterSpacing:"6px",marginRight:"-6px",color:"#fff",textTransform:"uppercase",cursor:"pointer"}}
+                style={{fontSize:12,fontWeight:600,letterSpacing:"6px",marginRight:"-6px",color:"#fff",textTransform:"uppercase",cursor:"pointer",padding:`${TEXT_HIT_PAD}px 0`,marginTop:-TEXT_HIT_PAD,marginBottom:-TEXT_HIT_PAD}}
               >Resume</span>
               <span
                 onPointerDown={handleMenu}
                 onTouchStart={e=>e.stopPropagation()}
-                style={{fontSize:12,fontWeight:400,letterSpacing:"6px",marginRight:"-6px",color:"rgba(255,255,255,0.3)",textTransform:"uppercase",cursor:"pointer"}}
+                style={{fontSize:12,fontWeight:400,letterSpacing:"6px",marginRight:"-6px",color:"rgba(255,255,255,0.3)",textTransform:"uppercase",cursor:"pointer",padding:`${TEXT_HIT_PAD}px 0`,marginTop:-TEXT_HIT_PAD,marginBottom:-TEXT_HIT_PAD}}
               >{state.online ? "Quit" : "Restart"}</span>
             </div>
           </div>
@@ -4177,7 +4198,7 @@ function TetrisGame2P() {
               <span
                 onPointerDown={()=>{ disconnectRoom(); setState(s=>({...makeInitState2P()})); }}
                 onTouchStart={e=>e.stopPropagation()}
-                style={{fontSize:12,fontWeight:600,letterSpacing:"6px",marginRight:"-6px",color:"#fff",textTransform:"uppercase",cursor:"pointer"}}
+                style={{fontSize:12,fontWeight:600,letterSpacing:"6px",marginRight:"-6px",color:"#fff",textTransform:"uppercase",cursor:"pointer",padding:`${TEXT_HIT_PAD}px 0`,marginTop:-TEXT_HIT_PAD,marginBottom:-TEXT_HIT_PAD}}
               >Menu</span>
             </div>
           </div>
@@ -4205,7 +4226,7 @@ function TetrisGame2P() {
           <div
             onPointerDown={() => setState(s => ({...makeInitState2P(), aiLevel: s.aiLevel}))}
             style={{
-              padding: "12px 36px", background: "#ff3333",
+              padding: "14px 36px", background: "#ff3333",
               color: "#fff", borderRadius: 6,
               fontSize: 12, fontWeight: 700, letterSpacing: 3,
               cursor: "pointer",
@@ -4297,13 +4318,13 @@ function TetrisGame2P() {
               <span
                 onPointerDown={onPrimary}
                 onTouchStart={e=>e.stopPropagation()}
-                style={{fontSize:12,fontWeight:600,letterSpacing:"6px",marginRight:"-6px",color:"#fff",textTransform:"uppercase",cursor:"pointer"}}
+                style={{fontSize:12,fontWeight:600,letterSpacing:"6px",marginRight:"-6px",color:"#fff",textTransform:"uppercase",cursor:"pointer",padding:`${TEXT_HIT_PAD}px 0`,marginTop:-TEXT_HIT_PAD,marginBottom:-TEXT_HIT_PAD}}
               >{primary}</span>
               {secondary && (
                 <span
                   onPointerDown={onSecondary}
                   onTouchStart={e=>e.stopPropagation()}
-                  style={{fontSize:12,fontWeight:400,letterSpacing:"6px",marginRight:"-6px",color:"rgba(255,255,255,0.3)",textTransform:"uppercase",cursor:"pointer"}}
+                  style={{fontSize:12,fontWeight:400,letterSpacing:"6px",marginRight:"-6px",color:"rgba(255,255,255,0.3)",textTransform:"uppercase",cursor:"pointer",padding:`${TEXT_HIT_PAD}px 0`,marginTop:-TEXT_HIT_PAD,marginBottom:-TEXT_HIT_PAD}}
                 >{secondary}</span>
               )}
             </div>
