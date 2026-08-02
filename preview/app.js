@@ -127,8 +127,8 @@ const AI_LEVEL_CONFIG = {
 // number every time that's bumped for a new archive.
 const APP_VERSION = "v1.1";
 const APP_BUILD_NUMBER = "5";
-const APP_COMMIT = "e4e210b";
-const APP_BUILD_DATE = "2026-08-02T08:53:37";
+const APP_COMMIT = "67b6849";
+const APP_BUILD_DATE = "2026-08-02T09:36:03";
 
 // Bottom-right debug stamp (commit hash + relative build time) on the start
 // screen -- dev/preview only, so either Mac can confirm which build is
