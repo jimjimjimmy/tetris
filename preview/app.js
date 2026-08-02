@@ -119,9 +119,9 @@ const AI_LEVEL_CONFIG = {
 // changes. APP_COMMIT is the short hash of the commit that introduced THIS
 // file state (one behind HEAD after the commit lands); update it just before
 // each commit.
-const APP_VERSION = "v1.0";
-const APP_COMMIT = "783770d";
-const APP_BUILD_DATE = "2026-07-10T17:09:06";
+const APP_VERSION = "v1.1";
+const APP_COMMIT = "e4e210b";
+const APP_BUILD_DATE = "2026-08-02T08:53:37";
 
 // Bottom-right debug stamp (commit hash + relative build time) on the start
 // screen -- dev/preview only, so either Mac can confirm which build is
@@ -182,6 +182,24 @@ const WINS_TO_WIN = 2; // best-of-3: first player to reach this wins the set
 const SIDEBAR_X = 320;
 const SIDEBAR_W = 82;
 const ICON_SIZE = 24;
+// Invisible tap-target padding for the info/gear icons. The visual icon
+// stays ICON_SIZE (24px, matches Figma exactly) but a 24px hit box is well
+// under Apple's 44pt HIG minimum -- on real devices this reads as taps
+// "doing nothing" when a thumb lands a few px outside the SVG's exact
+// box. ICON_HIT_PAD extends the invisible padding around the icon on all
+// sides so ICON_SIZE + ICON_HIT_PAD*2 = 44. Applied via padding+negative
+// margin (flex layout sites) or padding+position offset (absolute sites)
+// so it never shifts the icon's visual position or surrounding spacing.
+const ICON_HIT_PAD = (44 - ICON_SIZE) / 2;
+// Same idea for bare-text action buttons (Menu/Resume/Restart/Quit/Back/
+// Rematch etc.) that render with no padding at all -- just a ~14-17px line
+// of 12px text, well under the 44pt target. TEXT_HIT_PAD is applied as
+// vertical padding + equal negative margin (padding: `${TEXT_HIT_PAD}px 0`,
+// marginTop/marginBottom: -TEXT_HIT_PAD) so the invisible hit box grows to
+// >=44px tall while the visible text's position and surrounding flex gap
+// stay pixel-identical (matches the technique already used for
+// Settings' Cancel/Done, which bakes 17px into their container's `top`).
+const TEXT_HIT_PAD = 17;
 const ICON_INFO_X = 349;
 const ICON_INFO_Y = 32;
 const ICON_GEAR_X = 349;
@@ -259,6 +277,54 @@ const GAIN_FADE_MS = 1500;
 // lock without the human getting another reset.
 const LOCK_DELAY_MS = 250;
 const MAX_LOCK_RESETS = 5;
+
+// Screen-transition content slide+fade duration -- single source of truth
+// for every di() helper below (Settings, Instructions, both start-screen
+// tabs, online/join-code screen) plus their exit animations. The distance
+// these travel is the paired --transition-dist / --transition-dist-slow
+// CSS custom properties in index.html. Change ONE of these four values
+// (2 here, 2 there) to retune every screen transition at once instead of
+// hunting down each call site.
+const TRANSITION_MS = 360; // driftIn / driftOut / driftInLeft / driftOutRight
+const TRANSITION_SLOW_MS = 300; // slideInLeft, and the setTimeout unmount
+// delays that must match its duration
+
+// Drift (solo-only prototype, Settings > Game > Drift, default OFF): the
+// whole shared board -- locked stack + both active pieces -- scrolls one
+// column every DRIFT_TICK_MS and wraps at the seam (col 9 <-> col 0,
+// Pac-Man style). Fixed direction/speed for v1 -- not player-tunable yet.
+const DRIFT_TICK_MS = 2200;
+const DRIFT_DIR = 1; // +1 = rightward
+
+// Drift parallax starfield: two layers of randomly-scattered dots (NOT a
+// repeating small tile -- that read as a visible grid). Built once at module
+// load as an SVG data-URI background-image, seeded so the scatter is
+// deterministic and reproducible. The whole SVG (sized to the full frame)
+// IS the repeat unit for the CSS background-position scroll animation
+// (see driftStarsFar/Near keyframes in index.html), so it tiles seamlessly
+// without ever looking like a grid.
+function seededRandom(seed) {
+  let s = seed;
+  return () => {
+    s = s * 16807 % 2147483647;
+    return (s - 1) / 2147483646;
+  };
+}
+function buildStarfieldUrl(count, seed, rMin, rMax, aMin, aMax, w, h) {
+  const rand = seededRandom(seed);
+  let circles = "";
+  for (let i = 0; i < count; i++) {
+    const cx = (rand() * w).toFixed(1);
+    const cy = (rand() * h).toFixed(1);
+    const r = (rMin + rand() * (rMax - rMin)).toFixed(2);
+    const a = (aMin + rand() * (aMax - aMin)).toFixed(2);
+    circles += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="white" fill-opacity="${a}"/>`;
+  }
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">${circles}</svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+}
+const STARFIELD_FAR_URL = buildStarfieldUrl(70, 7919, 0.5, 1.1, 0.15, 0.35, FRAME_W, GAME_2P_H);
+const STARFIELD_NEAR_URL = buildStarfieldUrl(35, 104729, 1.0, 1.9, 0.35, 0.65, FRAME_W, GAME_2P_H);
 
 // Line clear flash: how long a white overlay sits on each just-cleared
 // row's OLD pixel position. Adds visual weight to clears that would
@@ -409,6 +475,45 @@ function lockPiece2P(board, cells, value) {
   }
   return next;
 }
+
+// ── Drift helpers (pure) ────────────────────────────────────────────────
+function wrapCol(c) {
+  return (c % COLS + COLS) % COLS;
+}
+
+// Shifts every locked cell one column in `dir`, wrapping at the seam.
+function shiftBoardDrift(board, dir) {
+  return board.map(row => {
+    const next = Array(COLS).fill(CELL_EMPTY);
+    for (let c = 0; c < COLS; c++) {
+      if (row[c] !== CELL_EMPTY) next[wrapCol(c + dir)] = row[c];
+    }
+    return next;
+  });
+}
+
+// Shifts an active piece's anchor by `dir`, wrapping it the same way the
+// board itself wraps (wrapCol keeps the anchor in [0,COLS) every tick, no
+// special-casing per direction). The piece's CELLS can still individually
+// land outside [0,COLS) when its footprint pokes past the seam (e.g. an
+// anchor of 9 with a 4-wide piece) -- wrapping each cell's column before
+// validating against the (already drift-shifted) board is what lets the
+// piece genuinely straddle the seam, Pac-Man style, instead of teleporting
+// as a whole unit. Reuses isValid2P unmodified: once columns are wrapped
+// they're always in range, so its existing bounds/occupancy/boundary
+// checks apply exactly as before. Holds in place if the wrapped landing
+// cells are blocked (occupied or wrong territory) -- the ground drifts
+// under it instead.
+function driftPiece(p, board, boundary, player, dir) {
+  if (!p) return p;
+  const next = {
+    ...p,
+    x: wrapCol(p.x + dir)
+  };
+  const cells = getCells(next.type, next.rot, next.x, next.y).map(([c, r]) => [wrapCol(c), r]);
+  if (!isValid2P(cells, board, boundary, player)) return p;
+  return next;
+}
 function clearP1_2P(board, bdy) {
   const terr = board.slice(bdy);
   const kept = terr.filter(row => row.includes(CELL_EMPTY));
@@ -436,7 +541,12 @@ function clearP2_2P(board, bdy) {
 // Extracted verbatim from the tick so the online network handler can reuse
 // the exact same boundary math for REMOTE line-clears. Eviction respawns draw
 // from nextPiece() (seeded in online, Math.random in solo).
-function shiftBoundary2P(g, n1, n2) {
+// `wrap` (solo-drift-only, always falsy for the online lk handler): without
+// it, a piece currently straddling the seam would read as "invalid" purely
+// from its own out-of-range raw columns and get wrongly evicted/respawned on
+// ANY line clear anywhere on the board, not just ones that actually displace
+// it -- a false-positive with nothing to do with the boundary shift itself.
+function shiftBoundary2P(g, n1, n2, wrap) {
   let {
     board,
     boundary,
@@ -448,6 +558,10 @@ function shiftBoundary2P(g, n1, n2) {
     p2NextNext,
     lastGain
   } = g;
+  const evictCells = p => {
+    const cells = getCells(p.type, p.rot, p.x, p.y);
+    return wrap ? cells.map(([c, r]) => [wrapCol(c), r]) : cells;
+  };
   let newBdy = boundary - n1 + n2;
   let winner = null,
     phase = "playing";
@@ -492,7 +606,7 @@ function shiftBoundary2P(g, n1, n2) {
       }
     }
     board = next;
-    if (!isValid2P(getCells(p1.type, p1.rot, p1.x, p1.y), board, newBdy, 1)) {
+    if (!isValid2P(evictCells(p1), board, newBdy, 1)) {
       p1 = {
         type: p1Next,
         rot: 0,
@@ -504,7 +618,7 @@ function shiftBoundary2P(g, n1, n2) {
       p1Next = p1NextNext;
       p1NextNext = nextPiece(1);
     }
-    if (!isValid2P(getCells(p2.type, p2.rot, p2.x, p2.y), board, newBdy, 2)) {
+    if (!isValid2P(evictCells(p2), board, newBdy, 2)) {
       p2 = {
         type: p2Next,
         rot: 0,
@@ -1289,7 +1403,8 @@ function loadSettings() {
     haptics: true,
     hapticIntensity: "medium",
     level: AI_LEVEL_DEFAULT,
-    direction: 1
+    direction: 1,
+    drift: false
   };
   try {
     return {
@@ -1355,7 +1470,7 @@ function SettingsScreen({
     userSelect: "none"
   });
   const di = n => exiting ? {} : {
-    animation: `driftIn 0.18s ease ${n * 50}ms both`
+    animation: `driftIn ${TRANSITION_MS}ms ease ${n * 50}ms both`
   };
   return /*#__PURE__*/React.createElement("div", {
     style: {
@@ -1367,7 +1482,7 @@ function SettingsScreen({
       zIndex: 100,
       userSelect: "none",
       WebkitUserSelect: "none",
-      animation: exiting ? "driftOutRight 0.15s ease both" : undefined
+      animation: exiting ? `driftOutRight ${TRANSITION_SLOW_MS}ms ease both` : undefined
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -1427,7 +1542,9 @@ function SettingsScreen({
     onTouchStart: e => e.stopPropagation(),
     style: {
       ...opt(settings.soundFX === v),
-      padding: "17px 0"
+      padding: "17px 8px",
+      marginLeft: -8,
+      marginRight: -8
     }
   }, v ? "ON" : "Off"))), /*#__PURE__*/React.createElement("div", {
     style: {
@@ -1445,7 +1562,9 @@ function SettingsScreen({
     onTouchStart: e => e.stopPropagation(),
     style: {
       ...opt(settings.volume === n),
-      padding: "17px 0"
+      padding: "17px 17px",
+      marginLeft: -17,
+      marginRight: -17
     }
   }, n)))), /*#__PURE__*/React.createElement("div", {
     style: {
@@ -1473,7 +1592,9 @@ function SettingsScreen({
     onTouchStart: e => e.stopPropagation(),
     style: {
       ...opt(settings.haptics === v),
-      padding: "17px 0"
+      padding: "17px 8px",
+      marginLeft: -8,
+      marginRight: -8
     }
   }, v ? "ON" : "Off"))), /*#__PURE__*/React.createElement("div", {
     style: {
@@ -1504,7 +1625,10 @@ function SettingsScreen({
       cursor: "pointer",
       userSelect: "none",
       display: "flex",
-      alignItems: "center"
+      alignItems: "center",
+      padding: "0 8px",
+      marginLeft: -8,
+      marginRight: -8
     }
   }, label)))), /*#__PURE__*/React.createElement("div", {
     style: {
@@ -1532,7 +1656,9 @@ function SettingsScreen({
     onTouchStart: e => e.stopPropagation(),
     style: {
       ...opt(settings.level === n),
-      padding: "17px 0"
+      padding: "17px 17px",
+      marginLeft: -17,
+      marginRight: -17
     }
   }, n))), /*#__PURE__*/React.createElement("div", {
     style: {
@@ -1566,9 +1692,30 @@ function SettingsScreen({
       opacity: settings.direction === s ? 1 : 0.3,
       cursor: "pointer",
       userSelect: "none",
-      padding: "17px 0"
+      padding: "17px 8px",
+      marginLeft: -8,
+      marginRight: -8
     }
-  }, label))))), /*#__PURE__*/React.createElement("div", {
+  }, label))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      minHeight: 44,
+      gap: 16
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: rowLbl
+  }, "Drift"), [false, true].map(v => /*#__PURE__*/React.createElement("div", {
+    key: String(v),
+    onPointerDown: () => onUpdate("drift", v),
+    onTouchStart: e => e.stopPropagation(),
+    style: {
+      ...opt(settings.drift === v),
+      padding: "17px 8px",
+      marginLeft: -8,
+      marginRight: -8
+    }
+  }, v ? "ON" : "Off"))))), /*#__PURE__*/React.createElement("div", {
     style: {
       position: "absolute",
       left: 0,
@@ -1662,7 +1809,7 @@ function InstructionsScreen({
     ...di(n)
   });
   const di = n => exiting ? {} : {
-    animation: `driftIn 0.18s ease ${n * 50}ms both`
+    animation: `driftIn ${TRANSITION_MS}ms ease ${n * 50}ms both`
   };
   return /*#__PURE__*/React.createElement("div", {
     style: {
@@ -1674,7 +1821,7 @@ function InstructionsScreen({
       zIndex: 100,
       userSelect: "none",
       WebkitUserSelect: "none",
-      animation: exiting ? "driftOutRight 0.15s ease both" : undefined
+      animation: exiting ? `driftOutRight ${TRANSITION_SLOW_MS}ms ease both` : undefined
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -1882,7 +2029,7 @@ function TetrisGame2P() {
       setShowSettings(false);
       setSettingsSection(null);
       setSettingsExiting(false);
-    }, 150);
+    }, TRANSITION_SLOW_MS);
   };
   const openInstructions = () => {
     setShowInstructions(true);
@@ -1893,7 +2040,7 @@ function TetrisGame2P() {
     setTimeout(() => {
       setShowInstructions(false);
       setInstructionsExiting(false);
-    }, 150);
+    }, TRANSITION_SLOW_MS);
   };
 
   // Screen-to-screen navigation with a full-page directional slide.
@@ -1967,6 +2114,14 @@ function TetrisGame2P() {
         // game-over grace window resolves.
         const runP1 = !s.online ? true : s.playerSide === 1 && !s.iDied;
         const runP2 = !s.online ? true : s.playerSide === 2 && !s.iDied;
+        // Drift (solo-only): while active, the gravity/lock fall-check below
+        // must wrap columns before validating, or a piece that's currently
+        // straddling the seam (some cells >= COLS from a drift tick) would
+        // read as permanently "out of bounds" and false-lock the instant it
+        // starts crossing. wrapCells is a no-op for any non-straddling piece,
+        // so this changes nothing when drift is off.
+        const driftOn = !s.online && settings.drift;
+        const wrapCells = cells => driftOn ? cells.map(([c, r]) => [wrapCol(c), r]) : cells;
         // Track which rows were full at lock time so we can flash them
         // briefly after they're cleared. Filled per-side just before
         // clearP*_2P runs (board still has the full rows at that moment).
@@ -2077,17 +2232,17 @@ function TetrisGame2P() {
           }
           if (p1.rot !== bestRot1) {
             const nr = (p1.rot + 1) % 4;
-            if (isValid2P(getCells(p1.type, nr, p1.x, p1.y), board, boundary, 1)) p1 = {
+            if (isValid2P(wrapCells(getCells(p1.type, nr, p1.x, p1.y)), board, boundary, 1)) p1 = {
               ...p1,
               rot: nr
             };
           } else if (p1.x < bestX1) {
-            if (isValid2P(getCells(p1.type, p1.rot, p1.x + 1, p1.y), board, boundary, 1)) p1 = {
+            if (isValid2P(wrapCells(getCells(p1.type, p1.rot, p1.x + 1, p1.y)), board, boundary, 1)) p1 = {
               ...p1,
               x: p1.x + 1
             };
           } else if (p1.x > bestX1) {
-            if (isValid2P(getCells(p1.type, p1.rot, p1.x - 1, p1.y), board, boundary, 1)) p1 = {
+            if (isValid2P(wrapCells(getCells(p1.type, p1.rot, p1.x - 1, p1.y)), board, boundary, 1)) p1 = {
               ...p1,
               x: p1.x - 1
             };
@@ -2196,17 +2351,17 @@ function TetrisGame2P() {
           }
           if (p2.rot !== bestRot2) {
             const nr = (p2.rot + 1) % 4;
-            if (isValid2P(getCells(p2.type, nr, p2.x, p2.y), board, boundary, 2)) p2 = {
+            if (isValid2P(wrapCells(getCells(p2.type, nr, p2.x, p2.y)), board, boundary, 2)) p2 = {
               ...p2,
               rot: nr
             };
           } else if (p2.x < bestX2) {
-            if (isValid2P(getCells(p2.type, p2.rot, p2.x + 1, p2.y), board, boundary, 2)) p2 = {
+            if (isValid2P(wrapCells(getCells(p2.type, p2.rot, p2.x + 1, p2.y)), board, boundary, 2)) p2 = {
               ...p2,
               x: p2.x + 1
             };
           } else if (p2.x > bestX2) {
-            if (isValid2P(getCells(p2.type, p2.rot, p2.x - 1, p2.y), board, boundary, 2)) p2 = {
+            if (isValid2P(wrapCells(getCells(p2.type, p2.rot, p2.x - 1, p2.y)), board, boundary, 2)) p2 = {
               ...p2,
               x: p2.x - 1
             };
@@ -2221,7 +2376,7 @@ function TetrisGame2P() {
         // elapsed. Successful human input during this window resets the
         // timer (handled inside applyP1), up to MAX_LOCK_RESETS.
         if (runP1) {
-          if (isValid2P(getCells(p1.type, p1.rot, p1.x, p1.y - 1), board, boundary, 1)) {
+          if (isValid2P(wrapCells(getCells(p1.type, p1.rot, p1.x, p1.y - 1)), board, boundary, 1)) {
             p1 = {
               ...p1,
               y: p1.y - 1,
@@ -2238,7 +2393,7 @@ function TetrisGame2P() {
               };
             } else if (nowMs - p1.lockPendingTs >= LOCK_DELAY_MS) {
               // Grace period elapsed -- commit the lock.
-              board = lockPiece2P(board, getCells(p1.type, p1.rot, p1.x, p1.y), CELL_P1);
+              board = lockPiece2P(board, wrapCells(getCells(p1.type, p1.rot, p1.x, p1.y)), CELL_P1);
               // Snapshot the full rows in P1 territory BEFORE the clear
               // mutates the board, for the line-clear flash overlay.
               for (let r = boundary; r < ROWS_2P; r++) {
@@ -2296,7 +2451,7 @@ function TetrisGame2P() {
 
         // P2 physics (mirror of P1, falling DOWN toward boundary).
         if (runP2) {
-          if (isValid2P(getCells(p2.type, p2.rot, p2.x, p2.y + 1), board, boundary, 2)) {
+          if (isValid2P(wrapCells(getCells(p2.type, p2.rot, p2.x, p2.y + 1)), board, boundary, 2)) {
             p2 = {
               ...p2,
               y: p2.y + 1,
@@ -2311,7 +2466,7 @@ function TetrisGame2P() {
                 lockPendingTs: nowMs
               };
             } else if (nowMs - p2.lockPendingTs >= LOCK_DELAY_MS) {
-              board = lockPiece2P(board, getCells(p2.type, p2.rot, p2.x, p2.y), CELL_P2);
+              board = lockPiece2P(board, wrapCells(getCells(p2.type, p2.rot, p2.x, p2.y)), CELL_P2);
               for (let r = 0; r < boundary; r++) {
                 if (board[r].every(v => v !== CELL_EMPTY)) clearedRowsThisTick.push(r);
               }
@@ -2377,7 +2532,7 @@ function TetrisGame2P() {
           p2Next,
           p2NextNext,
           lastGain: s.lastGain
-        }, n1, n2);
+        }, n1, n2, driftOn);
 
         // In ONLINE mode, when the LOCAL player locks a piece, bump lockStamp
         // and record the line count + post-shift board side. A dedicated
@@ -2411,7 +2566,31 @@ function TetrisGame2P() {
       });
     }, TEST_SPEED ? 110 : state.online ? ONLINE_TICK_MS : AI_LEVEL_CONFIG[state.aiLevel]?.tickMs || TICK_MS_DEFAULT);
     return () => clearInterval(id);
-  }, [state.aiLevel, state.online]);
+  }, [state.aiLevel, state.online, settings.drift]);
+
+  // ── Drift (solo-only prototype) ────────────────────────────────────────
+  // Gated on !online + settings.drift so this can never touch the networked
+  // path -- the toggle defaults OFF, so nothing here changes existing
+  // behavior unless a player explicitly opts in from Settings.
+  React.useEffect(() => {
+    if (state.online || !settings.drift) return;
+    const id = setInterval(() => {
+      setState(s => {
+        if (s.online || s.phase !== "playing") return s;
+        if (s.paused || s.oppPaused || s.summary) return s;
+        const board = shiftBoardDrift(s.board, DRIFT_DIR);
+        const p1 = driftPiece(s.p1, board, s.boundary, 1, DRIFT_DIR);
+        const p2 = driftPiece(s.p2, board, s.boundary, 2, DRIFT_DIR);
+        return {
+          ...s,
+          board,
+          p1,
+          p2
+        };
+      });
+    }, DRIFT_TICK_MS);
+    return () => clearInterval(id);
+  }, [state.online, settings.drift]);
 
   // ── Online networking: broadcast local events ─────────────────────────
   // netSend: JSON-encode + push over the live socket (no-op if not open).
@@ -2585,6 +2764,15 @@ function TetrisGame2P() {
         board,
         boundary
       } = s;
+      // Drift (solo-only): wrap columns before validating so the player's
+      // own gestures keep working while a piece is near or crossing the
+      // seam, instead of an unwrapped out-of-range column silently
+      // rejecting every move/rotate attempt. wrapX keeps the stored anchor
+      // normalized the same way driftPiece does. Both are no-ops when
+      // drift is off or online.
+      const driftOn = !s.online && settings.drift;
+      const wrapCells = cells => driftOn ? cells.map(([c, r]) => [wrapCol(c), r]) : cells;
+      const wrapX = x => driftOn ? wrapCol(x) : x;
       // Lock-delay reset: if the piece is currently in the lock-pending
       // window AND we haven't blown the reset cap, a successful input
       // resets the timer so the player can slide along the edge.
@@ -2603,14 +2791,14 @@ function TetrisGame2P() {
         // 4-tall I-piece rotate near the floor/boundary where a centered
         // rotation would clip out of bounds. First-valid wins.
         for (const [dx, dy] of ROT_KICKS) {
-          if (isValid2P(getCells(p1.type, nr, p1.x + dx, p1.y + dy), board, boundary, 1)) {
+          if (isValid2P(wrapCells(getCells(p1.type, nr, p1.x + dx, p1.y + dy)), board, boundary, 1)) {
             haptic.light();
             return {
               ...s,
               p1: {
                 ...p1,
                 rot: nr,
-                x: p1.x + dx,
+                x: wrapX(p1.x + dx),
                 y: p1.y + dy,
                 ...lockReset(p1)
               }
@@ -2618,25 +2806,25 @@ function TetrisGame2P() {
           }
         }
       } else if (action === "left") {
-        if (isValid2P(getCells(p1.type, p1.rot, p1.x - 1, p1.y), board, boundary, 1)) {
+        if (isValid2P(wrapCells(getCells(p1.type, p1.rot, p1.x - 1, p1.y)), board, boundary, 1)) {
           haptic.light();
           return {
             ...s,
             p1: {
               ...p1,
-              x: p1.x - 1,
+              x: wrapX(p1.x - 1),
               ...lockReset(p1)
             }
           };
         }
       } else if (action === "right") {
-        if (isValid2P(getCells(p1.type, p1.rot, p1.x + 1, p1.y), board, boundary, 1)) {
+        if (isValid2P(wrapCells(getCells(p1.type, p1.rot, p1.x + 1, p1.y)), board, boundary, 1)) {
           haptic.light();
           return {
             ...s,
             p1: {
               ...p1,
-              x: p1.x + 1,
+              x: wrapX(p1.x + 1),
               ...lockReset(p1)
             }
           };
@@ -2647,7 +2835,7 @@ function TetrisGame2P() {
         // frame. Hard drop bypasses lock-delay extension -- the timer is
         // set to a past instant so the next tick locks immediately.
         let y = p1.y;
-        while (isValid2P(getCells(p1.type, p1.rot, p1.x, y - 1), board, boundary, 1)) {
+        while (isValid2P(wrapCells(getCells(p1.type, p1.rot, p1.x, y - 1)), board, boundary, 1)) {
           y--;
         }
         if (y !== p1.y) {
@@ -2670,7 +2858,7 @@ function TetrisGame2P() {
       } else if (action === "soft") {
         // Soft drop for P1: one row UP (y-1), with natural travel toward boundary.
         // Refreshes the lock-delay timer like any other successful input.
-        if (isValid2P(getCells(p1.type, p1.rot, p1.x, p1.y - 1), board, boundary, 1)) {
+        if (isValid2P(wrapCells(getCells(p1.type, p1.rot, p1.x, p1.y - 1)), board, boundary, 1)) {
           haptic.light();
           return {
             ...s,
@@ -2684,7 +2872,7 @@ function TetrisGame2P() {
       }
       return s;
     });
-  }, []);
+  }, [settings.drift]);
 
   // applyP2: mirror of applyP1 for the P2 piece (falls DOWN). The
   // "boost-toward-boundary" gesture for P2 is DOWN; the unsupported
@@ -2701,6 +2889,11 @@ function TetrisGame2P() {
         board,
         boundary
       } = s;
+      // Drift (solo-only): see applyP1 -- same wrap-before-validate pattern
+      // so P2's own gestures keep working near/through the seam too.
+      const driftOn = !s.online && settings.drift;
+      const wrapCells = cells => driftOn ? cells.map(([c, r]) => [wrapCol(c), r]) : cells;
+      const wrapX = x => driftOn ? wrapCol(x) : x;
       const lockReset = piece => {
         if (piece.lockPendingTs == null) return {};
         if ((piece.lockResets || 0) >= MAX_LOCK_RESETS) return {};
@@ -2714,14 +2907,14 @@ function TetrisGame2P() {
         // Wall kick (mirror of P1): ROT_KICKS, horizontal first then
         // vertical/diagonal so a 4-tall I-piece rotates near the ceiling/boundary.
         for (const [dx, dy] of ROT_KICKS) {
-          if (isValid2P(getCells(p2.type, nr, p2.x + dx, p2.y + dy), board, boundary, 2)) {
+          if (isValid2P(wrapCells(getCells(p2.type, nr, p2.x + dx, p2.y + dy)), board, boundary, 2)) {
             haptic.light();
             return {
               ...s,
               p2: {
                 ...p2,
                 rot: nr,
-                x: p2.x + dx,
+                x: wrapX(p2.x + dx),
                 y: p2.y + dy,
                 ...lockReset(p2)
               }
@@ -2729,25 +2922,25 @@ function TetrisGame2P() {
           }
         }
       } else if (action === "left") {
-        if (isValid2P(getCells(p2.type, p2.rot, p2.x - 1, p2.y), board, boundary, 2)) {
+        if (isValid2P(wrapCells(getCells(p2.type, p2.rot, p2.x - 1, p2.y)), board, boundary, 2)) {
           haptic.light();
           return {
             ...s,
             p2: {
               ...p2,
-              x: p2.x - 1,
+              x: wrapX(p2.x - 1),
               ...lockReset(p2)
             }
           };
         }
       } else if (action === "right") {
-        if (isValid2P(getCells(p2.type, p2.rot, p2.x + 1, p2.y), board, boundary, 2)) {
+        if (isValid2P(wrapCells(getCells(p2.type, p2.rot, p2.x + 1, p2.y)), board, boundary, 2)) {
           haptic.light();
           return {
             ...s,
             p2: {
               ...p2,
-              x: p2.x + 1,
+              x: wrapX(p2.x + 1),
               ...lockReset(p2)
             }
           };
@@ -2756,7 +2949,7 @@ function TetrisGame2P() {
         // Hard drop DOWN: same pattern as P1's hard drop UP. Bypass
         // lock-delay extension by setting the timer to a past instant.
         let y = p2.y;
-        while (isValid2P(getCells(p2.type, p2.rot, p2.x, y + 1), board, boundary, 2)) {
+        while (isValid2P(wrapCells(getCells(p2.type, p2.rot, p2.x, y + 1)), board, boundary, 2)) {
           y++;
         }
         if (y !== p2.y) {
@@ -2777,7 +2970,7 @@ function TetrisGame2P() {
       } else if (action === "soft") {
         // Soft drop for P2: one row DOWN (y+1), with natural travel toward boundary.
         // Refreshes the lock-delay timer like any other successful input.
-        if (isValid2P(getCells(p2.type, p2.rot, p2.x, p2.y + 1), board, boundary, 2)) {
+        if (isValid2P(wrapCells(getCells(p2.type, p2.rot, p2.x, p2.y + 1)), board, boundary, 2)) {
           haptic.light();
           return {
             ...s,
@@ -2791,7 +2984,7 @@ function TetrisGame2P() {
       }
       return s;
     });
-  }, []);
+  }, [settings.drift]);
 
   // playerSideRef mirrors state.playerSide for closure-free access inside
   // the keyboard and touch-gesture event handlers (which run outside the
@@ -3619,7 +3812,10 @@ function TetrisGame2P() {
         marginRight: "-6px",
         color: "#fff",
         textTransform: "uppercase",
-        cursor: "pointer"
+        cursor: "pointer",
+        padding: `${TEXT_HIT_PAD}px 0`,
+        marginTop: -TEXT_HIT_PAD,
+        marginBottom: -TEXT_HIT_PAD
       }
     }, "Menu")));
   }
@@ -3733,7 +3929,7 @@ function TetrisGame2P() {
     // pattern): the bg stays put, elements drift in from the right; on back-nav
     // (navExiting) they drift back out to the right.
     const di = n => ({
-      animation: navExiting ? "driftOutRight 0.18s ease both" : `driftIn 0.18s ease ${n * 45}ms both`
+      animation: navExiting ? `driftOutRight ${TRANSITION_MS}ms ease both` : `driftIn ${TRANSITION_MS}ms ease ${n * 45}ms both`
     });
     return /*#__PURE__*/React.createElement("div", {
       style: {
@@ -3752,8 +3948,8 @@ function TetrisGame2P() {
     }), /*#__PURE__*/React.createElement(BgVignette, null), /*#__PURE__*/React.createElement("div", {
       style: {
         position: "absolute",
-        left: 29,
-        top: 82,
+        left: 29 - ICON_HIT_PAD,
+        top: 82 - ICON_HIT_PAD,
         ...di(0)
       }
     }, /*#__PURE__*/React.createElement("div", {
@@ -3775,7 +3971,8 @@ function TetrisGame2P() {
         alignItems: "center",
         gap: 8,
         opacity: 0.5,
-        cursor: "pointer"
+        cursor: "pointer",
+        padding: ICON_HIT_PAD
       }
     }, /*#__PURE__*/React.createElement(ArrowL, null), /*#__PURE__*/React.createElement("span", {
       style: {
@@ -4030,7 +4227,7 @@ function TetrisGame2P() {
       // content: drift in on enter, drift out right on back. FADE nav
       // (start<->game) still animates the whole root (see root style below).
       const di = n => ({
-        animation: navExiting && navMode === "slide" ? "driftOutRight 0.18s ease both" : `${startKey > 0 ? "slideInLeft 0.15s" : "driftIn 0.18s"} ease ${n * 45}ms both`
+        animation: navExiting && navMode === "slide" ? `driftOutRight ${TRANSITION_MS}ms ease both` : `${startKey > 0 ? `slideInLeft ${TRANSITION_SLOW_MS}ms` : `driftIn ${TRANSITION_MS}ms`} ease ${n * 45}ms both`
       });
       return /*#__PURE__*/React.createElement("div", {
         style: {
@@ -4047,7 +4244,25 @@ function TetrisGame2P() {
         }
       }, /*#__PURE__*/React.createElement("div", {
         style: driftGrid
-      }), /*#__PURE__*/React.createElement(BgVignette, null), /*#__PURE__*/React.createElement(React.Fragment, {
+      }), /*#__PURE__*/React.createElement(BgVignette, null), settings.drift && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+        style: {
+          position: "absolute",
+          inset: 0,
+          backgroundImage: STARFIELD_FAR_URL,
+          backgroundSize: `${FRAME_W}px ${GAME_2P_H}px`,
+          animation: "driftStarsFar 34s linear infinite",
+          pointerEvents: "none"
+        }
+      }), /*#__PURE__*/React.createElement("div", {
+        style: {
+          position: "absolute",
+          inset: 0,
+          backgroundImage: STARFIELD_NEAR_URL,
+          backgroundSize: `${FRAME_W}px ${GAME_2P_H}px`,
+          animation: "driftStarsNear 18s linear infinite",
+          pointerEvents: "none"
+        }
+      })), /*#__PURE__*/React.createElement(React.Fragment, {
         key: `${startTab}-${startKey}`
       }, /*#__PURE__*/React.createElement("div", {
         style: {
@@ -4169,7 +4384,9 @@ function TetrisGame2P() {
         style: {
           color: "#fff",
           opacity: 0.3,
-          cursor: "pointer"
+          cursor: "pointer",
+          padding: ICON_HIT_PAD,
+          margin: -ICON_HIT_PAD
         }
       }, /*#__PURE__*/React.createElement(InfoIcon, null)), /*#__PURE__*/React.createElement("div", {
         onPointerDown: () => openSettings(),
@@ -4177,7 +4394,9 @@ function TetrisGame2P() {
         style: {
           color: "#fff",
           opacity: 0.3,
-          cursor: "pointer"
+          cursor: "pointer",
+          padding: ICON_HIT_PAD,
+          margin: -ICON_HIT_PAD
         }
       }, /*#__PURE__*/React.createElement(GearIcon, null))), SHOW_BUILD_STAMP && /*#__PURE__*/React.createElement("div", {
         style: {
@@ -4201,7 +4420,7 @@ function TetrisGame2P() {
     // SLIDE nav (start<->online) keeps the bg static, animates only content;
     // FADE nav (start<->game) animates the whole root (see root style below).
     const di = n => ({
-      animation: navExiting && navMode === "slide" ? "driftOutRight 0.18s ease both" : `${startKey > 0 ? "slideInLeft 0.15s" : "driftIn 0.18s"} ease ${n * 45}ms both`
+      animation: navExiting && navMode === "slide" ? `driftOutRight ${TRANSITION_MS}ms ease both` : `${startKey > 0 ? `slideInLeft ${TRANSITION_SLOW_MS}ms` : `driftIn ${TRANSITION_MS}ms`} ease ${n * 45}ms both`
     });
     return /*#__PURE__*/React.createElement("div", {
       style: {
@@ -4218,7 +4437,25 @@ function TetrisGame2P() {
       }
     }, /*#__PURE__*/React.createElement("div", {
       style: driftGrid
-    }), /*#__PURE__*/React.createElement(BgVignette, null), /*#__PURE__*/React.createElement(React.Fragment, {
+    }), /*#__PURE__*/React.createElement(BgVignette, null), settings.drift && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "absolute",
+        inset: 0,
+        backgroundImage: STARFIELD_FAR_URL,
+        backgroundSize: `${FRAME_W}px ${GAME_2P_H}px`,
+        animation: "driftStarsFar 34s linear infinite",
+        pointerEvents: "none"
+      }
+    }), /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "absolute",
+        inset: 0,
+        backgroundImage: STARFIELD_NEAR_URL,
+        backgroundSize: `${FRAME_W}px ${GAME_2P_H}px`,
+        animation: "driftStarsNear 18s linear infinite",
+        pointerEvents: "none"
+      }
+    })), /*#__PURE__*/React.createElement(React.Fragment, {
       key: `${startTab}-${startKey}`
     }, /*#__PURE__*/React.createElement("div", {
       style: {
@@ -4381,7 +4618,9 @@ function TetrisGame2P() {
       style: {
         color: "#fff",
         opacity: 0.3,
-        cursor: "pointer"
+        cursor: "pointer",
+        padding: ICON_HIT_PAD,
+        margin: -ICON_HIT_PAD
       }
     }, /*#__PURE__*/React.createElement(InfoIcon, null)), /*#__PURE__*/React.createElement("div", {
       onPointerDown: () => openSettings(),
@@ -4389,7 +4628,9 @@ function TetrisGame2P() {
       style: {
         color: "#fff",
         opacity: 0.3,
-        cursor: "pointer"
+        cursor: "pointer",
+        padding: ICON_HIT_PAD,
+        margin: -ICON_HIT_PAD
       }
     }, /*#__PURE__*/React.createElement(GearIcon, null))), SHOW_BUILD_STAMP && /*#__PURE__*/React.createElement("div", {
       style: {
@@ -4461,20 +4702,30 @@ function TetrisGame2P() {
   if (playerSide === 1 || playerSide === 2) {
     const piece = playerSide === 1 ? p1 : p2;
     const ghostStep = playerSide === 1 ? -1 : +1; // P1 floats UP, P2 falls DOWN
+    // Drift (solo-only): wrap columns so the ghost preview and lane
+    // highlight still work correctly while the piece is straddling the
+    // seam, instead of the unwrapped out-of-range columns making every
+    // validity check fail and the ghost silently vanish.
+    const gCol = settings.drift ? wrapCol : c => c;
     let gy = piece.y;
-    while (isValid2P(getCells(piece.type, piece.rot, piece.x, gy + ghostStep), board, boundary, playerSide)) {
+    while (isValid2P(getCells(piece.type, piece.rot, piece.x, gy + ghostStep).map(([c, r]) => [gCol(c), r]), board, boundary, playerSide)) {
       gy += ghostStep;
     }
     if (gy !== piece.y) {
       getCells(piece.type, piece.rot, piece.x, gy).forEach(([c, r]) => {
-        if (r >= 0 && r < ROWS_2P && c >= 0 && c < COLS && !grid[r][c]) {
-          grid[r][c] = GHOST_COLOR;
+        const wc = gCol(c);
+        if (r >= 0 && r < ROWS_2P && wc >= 0 && wc < COLS && !grid[r][wc]) {
+          grid[r][wc] = GHOST_COLOR;
         }
       });
     }
+    // Lane guide uses the RAW (unwrapped) span, clamped to the visible
+    // board -- wrapping first would make a straddling piece's columns
+    // (e.g. {9,0,1,2}) span min=0/max=9, drawing guides across the whole
+    // board instead of the true, shrinking sliver still on each side.
     const pCells = getCells(piece.type, piece.rot, piece.x, piece.y);
-    const lMinC = Math.min(...pCells.map(([c]) => c));
-    const lMaxC = Math.max(...pCells.map(([c]) => c));
+    const lMinC = Math.max(0, Math.min(...pCells.map(([c]) => c)));
+    const lMaxC = Math.min(COLS - 1, Math.max(...pCells.map(([c]) => c)));
     const topRow = playerSide === 1 ? boundary : 0;
     const botRow = playerSide === 1 ? ROWS_2P : boundary;
     laneData = {
@@ -4488,11 +4739,18 @@ function TetrisGame2P() {
   // Active pieces -- BOTH players -- render at the same translucent color
   // (ACTIVE_COLOR = opacity 0.5). The Figma design uses a single base color
   // and only varies opacity to distinguish locked vs active and per-player.
+  // Drift (solo-only): wrap columns so a piece currently straddling the
+  // seam renders split across both edges instead of the overflow cells
+  // just being dropped. wrapCol is a no-op for any in-range column, so
+  // this is harmless whenever drift is off or nothing is straddling.
+  const activeCol = settings.drift ? wrapCol : c => c;
   getCells(p1.type, p1.rot, p1.x, p1.y).forEach(([c, r]) => {
-    if (r >= 0 && r < ROWS_2P && c >= 0 && c < COLS) grid[r][c] = ACTIVE_COLOR;
+    const wc = activeCol(c);
+    if (r >= 0 && r < ROWS_2P && wc >= 0 && wc < COLS) grid[r][wc] = ACTIVE_COLOR;
   });
   getCells(p2.type, p2.rot, p2.x, p2.y).forEach(([c, r]) => {
-    if (r >= 0 && r < ROWS_2P && c >= 0 && c < COLS) grid[r][c] = ACTIVE_COLOR;
+    const wc = activeCol(c);
+    if (r >= 0 && r < ROWS_2P && wc >= 0 && wc < COLS) grid[r][wc] = ACTIVE_COLOR;
   });
 
   // Pause toggle for the on-screen pause button. Stops touch from
@@ -4673,7 +4931,25 @@ function TetrisGame2P() {
       background: "rgba(0, 0, 0, 0.18)",
       pointerEvents: "none"
     }
+  }), settings.drift && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      inset: 0,
+      backgroundImage: STARFIELD_FAR_URL,
+      backgroundSize: `${FRAME_W}px ${GAME_2P_H}px`,
+      animation: "driftStarsFar 34s linear infinite",
+      pointerEvents: "none"
+    }
   }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      inset: 0,
+      backgroundImage: STARFIELD_NEAR_URL,
+      backgroundSize: `${FRAME_W}px ${GAME_2P_H}px`,
+      animation: "driftStarsNear 18s linear infinite",
+      pointerEvents: "none"
+    }
+  })), /*#__PURE__*/React.createElement("div", {
     style: {
       position: "absolute",
       left: DASH_LEFT_X,
@@ -4908,10 +5184,11 @@ function TetrisGame2P() {
     onTouchStart: e => e.stopPropagation(),
     style: {
       position: "absolute",
-      left: ICON_INFO_X,
-      top: `calc(${ICON_INFO_Y}px + env(safe-area-inset-top))`,
+      left: ICON_INFO_X - ICON_HIT_PAD,
+      top: `calc(${ICON_INFO_Y - ICON_HIT_PAD}px + env(safe-area-inset-top))`,
       width: ICON_SIZE,
       height: ICON_SIZE,
+      padding: ICON_HIT_PAD,
       color: "#fff",
       opacity: CHROME_OPACITY,
       cursor: "pointer"
@@ -4921,10 +5198,11 @@ function TetrisGame2P() {
     onTouchStart: e => e.stopPropagation(),
     style: {
       position: "absolute",
-      left: ICON_GEAR_X,
-      top: `calc(${ICON_GEAR_Y}px + env(safe-area-inset-top))`,
+      left: ICON_GEAR_X - ICON_HIT_PAD,
+      top: `calc(${ICON_GEAR_Y - ICON_HIT_PAD}px + env(safe-area-inset-top))`,
       width: ICON_SIZE,
       height: ICON_SIZE,
+      padding: ICON_HIT_PAD,
       color: "#fff",
       opacity: CHROME_OPACITY,
       cursor: "pointer"
@@ -5149,7 +5427,10 @@ function TetrisGame2P() {
         marginRight: "-6px",
         color: "#fff",
         textTransform: "uppercase",
-        cursor: "pointer"
+        cursor: "pointer",
+        padding: `${TEXT_HIT_PAD}px 0`,
+        marginTop: -TEXT_HIT_PAD,
+        marginBottom: -TEXT_HIT_PAD
       }
     }, "Menu")));
   })(), paused && !summary && phase === "playing" && (() => {
@@ -5313,7 +5594,10 @@ function TetrisGame2P() {
         marginRight: "-6px",
         color: "#fff",
         textTransform: "uppercase",
-        cursor: "pointer"
+        cursor: "pointer",
+        padding: `${TEXT_HIT_PAD}px 0`,
+        marginTop: -TEXT_HIT_PAD,
+        marginBottom: -TEXT_HIT_PAD
       }
     }, "Resume"), /*#__PURE__*/React.createElement("span", {
       onPointerDown: handleMenu,
@@ -5325,7 +5609,10 @@ function TetrisGame2P() {
         marginRight: "-6px",
         color: "rgba(255,255,255,0.3)",
         textTransform: "uppercase",
-        cursor: "pointer"
+        cursor: "pointer",
+        padding: `${TEXT_HIT_PAD}px 0`,
+        marginTop: -TEXT_HIT_PAD,
+        marginBottom: -TEXT_HIT_PAD
       }
     }, state.online ? "Quit" : "Restart")));
   })(), state.oppPaused && !paused && !summary && phase === "playing" && (() => {
@@ -5465,7 +5752,10 @@ function TetrisGame2P() {
         marginRight: "-6px",
         color: "#fff",
         textTransform: "uppercase",
-        cursor: "pointer"
+        cursor: "pointer",
+        padding: `${TEXT_HIT_PAD}px 0`,
+        marginTop: -TEXT_HIT_PAD,
+        marginBottom: -TEXT_HIT_PAD
       }
     }, "Menu")));
   })(), summary && /*#__PURE__*/React.createElement("div", {
@@ -5513,7 +5803,7 @@ function TetrisGame2P() {
       aiLevel: s.aiLevel
     })),
     style: {
-      padding: "12px 36px",
+      padding: "14px 36px",
       background: "#ff3333",
       color: "#fff",
       borderRadius: 6,
@@ -5710,7 +6000,10 @@ function TetrisGame2P() {
         marginRight: "-6px",
         color: "#fff",
         textTransform: "uppercase",
-        cursor: "pointer"
+        cursor: "pointer",
+        padding: `${TEXT_HIT_PAD}px 0`,
+        marginTop: -TEXT_HIT_PAD,
+        marginBottom: -TEXT_HIT_PAD
       }
     }, primary), secondary && /*#__PURE__*/React.createElement("span", {
       onPointerDown: onSecondary,
@@ -5722,7 +6015,10 @@ function TetrisGame2P() {
         marginRight: "-6px",
         color: "rgba(255,255,255,0.3)",
         textTransform: "uppercase",
-        cursor: "pointer"
+        cursor: "pointer",
+        padding: `${TEXT_HIT_PAD}px 0`,
+        marginTop: -TEXT_HIT_PAD,
+        marginBottom: -TEXT_HIT_PAD
       }
     }, secondary)));
     if (state.online) {

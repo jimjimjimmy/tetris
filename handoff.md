@@ -1,153 +1,133 @@
-# Handoff - RVAL (jimjimjimmy/tetris) - 2026-07-09
+# Handoff - RVAL / Tetris (jimjimjimmy/tetris) - 2026-08-02
 
 ## What this is
 
-RVAL - the two-player territorial Tetris app. Personal repo `jimjimjimmy/tetris`,
-Capacitor iOS wrap. This session (on Gandalf, `~/Developer/tetris`): shipped 1.0
-to the App Store, then produced a set of gameplay demo videos for portfolio /
-App Store preview use.
-
-**Status:** version 1.0 (build 3) is LIVE on the App Store (approved, published).
-Bundle ID `com.typographic.drift`, marketing name `RVAL`.
+RVAL - two-player territorial Tetris, Capacitor iOS wrap. This session (on
+Gandalf, working from the Dropbox copy at `~/Dropbox/04 Projects/AI Shared/Tetris`,
+builds run from `~/Developer/tetris`): built a full "Drift" prototype feature
+(solo-only, Settings > Game > Drift, default OFF) end-to-end - board/piece
+wraparound mechanic, parallax starfield, several rounds of bugfixes from live
+device testing, and a screen-transition timing increase + consolidation
+refactor. All work is on branch `feature/drift-cylinder`, NOT merged to `main`.
 
 ## Current state
 
-Working / shipped:
-- **App is live in the App Store as RVAL 1.0 (3)** with the RVAL wordmark, all
-  metadata, screenshots, support/privacy pages, categorized Puzzle + Casual.
-- Support email: `rval@typographic.com` (was `arch.rival@...`, swapped mid-session).
-- 7 gameplay demo MP4s in `store-screenshots/` (see file list below). Two of
-  them are flagged with an `OK ` prefix in the filename - those are the user's
-  chosen keepers:
-  - `OK rval-gameplay-3.mp4` (20s, tug-of-war, 6 boundary shifts)
-  - `OK rval-gameplay-5.mp4` (19.4s, dominant local +2 with drama)
+**Working and verified (live device + browser testing throughout):**
+- Drift mechanic: the whole shared board (locked stack + both active pieces)
+  scrolls one column every 2.2s and wraps at the seam (col 9 <-> col 0,
+  Pac-Man style, true straddling mid-crossing - not a teleport).
+- Player input (left/right/rotate/hard-drop/soft-drop) stays responsive while
+  a piece is near or crossing the seam - this took a second bugfix pass after
+  on-device testing surfaced it (see commit `2ff016b`).
+- Gravity/lock, AI rotate/slide stepping, boundary-eviction-on-line-clear, and
+  the ghost-piece preview are all wrap-aware too - each was a separate bug
+  found via on-device "glitchy" reports and fixed one at a time (`34b85b3`).
+- Parallax starfield (two layers, random scatter via seeded PRNG -> SVG
+  data-URI background, NOT a repeating CSS tile - the first version looked
+  like a visible grid and was rejected) behind the board AND on the start
+  screen (both Single + 2 Players tabs), all gated on the same Drift toggle.
+- Screen-transition slide+fade (Settings, Instructions, both start tabs,
+  online/join-code screen) distance increased to 2.5x original, duration to
+  2x original, and CONSOLIDATED into shared constants so a future retune is a
+  2-4 value edit instead of hunting down 7+ call sites.
 
-Uncommitted in-tree:
-- `ios/App/App.xcodeproj/project.pbxproj` and `App.xcscheme` have small
-  cosmetic Xcode "recommended settings" churn (`LastUpgradeCheck`
-  `2650`->`2660`, `LastUpgradeVersion` `1600`->`2660`,
-  `TARGETED_DEVICE_FAMILY` string `"1"` -> integer `1`). No behavior change.
-  Safe to commit or leave.
-- 5 of the 7 gameplay MP4s are untracked. Decide: keep in git, gitignore, or
-  move to Dropbox.
+**Known non-issue explained, not a bug:** mid-session, one duration edit only
+landed on the "Single" start-screen tab's `di()` and silently missed the
+"2 Players" tab's near-identical block (they're NOT a shared component -
+two separately-written blocks that differ only in indentation, documented as
+intentional in CLAUDE.md). Caught and fixed same session; also root-caused
+the user's EARLIER report ("2 players updated, main screen didn't") to this
+exact same class of bug from an even earlier edit. The consolidation refactor
+should prevent this recurring.
 
-Known regressions introduced this session: **none in shipped code**. All AI /
-TEST_SPEED hacks used for video capture were reverted; `preview/app.jsx` and
-`preview/app.js` match the last committed version (`c34429c` + the `24414df`
-stamp).
+**Untested / pending decision - App icon:** an updated app-icon PNG was
+dropped in `assets/App Icon.png` and flattened (alpha stripped) into
+`ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png` in BOTH
+clones, but deliberately left UNCOMMITTED - user is still testing it on
+device. Flagged TWICE that the source image looks like it's cropped from a
+repeating tile (content cut off at the left and/or right edge in both
+versions provided so far) - this will likely look broken once iOS masks it
+small with rounded corners. Do not commit until the user confirms a version
+that reads as a clean, self-contained mark.
 
 ## Files changed this session
 
 | File | Status | What changed |
 |------|--------|-------------|
-| ios/App/App.xcodeproj/project.pbxproj | committed (`a646516`, `da6c0aa`, `c34429c`) + small unstaged churn | iPhone-only; build number bumped 1 -> 2 -> 3; small Xcode housekeeping (uncommitted) |
-| ios/App/App/Info.plist | committed (`da6c0aa`) | `ITSAppUsesNonExemptEncryption = false` to skip encryption prompt |
-| preview/app.jsx | committed (`b60553b`, `24414df`) | RVAL wordmark component replaced ARCH RIVAL lockup; APP_COMMIT + build date bumped |
-| preview/app.js | committed (`b60553b`, `24414df`) | Rebuilt output |
-| assets/splash.svg | committed (`b60553b`) | Splash wordmark swapped to RVAL |
-| ios/App/App/Assets.xcassets/Splash.imageset/*.png | committed (`b60553b`) | 6 splash PNGs regenerated (2732x2732, no alpha) |
-| ios/App/App/public/app.js | committed (`c34429c`) | `cap sync ios` output - the KEY fix that made build 3 actually ship RVAL (build 2 shipped stale public/) |
-| support.html | committed (`a646516`, `aff6695`) | Created; email later swapped to `rval@typographic.com` |
-| privacy.html | committed (`a646516`, `aff6695`) | Created; same email swap |
-| index.html | committed (`a646516`) | Root redirect title `DRIFT` -> `Arch Rival` |
-| APP-STORE-SUBMISSION.md | committed (`bfe0fc5`, `4bc69cf`, `aff6695`, `eb1762c`) | Worksheet created + iterated (RVAL name, email, versioning conventions) |
-| CLAUDE.md | committed (`b60553b`) | `RivalLogo` entry rewritten for RVAL |
-| store-screenshots/rval-gameplay*.mp4 | UNTRACKED (7 files) | Portfolio / App Store preview clips generated via puppeteer + ffmpeg |
+| `preview/app.jsx` | committed (many commits, `feature/drift-cylinder`) | Drift mechanic, wrap-aware collision/AI/eviction/ghost, starfield generator + both render sites, transition constants (`TRANSITION_MS`/`TRANSITION_SLOW_MS`), player-input wrap fixes |
+| `preview/app.js` | committed | Rebuilt output, paired with every `app.jsx` commit per repo convention |
+| `preview/index.html` | committed | `driftStarsFar`/`driftStarsNear` keyframes, transition keyframes + `--transition-dist`/`--transition-dist-slow` CSS custom properties |
+| `ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png` | **UNCOMMITTED** in both clones | Test app icon (flattened, alpha stripped) - see "pending decision" above |
+| `assets/App Icon.png` | untracked | Source of the test icon, user-provided, current version has the same "cropped tile" concern as the first |
+| `store-screenshots/6.5-display/02-countdown.png`, `03-keypad.png` | untracked | Pre-existing, unrelated to this session, never touched |
 
 ## Uncommitted work
 
-None. Both leftovers were resolved in `81fa5ae`:
-- Xcode housekeeping churn (`project.pbxproj`, `App.xcscheme`) committed as-is.
-- Gameplay MP4s added to `.gitignore` (`store-screenshots/*.mp4`). They live
-  on Gandalf disk only; not versioned.
-
-Everything else was already committed. Both clones on Gandalf
-(`~/Developer/tetris` and the Dropbox copy) are at `81fa5ae` clean.
-
-## To any other machine reading this
-
-The **other Mac's clone** (MacFQ at `/Users/jimmyche/.../Tetris`) will
-be stale until it runs:
-```bash
-cd "/Users/jimmyche/Library/CloudStorage/Dropbox/04 Projects/AI Shared/Tetris"
-git checkout -- .    # discard any stale uncommitted diffs
-git pull
-```
-Per the new convention (top of CLAUDE.md), the other Mac should NOT edit or
-push RVAL from here on - Gandalf is the primary. Sync-only.
+Only the app icon (see above). Everything else from this session is
+committed and pushed to `origin/feature/drift-cylinder` (HEAD: `bfc90ea`).
 
 ## Open questions / decisions pending
 
-1. **Gameplay video final selection.** User marked 2 as "OK" (files prefixed
-   `OK rval-gameplay-3.mp4` and `OK rval-gameplay-5.mp4`). No decision yet on
-   the other 5 - delete, keep as backups, or archive.
-2. **Xcode "Update to recommended settings" prompt** - was flagged during
-   Archive; ignored to avoid interrupting the ship. Should be reviewed and
-   applied when there's time.
-3. **EU trader status** in App Store Connect - the banner was showing on the
-   Apps page. Not blocking US distribution; must be resolved for EU
-   distribution. Answer will be "not a trader" if you're an individual dev.
-4. **Post-mortem: cap sync gap.** Session hit a real problem where build 2
-   uploaded with stale `ios/App/App/public/` because `npx cap sync ios` was
-   not run between the RVAL source swap and Archive. Fixed for build 3 and
-   documented in memory (`feedback_capacitor_cap_sync_before_archive.md`) so
-   the pattern doesn't repeat.
-5. **Xcode Cloud** - is configured (per CLAUDE.md `ci_scripts/`), but we shipped
-   via local Archive from Gandalf, not Cloud. Consider validating Cloud path
-   for future updates.
+1. **App icon**: does the user want to crop/recenter the source image so it
+   reads as one self-contained mark before it ships, or are they fine with
+   the cropped-tile look? Flagged twice, not yet answered either way.
+2. **`feature/drift-cylinder` -> `main`**: this entire Drift feature (11+
+   content commits) has not been merged. Confirm with the user before merging
+   - it's a solo-only prototype behind a default-OFF toggle, so it's low risk,
+   but merge timing is the user's call.
+3. **`main` has moved independently**: `origin/main` is 18 commits ahead of
+   where `feature/drift-cylinder` branched (App Store screenshots, etc. - see
+   `ce78580`, `b045c8c`). Any future merge should account for that drift.
+4. **Online/multiplayer sync for Drift**: explicitly out of scope this whole
+   session (user chose "single-player first" early on). If Drift ever needs
+   to work in networked 2P, that's unstarted - would need boundary/piece sync
+   extended to cover the drift tick too.
 
 ## What to do next
 
-1. **Commit or discard the Xcode housekeeping churn** in `project.pbxproj` and
-   `App.xcscheme`. One-liner commit if you want it clean.
-2. **Decide on the 7 gameplay MP4s** - pick keepers, decide git tracking vs
-   gitignore.
-3. **Resolve the EU trader status banner** in App Store Connect when convenient.
-4. **v1.0.1 plan** (whenever it's needed): for a hotfix, bump
-   `CFBundleShortVersionString` to `1.0.1`, bump `CURRENT_PROJECT_VERSION`
-   to `4`, edit source, `npm run build`, **`npx cap sync ios`**, verify
-   `ios/App/App/public/app.js` has the change, Archive, upload, attach in
-   App Store Connect. (Versioning notes are in `APP-STORE-SUBMISSION.md`.)
-5. **Portfolio case study** - user mentioned wanting to write one up. Gameplay
-   videos are ready; write-up not started.
+1. Wait for the user's verdict on the app icon (cropped-tile concern) before
+   committing it.
+2. If/when they approve an icon, commit it as its own small commit (source
+   PNG + the flattened xcassets PNG), separate from the Drift feature commits.
+3. Ask the user whether `feature/drift-cylinder` should be merged to `main`
+   yet, or stay as a branch for more testing first.
+4. No other loose ends from this session - Drift + starfield + transitions
+   are all committed, pushed, and synced into the Developer build clone.
 
 ## How to resume
 
-On Gandalf (this machine, build-only clone at `~/Developer/tetris`):
 ```bash
-cd ~/Developer/tetris
-git pull
-ls store-screenshots/
+cd ~/Developer/tetris   # the actual build clone - NEVER build from Dropbox
+git status --short      # confirm the app-icon PNG is still the only uncommitted diff
+git log --oneline -1    # should show bfc90ea (or later) on feature/drift-cylinder
+git branch --show-current  # should show feature/drift-cylinder
 ```
 
-On the MacFQ (Dropbox copy at `/Users/jimmyche/.../Tetris`):
+To pick up editing from the Dropbox copy (where this session ran):
 ```bash
-cd "/Users/jimmyche/Library/CloudStorage/Dropbox/04 Projects/AI Shared/Tetris"
+cd "/Users/jimmy/Dropbox/04 Projects/AI Shared/Tetris"
 git pull
+npm run build   # only if you edit preview/app.jsx - see CLAUDE.md's REQUIRED stamp workflow
 ```
 
-For any code edit that changes `preview/app.jsx`:
-```bash
-# edit preview/app.jsx
-npm run build          # writes preview/app.js
-npx cap sync ios       # copies preview/app.js -> ios/App/App/public/app.js  <-- REQUIRED for iOS builds
-grep -o "<expected-string>" ios/App/App/public/app.js  # verify sync landed
-# bump APP_COMMIT + APP_BUILD_DATE per CLAUDE.md two-commit pattern
-# then Archive in Xcode
-```
+To test on device: open `~/Developer/tetris/ios/App/App.xcodeproj` in Xcode,
+select Shadowfax, Run. Settings > Game > Drift (default OFF) turns on both
+the board mechanic and the starfield.
 
 ## Machine / account notes
 
-- Session ran on **Gandalf** (`~/Developer/tetris`). Per CLAUDE.md, Gandalf is
-  build-only from the Developer clone, NOT the Dropbox copy. This session did
-  commit and push directly from Gandalf, which worked cleanly.
+- Generated on **Gandalf**, working from the Dropbox copy
+  (`/Users/jimmy/Dropbox/04 Projects/AI Shared/Tetris`) for edits, with
+  `~/Developer/tetris` as the actual build clone (per CLAUDE.md convention).
+  Both clones are in sync as of this handoff except for the uncommitted app
+  icon, which exists identically (uncommitted) in both.
 - Personal repo; push with the explicit token form:
   ```bash
   GITHUB_TOKEN=$(gh auth token --hostname github.com -u jimjimjimmy 2>/dev/null)
-  git push "https://jimjimjimmy:${GITHUB_TOKEN}@github.com/jimjimjimmy/tetris.git" main
+  git push "https://jimjimjimmy:${GITHUB_TOKEN}@github.com/jimjimjimmy/tetris.git" feature/drift-cylinder
   ```
-- App Store account: Jimmy Chen team ID `32S35BUK9J`. Bundle ID
-  `com.typographic.drift` (unchanged for identity continuity even though
-  marketing name is now RVAL).
-- Support email `rval@typographic.com` is the canonical contact for App Review,
-  support page, and privacy page.
+- Every `app.jsx`-touching commit this session followed the repo's REQUIRED
+  two-commit stamp pattern (content commit -> copy hash -> bump
+  `APP_COMMIT`/`APP_BUILD_DATE` -> rebuild -> second commit). Current stamp:
+  `bfc90ea` is the bump commit; `APP_COMMIT` in code reads the content commit
+  one behind it (`415dff7`), which is the documented convention, not a bug.
