@@ -65,8 +65,8 @@ const AI_LEVEL_CONFIG  = {
 // file state (one behind HEAD after the commit lands); update it just before
 // each commit.
 const APP_VERSION    = "v1.1";
-const APP_COMMIT     = "b5896b8";
-const APP_BUILD_DATE = "2026-08-02T04:56:31";
+const APP_COMMIT     = "e4e210b";
+const APP_BUILD_DATE = "2026-08-02T08:53:37";
 
 // Bottom-right debug stamp (commit hash + relative build time) on the start
 // screen -- dev/preview only, so either Mac can confirm which build is
