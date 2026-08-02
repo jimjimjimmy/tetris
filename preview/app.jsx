@@ -56,17 +56,24 @@ const AI_LEVEL_CONFIG  = {
   5: { randomRatio: 0.00, aiPeriod: 1, holePenalty: 100, bumpPenalty: 6,   maxHPenalty: 10,  coverageBonus: 42, linePts: 1200, tickMs: 140  },
 };
 
-// Build identity, shown in Settings (APP_VERSION) and, for internal builds
-// only, at the bottom of the start screen (APP_COMMIT + APP_BUILD_DATE -- see
-// SHOW_BUILD_STAMP below). App went 1.0 / released on 2026-07-10; APP_VERSION
-// now follows conventional semver (MAJOR.MINOR.PATCH) from here on -- bump
-// PATCH for fixes, MINOR for features, MAJOR for breaking/App-Store-relaunch
-// changes. APP_COMMIT is the short hash of the commit that introduced THIS
-// file state (one behind HEAD after the commit lands); update it just before
-// each commit.
-const APP_VERSION    = "v1.1";
-const APP_COMMIT     = "e4e210b";
-const APP_BUILD_DATE = "2026-08-02T08:53:37";
+// Build identity, shown in Settings (APP_VERSION + APP_BUILD_NUMBER) and, for
+// internal builds only, at the bottom of the start screen (APP_COMMIT +
+// APP_BUILD_DATE -- see SHOW_BUILD_STAMP below). App went 1.0 / released on
+// 2026-07-10; APP_VERSION now follows conventional semver (MAJOR.MINOR.PATCH)
+// from here on -- bump PATCH for fixes, MINOR for features, MAJOR for
+// breaking/App-Store-relaunch changes. APP_COMMIT is the short hash of the
+// commit that introduced THIS file state (one behind HEAD after the commit
+// lands); update it just before each commit.
+//
+// APP_BUILD_NUMBER mirrors CURRENT_PROJECT_VERSION in
+// ios/App/App.xcodeproj/project.pbxproj -- this is the standard iOS
+// "Version X.Y (build N)" convention (same thing TestFlight shows per
+// install), so it must be bumped by hand in lockstep with the Xcode build
+// number every time that's bumped for a new archive.
+const APP_VERSION      = "v1.1";
+const APP_BUILD_NUMBER = "5";
+const APP_COMMIT       = "e4e210b";
+const APP_BUILD_DATE   = "2026-08-02T08:53:37";
 
 // Bottom-right debug stamp (commit hash + relative build time) on the start
 // screen -- dev/preview only, so either Mac can confirm which build is
@@ -1348,7 +1355,7 @@ function SettingsScreen({ settings, onUpdate, onClose, initialSection, exiting }
         fontFamily: inter, fontSize: 10, fontWeight: 500,
         letterSpacing: 2, color: "rgba(255,255,255,0.2)",
         pointerEvents: "none",
-      }}>{APP_VERSION}</div>
+      }}>{APP_VERSION} ({APP_BUILD_NUMBER})</div>
     </div>
   );
 }
