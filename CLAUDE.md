@@ -195,17 +195,36 @@ next feature -> `v1.1`, breaking/relaunch -> `v2.0`) - bump it manually at
 each release milestone, not every commit.
 
 Where each constant shows up is now split:
-- `APP_VERSION` - shown in **Settings** (bottom, centered). Always visible,
-  App Store and internal builds alike. This is the ONLY version info an
-  end user ever sees.
+- `APP_VERSION` + `APP_BUILD_NUMBER` - shown in **Settings** (bottom,
+  centered) as `v1.1 (5)`. Always visible, App Store and internal builds
+  alike. This is the ONLY version info an end user ever sees, and it's the
+  standard iOS "Version X (build N)" convention -- the same thing TestFlight
+  shows per install, so you can confirm a device/App-Store-Connect build
+  against this without needing any debug info. `APP_BUILD_NUMBER` MUST mirror
+  `CURRENT_PROJECT_VERSION` in `ios/App/App.xcodeproj/project.pbxproj` --
+  bump both by hand, together, every time a new Xcode archive build number is
+  cut (see "Bumping the Xcode build number" below).
 - `APP_COMMIT` / `APP_BUILD_DATE` - shown at the **start screen bottom-right**
   (commit hash + relative build time, e.g. "b60553b" / "5d ago"), gated by
   `SHOW_BUILD_STAMP` (top of `app.jsx`). This is INTERNAL-BUILD-ONLY debug
-  info for confirming which build a device is running:
+  info for confirming which *commit* a device is running (finer-grained than
+  the build number, useful mid-development):
   - `SHOW_BUILD_STAMP = true` (default) for dev/preview/internal builds.
   - `SHOW_BUILD_STAMP = false` **REQUIRED before every official App Store
     archive/push** - the entire bottom-right row disappears; App Store
     builds carry no commit hash or build timestamp anywhere in the UI.
+
+### Bumping the Xcode build number
+`CURRENT_PROJECT_VERSION` in `ios/App/App.xcodeproj/project.pbxproj` appears
+FOUR times (App target + its UI-test target, Debug + Release configs each) --
+bump all four together, e.g.:
+```bash
+sed -i '' 's/CURRENT_PROJECT_VERSION = 4;/CURRENT_PROJECT_VERSION = 5;/g' ios/App/App.xcodeproj/project.pbxproj
+```
+Then update `APP_BUILD_NUMBER` in `preview/app.jsx` to match (same number, as
+a string), rebuild, and `npx cap sync ios` (see below). `MARKETING_VERSION`
+in the same file mirrors `APP_VERSION` and only changes at release
+milestones, not every build.
 
 ### REQUIRED before every commit - BUILD + update version stamps
 The `APP_COMMIT` / `APP_BUILD_DATE` constants live in `preview/app.jsx`.
