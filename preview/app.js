@@ -119,7 +119,7 @@ const AI_LEVEL_CONFIG = {
 // changes. APP_COMMIT is the short hash of the commit that introduced THIS
 // file state (one behind HEAD after the commit lands); update it just before
 // each commit.
-const APP_VERSION = "v1.0";
+const APP_VERSION = "v1.1";
 const APP_COMMIT = "b5896b8";
 const APP_BUILD_DATE = "2026-08-02T04:56:31";
 
