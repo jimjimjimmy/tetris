@@ -30,6 +30,7 @@ Instead of racing for high scores, you're fighting for territory. Each row you c
 
 MODES
 - Solo: pick your side, pick a difficulty, take on the AI.
+- Drift: a scrolling, wrap-around solo mode with parallax starfield.
 - Online: share a 4-digit room code with a friend and play in real time.
 
 CONTROLS
