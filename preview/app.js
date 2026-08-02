@@ -128,7 +128,7 @@ const APP_BUILD_DATE = "2026-08-02T08:53:37";
 // running at a glance. The user-facing APP_VERSION lives in Settings instead
 // (see SettingsScreen) and is never gated off. Set false right before an
 // official App Store archive/push -- official builds carry no debug stamp.
-const SHOW_BUILD_STAMP = true;
+const SHOW_BUILD_STAMP = false;
 
 // Default fall interval (used as a fallback when state.aiLevel is invalid).
 // Real tick rate comes from AI_LEVEL_CONFIG[aiLevel].tickMs, looked up at
