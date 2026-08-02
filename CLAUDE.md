@@ -1,25 +1,33 @@
 # Tetris - Project Context
 
-> **CROSS-MACHINE RULE (read first).** As of 2026-07-10, **Gandalf is the
-> primary machine for RVAL** and does BOTH edit and build. Work happens in the
-> Developer clone `~/Developer/tetris` (OUTSIDE Dropbox - never edit/build from
-> the Dropbox copy, which stays as an archival mirror only). Commit and push
-> from Gandalf using the jimjimjimmy explicit-token form documented below. If
-> another Mac ever needs to touch the repo, hand the writer role off via a
-> handoff.md + `git push` from Gandalf, then `git pull` on the other Mac
-> before it touches anything.
+> **SINGLE-COPY RULE (read first).** As of 2026-08-03, MacFQ is no longer
+> used for Tetris. There is exactly ONE working copy: `~/Developer/tetris`
+> (OUTSIDE Dropbox). All editing AND building happen here, on Gandalf, by one
+> person on one machine. Commit and push using the jimjimjimmy explicit-token
+> form documented below.
 >
-> (Historical note: prior convention was MacFQ at
-> `/Users/jimmyche/.../Dropbox/.../Tetris` as the writer and Gandalf as
-> build-only. That flipped after the RVAL 1.0(3) ship, when it became clear
-> Gandalf was doing everything anyway - Xcode, Shadowfax, App Store Connect.)
+> There used to be a second copy of this repo inside Dropbox
+> (`~/Dropbox/04 Projects/AI Shared/Tetris`), kept in sync with this one and
+> used as an alternate edit location. That's retired -- don't edit or build
+> from it, don't `cd` there for Tetris work. It's left on disk untouched for
+> now (Jimmy will clean it up manually later) but it is NOT a copy to trust;
+> `~/Developer/tetris` is the only source of truth.
+>
+> (Historical note: before this, the convention was MacFQ-edits /
+> Gandalf-builds, then Gandalf-edits-via-Dropbox / Gandalf-builds outside
+> Dropbox, both to work around two-machine git-over-Dropbox corruption. With
+> only one machine now, that whole class of problem goes away -- see the
+> retired sections this replaced, kept below only as history if this ever
+> becomes multi-machine again.)
 
 <!--
   IMPORTANT: KEEP THIS FILE CURRENT
-  Whichever machine (MacFQ or Gandalf) adds a component, updates a file,
-  or makes a structural change: update this file before ending the session.
-  Both machines depend on this as the single source of truth.
-  Last updated: 2026-06-11 - MacFQ (I-piece floor-rotation fix: ROT_KICKS adds vertical/diagonal wall-kicks so a 4-tall I rotates near the floor/ceiling/boundary instead of silently failing. Also: multiplayer QA suite fixes (3rd-player reject + MENU ghost-rematch). feature/multiplayer.)
+  Any session that adds a component, updates a file, or makes a structural
+  change: update this file before ending the session. It's the single source
+  of truth for the next session (this one or a future one).
+  Last updated: 2026-08-03 - Gandalf (retired the Dropbox / two-machine setup;
+  single clone at ~/Developer/tetris going forward. feature/drift-cylinder
+  merged to main: Drift mode, tap-target hit-area fixes, v1.1/build 4.)
 -->
 
 ## Required reading before building
@@ -315,97 +323,36 @@ function useReveal(duration) {
 
 ---
 
-## Cross-machine collaboration (MacFQ + Gandalf)
+## Working copy (single machine, single clone)
 
-- **MacFQ** = Jimmy's FloQast MacBook. Has access to FQ GitHub (FloQastInc repos) and freeradicals-studio. All FQ-related pushes happen here only.
-- **Gandalf** = personal machine. Has access to jimjimjimmy personal GitHub only. No FQ GitHub access.
-- Tetris is a personal project - Gandalf CAN push to jimjimjimmy/tetris directly.
-- Files live in Dropbox. The two machines mount it at DIFFERENT paths:
-  - Code/Claude machine: `/Users/jimmyche/Library/CloudStorage/Dropbox/04 Projects/AI Shared/Tetris` (Claude runs here, does edits + git push)
-  - Device-build machine (phone connected, Xcode Run to "Shadowfax"): `/Users/jimmy/Dropbox/04 Projects/AI Shared/Tetris`
-- Git is the source of truth for committed state - push at end of every session
-
-### SINGLE-WRITER rule (avoid the two-agent / Dropbox-.git corruption)
-- Syncing the project (especially the `.git` folder) across both Macs via Dropbox
-  CORRUPTS git: Gandalf hit `error: ... unpack-objects failed` on `git pull`
-  because Dropbox half-synced git objects. Running a Claude session on BOTH Macs
-  against the same Dropbox copy compounds this (divergent commits).
-- Rule going forward:
-  - **Only ONE machine commits/pushes** (the code/Claude machine, `/Users/jimmyche/...`).
-  - **Gandalf is build-only.** It should NOT live in Dropbox for git purposes -
-    it should have its OWN fresh `git clone` OUTSIDE Dropbox (e.g.
-    `~/Developer/tetris`) and `git pull` to update. Build the device from there.
-  - Never run two Claude sessions editing the same repo at once.
-- To repair Gandalf's corrupted repo, re-clone fresh (do NOT `rm` the Dropbox
-  copy - Dropbox would propagate the delete to the other Mac):
-  ```bash
-  mkdir -p ~/Developer && cd ~/Developer
-  git clone https://github.com/jimjimjimmy/tetris.git
-  cd tetris && npm install && npx cap sync ios
-  # open ios/App/App.xcodeproj from ~/Developer/tetris -> Shadowfax -> Run
-  ```
-
-### Switching the active writer (FOOLPROOF) - which Mac is editing
-Only ONE Mac edits/commits at a time. Hand the baton through GitHub.
-**Mantra: PULL before you start. PUSH when you stop.**
-
-HAND OFF to Gandalf (you want to work on Gandalf):
-1. On the MacFQ - save + send your latest to GitHub:
-   ```bash
-   git commit -am "wip" 2>/dev/null; \
-   GITHUB_TOKEN=$(gh auth token --hostname github.com -u jimjimjimmy 2>/dev/null) && \
-   git push "https://jimjimjimmy:${GITHUB_TOKEN}@github.com/jimjimjimmy/tetris.git" main
-   ```
-   ("nothing to commit" is fine - the push is what matters.)
-2. On GANDALF - get it:
-   ```bash
-   cd ~/Developer/tetris && git pull
-   ```
-   Work there. When done, push from Gandalf using the SAME two lines from step 1
-   (run them inside `~/Developer/tetris`).
-
-HAND BACK to the MacFQ:
-1. On GANDALF: push (the commands from step 1, run in `~/Developer/tetris`).
-2. On the MacFQ: `git pull` BEFORE you touch anything.
-
-GOLDEN RULES (these prevent every problem we hit):
-- PULL before you start, PUSH when you stop. Every time.
-- One writer at a time. Never edit on both Macs - or run two Claude sessions on
-  the repo - at once.
-- Gandalf only ever works from `~/Developer/tetris`. NEVER the Dropbox copy.
-- Easiest + safest: let Claude do the commit/push (it knows the stamp rules and
-  won't commit junk). `git commit -am` above only saves already-tracked files,
-  so it will not accidentally add the stray untracked files.
-
-If you are ever unsure "did my change make it across?":
-```bash
-git pull && git log --oneline -3
-```
-The top line is the truth (that is what is on GitHub). If git ever prints
-"CONFLICT", STOP and ask Claude on the MacFQ - do not force anything.
-
-### node_modules is PER-MACHINE - never sync it via Dropbox
-- `node_modules` is gitignored but lives inside the Dropbox folder, so Dropbox
-  would otherwise try to sync it. Running `npm ci`/`npm install` on one machine
-  then churns thousands of files across Dropbox to the other Mac, landing a
-  PARTIAL copy - which breaks the iOS build there with "invalid custom path
-  'ios/Sources/HapticsPlugin'" / "Build input files cannot be found ...
-  node_modules/@capacitor/haptics/.../Haptics.swift". (Capacitor's CLI-managed
-  CapApp-SPM/Package.swift references the plugins by local node_modules path.)
-- Fix: each Mac keeps its OWN local node_modules and Dropbox ignores it. Set on
-  EACH machine (in the project root):
-  `xattr -w com.dropbox.ignored 1 node_modules`
-  (already set on the MacFQ). Note: setting it removes the shared copy
-  from Dropbox + the other Mac, which is fine - run `npm install` locally there.
-- After any pull/sync (or a fresh checkout) on a machine, run
-  `npm install && npx cap sync ios` locally before building. Do NOT rely on
-  Dropbox to deliver node_modules.
+- **Gandalf** = the only machine used for Tetris now. Has access to jimjimjimmy
+  personal GitHub only (no FQ GitHub access, not needed -- Tetris is personal).
+- **One clone, `~/Developer/tetris`, OUTSIDE Dropbox.** This is where you edit,
+  build, run on device (Shadowfax), and commit/push. There is no other copy to
+  keep in sync and no "which machine has the latest" question anymore.
+- Git is still the source of truth for committed state - push at the end of
+  every session so it's backed up on GitHub, same as always.
+- After any `git pull` (or a fresh clone), run `npm install && npx cap sync ios`
+  before building -- `node_modules` is gitignored and Capacitor's CLI-managed
+  `CapApp-SPM/Package.swift` references plugins by local `node_modules` path.
 
 ### Handoff rules
 1. **Update this CLAUDE.md** whenever you add a component, rename a file, or change the architecture.
 2. **Never create standalone HTML preview files** - all components go into index.html.
-3. **Push to GitHub** at the end of every session so both machines are on the same commit.
-4. **Don't assume the other machine's session history** - write CLAUDE.md as current facts.
+3. **Push to GitHub** at the end of every session so it's backed up.
+
+### History: the old Dropbox / two-machine setup (retired 2026-08-03)
+Earlier this project ran across two Macs (MacFQ + Gandalf) with the repo living
+in Dropbox, which caused real problems: Dropbox half-syncing the `.git` folder
+corrupted git on pull, and `node_modules` syncing a partial copy broke iOS
+builds with missing Capacitor plugin paths. The fix at the time was a strict
+single-writer handoff protocol (pull-before-start, push-when-stop, only one Mac
+editing at a time) plus keeping Gandalf's build clone outside Dropbox
+(`~/Developer/tetris`, the same clone still in use today) and Dropbox-ignoring
+`node_modules` per machine. None of that applies anymore with one machine and
+one clone -- if this ever becomes multi-machine again, that protocol is the
+starting point to revive (check git history on this file around 2026-08-03 for
+the full runbook).
 
 ---
 
