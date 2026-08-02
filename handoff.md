@@ -1,133 +1,127 @@
-# Handoff - RVAL / Tetris (jimjimjimmy/tetris) - 2026-08-02
+# Handoff - RVAL / Tetris (jimjimjimmy/tetris) - 2026-08-03
 
 ## What this is
 
 RVAL - two-player territorial Tetris, Capacitor iOS wrap. This session (on
-Gandalf, working from the Dropbox copy at `~/Dropbox/04 Projects/AI Shared/Tetris`,
-builds run from `~/Developer/tetris`): built a full "Drift" prototype feature
-(solo-only, Settings > Game > Drift, default OFF) end-to-end - board/piece
-wraparound mechanic, parallax starfield, several rounds of bugfixes from live
-device testing, and a screen-transition timing increase + consolidation
-refactor. All work is on branch `feature/drift-cylinder`, NOT merged to `main`.
+Gandalf): fixed a real tap-target bug, shipped the Drift feature from the
+previous session's branch into `main` as v1.1 (build 4), and retired the
+old Dropbox / two-machine workflow in favor of a single working copy.
 
 ## Current state
 
-**Working and verified (live device + browser testing throughout):**
-- Drift mechanic: the whole shared board (locked stack + both active pieces)
-  scrolls one column every 2.2s and wraps at the seam (col 9 <-> col 0,
-  Pac-Man style, true straddling mid-crossing - not a teleport).
-- Player input (left/right/rotate/hard-drop/soft-drop) stays responsive while
-  a piece is near or crossing the seam - this took a second bugfix pass after
-  on-device testing surfaced it (see commit `2ff016b`).
-- Gravity/lock, AI rotate/slide stepping, boundary-eviction-on-line-clear, and
-  the ghost-piece preview are all wrap-aware too - each was a separate bug
-  found via on-device "glitchy" reports and fixed one at a time (`34b85b3`).
-- Parallax starfield (two layers, random scatter via seeded PRNG -> SVG
-  data-URI background, NOT a repeating CSS tile - the first version looked
-  like a visible grid and was rejected) behind the board AND on the start
-  screen (both Single + 2 Players tabs), all gated on the same Drift toggle.
-- Screen-transition slide+fade (Settings, Instructions, both start tabs,
-  online/join-code screen) distance increased to 2.5x original, duration to
-  2x original, and CONSOLIDATED into shared constants so a future retune is a
-  2-4 value edit instead of hunting down 7+ call sites.
+**Working and verified:**
+- Fixed the reported bug: info/gear icons (and several other icon/text
+  buttons) had a 24x24px or smaller tap target with zero padding -- on a
+  real device thumb tap this read as "the app does nothing." Audited every
+  icon/text button in the app and enlarged hit areas toward Apple's 44pt
+  minimum via a padding+negative-margin technique (grows the invisible tap
+  target without moving the visible icon/text by a single pixel). Verified
+  geometrically (measured DOM rects) and visually (screenshot diff) in the
+  browser preview -- zero visual regression anywhere touched.
+- Fixed sites: home-screen Info/Gear icons (both Single + 2 Players tabs),
+  in-game Info/Gear icons, online-screen Back button, Menu buttons (room-full,
+  connection-lost, opponent-paused), Paused screen Resume/Restart/Quit,
+  game-over screen's primary/secondary buttons, demo-complete Rematch button,
+  and the Settings screen's Volume/Level digit buttons + ON/OFF/Low-Mid-High
+  toggles (some of these were as narrow as 9px wide).
+- Merged `feature/drift-cylinder` into `main` (23 commits: Drift mode, the
+  starfield, screen-transition timing, the tap-target fixes, and the
+  approved app icon). Clean merge, no conflicts.
+- Bumped version to **v1.1 (build 4)** -- `APP_VERSION` in-app string,
+  `MARKETING_VERSION`/`CURRENT_PROJECT_VERSION` in the Xcode project.
+  Jimmy confirmed this should be a minor bump (Drift counts as a new
+  feature even though it ships default-OFF).
+- Retired the Dropbox / two-machine workflow. MacFQ is no longer used for
+  this project; `~/Developer/tetris` (this clone) is now the ONLY working
+  copy -- edit, build, and commit all happen here. Rewrote `CLAUDE.md`
+  accordingly: replaced the SINGLE-WRITER handoff protocol and the
+  `node_modules`-Dropbox-ignore workaround with a plain single-copy
+  convention, keeping the old procedure as a condensed history note in
+  case this ever goes multi-machine again.
+- The old Dropbox copy (`~/Dropbox/04 Projects/AI Shared/Tetris`) is left
+  on disk untouched, per Jimmy's call -- not deleted, just no longer used
+  for anything. Do not edit or build from it.
 
-**Known non-issue explained, not a bug:** mid-session, one duration edit only
-landed on the "Single" start-screen tab's `di()` and silently missed the
-"2 Players" tab's near-identical block (they're NOT a shared component -
-two separately-written blocks that differ only in indentation, documented as
-intentional in CLAUDE.md). Caught and fixed same session; also root-caused
-the user's EARLIER report ("2 players updated, main screen didn't") to this
-exact same class of bug from an even earlier edit. The consolidation refactor
-should prevent this recurring.
-
-**Untested / pending decision - App icon:** an updated app-icon PNG was
-dropped in `assets/App Icon.png` and flattened (alpha stripped) into
-`ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png` in BOTH
-clones, but deliberately left UNCOMMITTED - user is still testing it on
-device. Flagged TWICE that the source image looks like it's cropped from a
-repeating tile (content cut off at the left and/or right edge in both
-versions provided so far) - this will likely look broken once iOS masks it
-small with rounded corners. Do not commit until the user confirms a version
-that reads as a clean, self-contained mark.
+**Not yet done:**
+- Nothing has been built to device (Shadowfax) or archived since the merge
+  and version bump. All verification this session was in the browser
+  preview only.
+- `SHOW_BUILD_STAMP` is still `true` (dev default). It MUST be flipped to
+  `false`, rebuilt, and committed right before the actual App Store
+  archive -- not done yet, intentionally (Jimmy isn't archiving yet).
 
 ## Files changed this session
 
 | File | Status | What changed |
 |------|--------|-------------|
-| `preview/app.jsx` | committed (many commits, `feature/drift-cylinder`) | Drift mechanic, wrap-aware collision/AI/eviction/ghost, starfield generator + both render sites, transition constants (`TRANSITION_MS`/`TRANSITION_SLOW_MS`), player-input wrap fixes |
+| `preview/app.jsx` | committed (multiple commits, now on `main`) | Tap-target hit-area fixes (padding+negative-margin) on ~15 buttons; `ICON_HIT_PAD`/`TEXT_HIT_PAD` constants added; `APP_VERSION` bumped to v1.1; `APP_COMMIT`/`APP_BUILD_DATE` stamp bumps |
 | `preview/app.js` | committed | Rebuilt output, paired with every `app.jsx` commit per repo convention |
-| `preview/index.html` | committed | `driftStarsFar`/`driftStarsNear` keyframes, transition keyframes + `--transition-dist`/`--transition-dist-slow` CSS custom properties |
-| `ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png` | **UNCOMMITTED** in both clones | Test app icon (flattened, alpha stripped) - see "pending decision" above |
-| `assets/App Icon.png` | untracked | Source of the test icon, user-provided, current version has the same "cropped tile" concern as the first |
-| `store-screenshots/6.5-display/02-countdown.png`, `03-keypad.png` | untracked | Pre-existing, unrelated to this session, never touched |
+| `ios/App/App.xcodeproj/project.pbxproj` | committed | `MARKETING_VERSION` 1.0->1.1, `CURRENT_PROJECT_VERSION` (build) 3->4 |
+| `CLAUDE.md` | committed | Retired the Dropbox/two-machine section; replaced with single-copy convention + condensed history note |
+| `assets/App Icon.png`, `ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png` | committed (carried over from prior session's branch) | Approved app icon, merged in from `feature/drift-cylinder` |
+| `store-screenshots/6.5-display/02-countdown.png`, `03-keypad.png` | committed | Pre-existing screenshots, committed this session at Jimmy's request; unrelated to the other work |
 
 ## Uncommitted work
 
-Only the app icon (see above). Everything else from this session is
-committed and pushed to `origin/feature/drift-cylinder` (HEAD: `bfc90ea`).
+None. Working tree is clean, `main` is fully in sync with `origin/main`
+(`4bcbf40`).
 
 ## Open questions / decisions pending
 
-1. **App icon**: does the user want to crop/recenter the source image so it
-   reads as one self-contained mark before it ships, or are they fine with
-   the cropped-tile look? Flagged twice, not yet answered either way.
-2. **`feature/drift-cylinder` -> `main`**: this entire Drift feature (11+
-   content commits) has not been merged. Confirm with the user before merging
-   - it's a solo-only prototype behind a default-OFF toggle, so it's low risk,
-   but merge timing is the user's call.
-3. **`main` has moved independently**: `origin/main` is 18 commits ahead of
-   where `feature/drift-cylinder` branched (App Store screenshots, etc. - see
-   `ce78580`, `b045c8c`). Any future merge should account for that drift.
-4. **Online/multiplayer sync for Drift**: explicitly out of scope this whole
-   session (user chose "single-player first" early on). If Drift ever needs
-   to work in networked 2P, that's unstarted - would need boundary/piece sync
-   extended to cover the drift tick too.
+1. **Device testing**: none of this session's fixes (tap targets, Drift,
+   v1.1) have been verified on Shadowfax yet -- only in the browser preview.
+   Should happen before archiving.
+2. **Feature branches now stale/mergeable**: `feature/drift-cylinder` and
+   `feature/multiplayer` still exist as branches (both local and on
+   origin). `feature/drift-cylinder` is now fully merged into `main` --
+   safe to delete once Jimmy confirms he doesn't need it as a reference.
+   `feature/multiplayer`'s relationship to `main` wasn't checked this
+   session.
+3. **App Store submission timing**: v1.1/build 4 is ready in the repo, but
+   the actual archive/submit hasn't happened. When Jimmy's ready: flip
+   `SHOW_BUILD_STAMP` to `false`, rebuild, commit, archive, then flip back
+   to `true` afterward (see CLAUDE.md's "REQUIRED additional step before an
+   App Store archive").
+4. **Old Dropbox copy cleanup**: left on disk untouched at Jimmy's request
+   ("leave it as-is, just stop using it"). He said he'd delete it manually
+   later -- not blocking anything.
 
 ## What to do next
 
-1. Wait for the user's verdict on the app icon (cropped-tile concern) before
-   committing it.
-2. If/when they approve an icon, commit it as its own small commit (source
-   PNG + the flattened xcassets PNG), separate from the Drift feature commits.
-3. Ask the user whether `feature/drift-cylinder` should be merged to `main`
-   yet, or stay as a branch for more testing first.
-4. No other loose ends from this session - Drift + starfield + transitions
-   are all committed, pushed, and synced into the Developer build clone.
+1. Start the next session rooted directly in `~/Developer/tetris` (not the
+   Dropbox `AI Shared` folder) -- Jimmy specifically wants this so there's
+   no more manual `cd`-ing for Tetris work.
+2. Build to Shadowfax and smoke-test: the Drift toggle (Settings > Game),
+   the previously-broken info/gear/menu taps, and general v1.1 sanity.
+3. Once device-verified, flip `SHOW_BUILD_STAMP` to `false` per the archive
+   checklist above, then Jimmy can archive/submit v1.1 (build 4) with the
+   drafted release notes (Drift mode announcement + "fixed several buttons
+   that were hard to tap").
+4. Ask Jimmy whether to delete the now-fully-merged `feature/drift-cylinder`
+   branch (local + origin).
 
 ## How to resume
 
 ```bash
-cd ~/Developer/tetris   # the actual build clone - NEVER build from Dropbox
-git status --short      # confirm the app-icon PNG is still the only uncommitted diff
-git log --oneline -1    # should show bfc90ea (or later) on feature/drift-cylinder
-git branch --show-current  # should show feature/drift-cylinder
+cd ~/Developer/tetris
+git pull                        # should already be at 4bcbf40 / clean
+npm install && npx cap sync ios # only needed if node_modules is stale
+# open ios/App/App.xcodeproj in Xcode -> Shadowfax -> Run
 ```
 
-To pick up editing from the Dropbox copy (where this session ran):
-```bash
-cd "/Users/jimmy/Dropbox/04 Projects/AI Shared/Tetris"
-git pull
-npm run build   # only if you edit preview/app.jsx - see CLAUDE.md's REQUIRED stamp workflow
-```
-
-To test on device: open `~/Developer/tetris/ios/App/App.xcodeproj` in Xcode,
-select Shadowfax, Run. Settings > Game > Drift (default OFF) turns on both
-the board mechanic and the starfield.
+No other setup steps. This is the only working copy now -- no handoff
+between machines needed.
 
 ## Machine / account notes
 
-- Generated on **Gandalf**, working from the Dropbox copy
-  (`/Users/jimmy/Dropbox/04 Projects/AI Shared/Tetris`) for edits, with
-  `~/Developer/tetris` as the actual build clone (per CLAUDE.md convention).
-  Both clones are in sync as of this handoff except for the uncommitted app
-  icon, which exists identically (uncommitted) in both.
+- Generated on **Gandalf**, from `~/Developer/tetris` -- the single working
+  copy as of this session (MacFQ is retired for this project; the old
+  Dropbox copy is untouched but unused).
 - Personal repo; push with the explicit token form:
   ```bash
   GITHUB_TOKEN=$(gh auth token --hostname github.com -u jimjimjimmy 2>/dev/null)
-  git push "https://jimjimjimmy:${GITHUB_TOKEN}@github.com/jimjimjimmy/tetris.git" feature/drift-cylinder
+  git push "https://jimjimjimmy:${GITHUB_TOKEN}@github.com/jimjimjimmy/tetris.git" main
   ```
-- Every `app.jsx`-touching commit this session followed the repo's REQUIRED
-  two-commit stamp pattern (content commit -> copy hash -> bump
-  `APP_COMMIT`/`APP_BUILD_DATE` -> rebuild -> second commit). Current stamp:
-  `bfc90ea` is the bump commit; `APP_COMMIT` in code reads the content commit
-  one behind it (`415dff7`), which is the documented convention, not a bug.
+- The GitHub push had transient network trouble earlier in this session
+  (HTTP 408 / RPC timeouts, unrelated to git or file size) -- if a push
+  hangs or 408s, it's very likely the connection, not the repo; just retry.
