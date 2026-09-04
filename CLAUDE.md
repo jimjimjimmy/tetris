@@ -25,7 +25,9 @@
   Any session that adds a component, updates a file, or makes a structural
   change: update this file before ending the session. It's the single source
   of truth for the next session (this one or a future one).
-  Last updated: 2026-08-03 - Gandalf (retired the Dropbox / two-machine setup;
+  Last updated: 2026-09-03 - Gandalf (share-sheet join link -- see "Online
+  multiplayer" section bottom).
+  Prior: 2026-08-03 - Gandalf (retired the Dropbox / two-machine setup;
   single clone at ~/Developer/tetris going forward. feature/drift-cylinder
   merged to main: Drift mode, tap-target hit-area fixes, v1.1/build 4.)
 -->
@@ -1119,3 +1121,28 @@ The top-level phase screens (`start`, `online`, `playing`) swap via early
 - Verified in-browser (MacFQ): exit sampled at translateX(238px)+fading mid
   slide; incoming root running `pageInRight`; settles centered, no console
   errors.
+- **Share-sheet join link (4ca0552, Gandalf, 2026-09-03):** the existing
+  "Share your code / with opponent" caption on the 2 Players "share your
+  code" screen is now tappable -- `shareRoomCode(code)` opens the native
+  share sheet (`window.Capacitor?.Plugins?.Share`, new dependency
+  `@capacitor/share`) with a message + `SHARE_BASE_URL` link
+  (`https://jimjimjimmy.github.io/tetris/preview/?join=CODE`). Falls back to
+  `navigator.share` then clipboard copy in the browser preview. No new
+  visual element -- reuses the existing caption's exact typography, just
+  adds `onPointerDown`.
+  A new mount-only `useEffect` in `TetrisGame2P` reads `?join=CODE` from
+  `window.location.search` and calls `connectToRoom(code)` directly, same
+  path as the "Join with Code" keypad's auto-connect-on-4th-digit. Works for
+  both the native app and the GitHub Pages web build (same JS). Verified
+  end-to-end in the browser preview across two tabs: host auto-joins its own
+  room, second tab loaded with `?join=<code>` connected as guest, both
+  reached `phase=playing` in lockstep.
+  **Not implemented (scoped, deferred):** true Universal Links (tapping the
+  link on a phone without the app opening the app directly) needs a
+  domain-root `jimjimjimmy.github.io` repo hosting
+  `/.well-known/apple-app-site-association`, an Associated Domains
+  entitlement + capability in Xcode, `@capacitor/app`'s `appUrlOpen`
+  listener, and a fresh TestFlight build to test on-device -- none of that
+  exists yet. Today the link opens the web preview (which handles `?join=`
+  itself) or, if the app is already frontmost, does nothing special; it does
+  NOT background-launch the native app.
