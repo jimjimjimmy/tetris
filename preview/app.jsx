@@ -659,6 +659,31 @@ function makeRoomCode() {
 }
 
 const PARTYKIT_HOST = "drift-game.jimjimjimmy.partykit.dev";
+// Base URL for a shareable join link (?join=CODE). Points at the GitHub
+// Pages build so the link works even for someone without the app installed
+// (opens the web preview, which reads the same query param -- see the
+// join-link effect in TetrisGame2P).
+const SHARE_BASE_URL = "https://jimjimjimmy.github.io/tetris/preview/";
+
+// Share a room code via the native share sheet (Capacitor Share plugin),
+// falling back to the Web Share API in the browser preview, and to a
+// clipboard copy if neither is available.
+async function shareRoomCode(code) {
+  const link = `${SHARE_BASE_URL}?join=${code}`;
+  const text = `Join my RVAL game -- code ${code}\n${link}`;
+  const NativeShare = window.Capacitor?.Plugins?.Share;
+  try {
+    if (NativeShare) {
+      await NativeShare.share({ title: "Join my RVAL game", text, url: link, dialogTitle: "Share join code" });
+    } else if (navigator.share) {
+      await navigator.share({ title: "Join my RVAL game", text, url: link });
+    } else if (navigator.clipboard) {
+      await navigator.clipboard.writeText(link);
+    }
+  } catch (_) {
+    // User dismissed the share sheet, or no share surface is available -- no-op.
+  }
+}
 
 // ============================================================
 // BOARD VIEWPORT  (subset: ROWS_2P bound check, not legacy ROWS=33)
@@ -2765,6 +2790,15 @@ function TetrisGame2P() {
     };
   };
 
+  // Join-link auto-connect: if the app was opened via a shared join link
+  // (?join=CODE from shareRoomCode), jump straight into that room as the
+  // guest, same as manually typing the code on the "Join with Code" keypad.
+  // Runs once on mount only.
+  React.useEffect(() => {
+    const code = new URLSearchParams(window.location.search).get("join");
+    if (code && code.length === 4) connectToRoom(code);
+  }, []);
+
   // Host auto-connect: as soon as the 2 Players "share your code" screen is
   // shown, join the room as P1 in the background so the opponent entering the
   // code (P2) fills the room and the server's "ready" starts BOTH at once.
@@ -3167,11 +3201,15 @@ function TetrisGame2P() {
               fontSize:40, fontWeight:300, letterSpacing:"20px", marginRight:"-20px",
               color:"#fff", opacity:0.5, textTransform:"uppercase",
             }}>{myCode}</span>
-            <div style={{
-              display:"flex", flexDirection:"column", alignItems:"center",
-              opacity:0.3, fontSize:10, letterSpacing:"3px",
-              fontWeight:600, textTransform:"uppercase",
-            }}>
+            <div
+              onPointerDown={()=>shareRoomCode(myCode)}
+              onTouchStart={e=>e.stopPropagation()}
+              style={{
+                display:"flex", flexDirection:"column", alignItems:"center",
+                opacity:0.3, fontSize:10, letterSpacing:"3px",
+                fontWeight:600, textTransform:"uppercase", cursor:"pointer",
+              }}
+            >
               <span style={{marginRight:"-3px"}}>Share your code</span>
               <span style={{marginRight:"-3px"}}>with opponent</span>
             </div>
