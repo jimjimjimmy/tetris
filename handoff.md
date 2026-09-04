@@ -1,127 +1,59 @@
-# Handoff - RVAL / Tetris (jimjimjimmy/tetris) - 2026-08-03
+# Handoff - RVAL (aka Tetris, aka Drift) - 2026-08-07
 
 ## What this is
-
-RVAL - two-player territorial Tetris, Capacitor iOS wrap. This session (on
-Gandalf): fixed a real tap-target bug, shipped the Drift feature from the
-previous session's branch into `main` as v1.1 (build 4), and retired the
-old Dropbox / two-machine workflow in favor of a single working copy.
+Two-player territorial Tetris game, App Store name **RVAL**, bundle id `com.typographic.drift`, working dir `~/Developer/tetris` (single source of truth, single-machine, no Dropbox copy). This session's focus: finishing the v1.1 "Drift mode" App Store submission (build fixes, copy, screenshots/video) end-to-end.
 
 ## Current state
-
-**Working and verified:**
-- Fixed the reported bug: info/gear icons (and several other icon/text
-  buttons) had a 24x24px or smaller tap target with zero padding -- on a
-  real device thumb tap this read as "the app does nothing." Audited every
-  icon/text button in the app and enlarged hit areas toward Apple's 44pt
-  minimum via a padding+negative-margin technique (grows the invisible tap
-  target without moving the visible icon/text by a single pixel). Verified
-  geometrically (measured DOM rects) and visually (screenshot diff) in the
-  browser preview -- zero visual regression anywhere touched.
-- Fixed sites: home-screen Info/Gear icons (both Single + 2 Players tabs),
-  in-game Info/Gear icons, online-screen Back button, Menu buttons (room-full,
-  connection-lost, opponent-paused), Paused screen Resume/Restart/Quit,
-  game-over screen's primary/secondary buttons, demo-complete Rematch button,
-  and the Settings screen's Volume/Level digit buttons + ON/OFF/Low-Mid-High
-  toggles (some of these were as narrow as 9px wide).
-- Merged `feature/drift-cylinder` into `main` (23 commits: Drift mode, the
-  starfield, screen-transition timing, the tap-target fixes, and the
-  approved app icon). Clean merge, no conflicts.
-- Bumped version to **v1.1 (build 4)** -- `APP_VERSION` in-app string,
-  `MARKETING_VERSION`/`CURRENT_PROJECT_VERSION` in the Xcode project.
-  Jimmy confirmed this should be a minor bump (Drift counts as a new
-  feature even though it ships default-OFF).
-- Retired the Dropbox / two-machine workflow. MacFQ is no longer used for
-  this project; `~/Developer/tetris` (this clone) is now the ONLY working
-  copy -- edit, build, and commit all happen here. Rewrote `CLAUDE.md`
-  accordingly: replaced the SINGLE-WRITER handoff protocol and the
-  `node_modules`-Dropbox-ignore workaround with a plain single-copy
-  convention, keeping the old procedure as a condensed history note in
-  case this ever goes multi-machine again.
-- The old Dropbox copy (`~/Dropbox/04 Projects/AI Shared/Tetris`) is left
-  on disk untouched, per Jimmy's call -- not deleted, just no longer used
-  for anything. Do not edit or build from it.
-
-**Not yet done:**
-- Nothing has been built to device (Shadowfax) or archived since the merge
-  and version bump. All verification this session was in the browser
-  preview only.
-- `SHOW_BUILD_STAMP` is still `true` (dev default). It MUST be flipped to
-  `false`, rebuilt, and committed right before the actual App Store
-  archive -- not done yet, intentionally (Jimmy isn't archiving yet).
+- **App**: v1.1, build 5 (`MARKETING_VERSION=1.1`, `CURRENT_PROJECT_VERSION=5` in the Xcode project; `APP_VERSION="v1.1"` / `APP_BUILD_NUMBER="5"` in `preview/app.jsx`, shown in Settings as `v1.1 (5)`). Build 5 uploaded and fully processed in App Store Connect (confirmed "Complete" in Build Uploads).
+- **Xcode Cloud signing bug found and fixed**: the App target's Debug/Release configs were missing `DEVELOPMENT_TEAM`, so Xcode Cloud archives came out unsigned (`SigningIdentity`/`Team` both empty in the archive's Info.plist) and couldn't be distributed. Fixed in `40aad87`. A **local** archive (`Product -> Archive` in Xcode, not Xcode Cloud) is what actually got build 5 signed and uploaded successfully.
+- **Version/build display convention adopted**: Settings now shows `v1.1 (5)` - the standard iOS "Version X (build N)" pattern, matching what TestFlight shows per install. Documented in `CLAUDE.md` under "Bumping the Xcode build number" - `APP_BUILD_NUMBER` in `app.jsx` must be bumped by hand alongside `CURRENT_PROJECT_VERSION` every time a new archive build number is cut. Build number is global/monotonic across the app's lifetime, not reset per marketing version (e.g. next would be `v1.1 (6)` or `v1.2 (6)`, not `v1.2 (1)`).
+- **App Store Connect submission for v1.1**: description, promotional text, "What's New" copy, and keywords are all drafted (see below) but I have **no confirmation "Submit for Review" was actually clicked**. Worth checking App Store Connect directly before assuming this is live.
+- **App Preview video**: solved after real back-and-forth. Apple's App Preview video spec for this size bucket is **886x1920** (or 1920x886 landscape) - a different resolution than screenshots (1242x2688), which isn't obvious from the UI. First upload attempt failed with a dimensions error; second attempt (converted correctly) failed with "unsupported or corrupted audio" even though the source had *no* audio track at all - Apple's validator appears to require *some* audio stream to be present, even silent. Fix: always mux in a silent AAC track. Final best version was a **genuine native screen recording** via `xcrun simctl io <udid> recordVideo` (real continuous 60fps capture), not the frame-sampled screenshot approach used earlier in the session - see `rval-drift-native-886x1920.mp4` below.
+- **Unrelated fix landed outside this session**: commit `8ca5929` (2026-08-07, this machine, different session) fixed the home-screen app display name - it was still "Rival" in `capacitor.config.json` / `Info.plist`, leftover from before the RVAL rebrand; now lowercase `rval` to match the shipped App Store name. Already committed and pushed. Not something this session did - flagging so it's not mistaken for still-open work.
+- **Board-width redesign (16 columns)**: discussed and scoped but **not started**. See "Open questions" below.
 
 ## Files changed this session
 
 | File | Status | What changed |
 |------|--------|-------------|
-| `preview/app.jsx` | committed (multiple commits, now on `main`) | Tap-target hit-area fixes (padding+negative-margin) on ~15 buttons; `ICON_HIT_PAD`/`TEXT_HIT_PAD` constants added; `APP_VERSION` bumped to v1.1; `APP_COMMIT`/`APP_BUILD_DATE` stamp bumps |
-| `preview/app.js` | committed | Rebuilt output, paired with every `app.jsx` commit per repo convention |
-| `ios/App/App.xcodeproj/project.pbxproj` | committed | `MARKETING_VERSION` 1.0->1.1, `CURRENT_PROJECT_VERSION` (build) 3->4 |
-| `CLAUDE.md` | committed | Retired the Dropbox/two-machine section; replaced with single-copy convention + condensed history note |
-| `assets/App Icon.png`, `ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png` | committed (carried over from prior session's branch) | Approved app icon, merged in from `feature/drift-cylinder` |
-| `store-screenshots/6.5-display/02-countdown.png`, `03-keypad.png` | committed | Pre-existing screenshots, committed this session at Jimmy's request; unrelated to the other work |
+| `ios/App/App.xcodeproj/project.pbxproj` | committed (`40aad87`) | Added missing `DEVELOPMENT_TEAM = 32S35BUK9J;` to App target Debug/Release configs (was only on project defaults + UI-test target). Also bumped `CURRENT_PROJECT_VERSION` 4->5 (`7cbf7ac`). |
+| `preview/app.jsx` / `preview/app.js` | committed (`7cbf7ac`, `67b6849`, `43195d0`) | `SHOW_BUILD_STAMP = false` for the App Store archive; added `APP_BUILD_NUMBER` constant and display (`v1.1 (5)` in Settings); bumped `APP_COMMIT`/`APP_BUILD_DATE` stamp. |
+| `CLAUDE.md` | committed (`e29fd2f`) | Documented the `APP_BUILD_NUMBER` convention and the exact steps/sed command to bump the Xcode build number across all 4 pbxproj occurrences. |
+| `APP-STORE-SUBMISSION.md` | committed (`695480d`) | Added a "Drift" line to the `MODES` section of the App Store description worksheet. |
+| `RELEASE_NOTES_v1.1.md` | committed (`695480d`, created this session) | Engineering-facing release notes for v1.1, later retitled from "DRIFT" to "RVAL" (that's the actual App Store brand name; "Drift" the word stays correct as the mode name elsewhere in the doc). Includes a "Build 5" addendum for the signing fix / version-display change. |
+| `store-screenshots/6.5-display/04-drift-gameplay.png`, `05-drift-start.png` | committed (`9ef5e07`) | New 1242x2688 screenshots showing Drift mode (gameplay + start-screen starfield), captured via iOS Simulator since the existing 3 screenshots predate Drift mode. Jimmy felt the quality wasn't as good as the browser-rendered ones - kept in repo but not necessarily the final pick. |
+| `store-screenshots/rval-drift-browser-886x1920.mp4` | **not committed** (gitignored, `store-screenshots/*.mp4`) | App Preview candidate recorded via real Chrome (crisper text/starfield than simulator) but frame-sampled (not continuous), ~16.5s, cropped/scaled/silent-AAC-muxed to spec. |
+| `store-screenshots/rval-gameplay-5-appstore-886x1920.mp4` | **not committed** | Re-encode of an existing pre-session gameplay clip (`OK rval-gameplay-5.mp4`) to the 886x1920 + silent-AAC spec - this is the one that hit the "corrupted audio" error before the silent-track fix was added. |
+| `store-screenshots/rval-drift-native-886x1920.mp4` | **not committed** | **Best candidate.** Genuine native 60fps `simctl recordVideo` capture off an iPhone 17 Pro Max simulator, trimmed to a 22s mid-to-late-game window, scaled to 886x1920 with silent AAC. This is what I'd upload. |
 
 ## Uncommitted work
-
-None. Working tree is clean, `main` is fully in sync with `origin/main`
-(`4bcbf40`).
+None - `git status` is clean, everything above is either committed+pushed or intentionally gitignored (the mp4s). Confirmed `git log origin/main..HEAD` is empty (fully pushed).
 
 ## Open questions / decisions pending
 
-1. **Device testing**: none of this session's fixes (tap targets, Drift,
-   v1.1) have been verified on Shadowfax yet -- only in the browser preview.
-   Should happen before archiving.
-2. **Feature branches now stale/mergeable**: `feature/drift-cylinder` and
-   `feature/multiplayer` still exist as branches (both local and on
-   origin). `feature/drift-cylinder` is now fully merged into `main` --
-   safe to delete once Jimmy confirms he doesn't need it as a reference.
-   `feature/multiplayer`'s relationship to `main` wasn't checked this
-   session.
-3. **App Store submission timing**: v1.1/build 4 is ready in the repo, but
-   the actual archive/submit hasn't happened. When Jimmy's ready: flip
-   `SHOW_BUILD_STAMP` to `false`, rebuild, commit, archive, then flip back
-   to `true` afterward (see CLAUDE.md's "REQUIRED additional step before an
-   App Store archive").
-4. **Old Dropbox copy cleanup**: left on disk untouched at Jimmy's request
-   ("leave it as-is, just stop using it"). He said he'd delete it manually
-   later -- not blocking anything.
+1. **Was v1.1 actually submitted for review?** I prepared all App Store Connect copy and confirmed build 5 processed successfully, but never got confirmation the Submit button was clicked. Check App Store Connect's "iOS App Version 1.1" page status before assuming this shipped.
+2. **Which screenshots/video actually go into App Store Connect?** Jimmy said the simulator-generated screenshots (`04-drift-gameplay.png`, `05-drift-start.png`) weren't as good quality as the browser-rendered ones shown inline earlier - but nothing was saved from the browser preview as a file (that tool can't export files directly), so those simulator PNGs are the only Drift-mode screenshot files that actually exist on disk. Worth deciding: use these, or re-generate via the real Chrome browser path (like the video) for better fidelity. For video, `rval-drift-native-886x1920.mp4` (real continuous recording) is the strongest candidate of the three generated this session.
+3. **Xcode Cloud is still unfixed for signing.** The `DEVELOPMENT_TEAM` fix in the pbxproj did NOT actually solve Xcode Cloud producing signed archives (verified: build 183 post-fix still came out with empty `SigningIdentity`/`Team`). Build 5 shipped via a **local** Xcode archive instead. If Jimmy wants Xcode Cloud to auto-upload to TestFlight going forward, its workflow signing/certificate configuration in App Store Connect needs a separate look - not something a repo file edit can fix.
+4. **Board-width redesign (16 columns) - not started.** Scoped in conversation: keeping the right sidebar (pause/settings icons at `SIDEBAR_X=320`) fixed and `CELL=20` unchanged (since `CELL` also sets row height via `GAME_2P_H = ROWS_2P * CELL`) means 16 columns x 20px = exactly 320px, i.e. the play area would need to start flush at `PLAY_X~0`, effectively dropping/redesigning the left bracket/dash decoration (`BRACKET_X`, `DASH_LEFT_W`, etc.). Jimmy wants to redesign that UI himself before this gets implemented. Also flagged: wider board = longer horizontal wrap distance in Drift mode, so wind/AI tuning may feel different at 16 columns and should be playtested once the layout lands, not reasoned about in the abstract.
 
 ## What to do next
-
-1. Start the next session rooted directly in `~/Developer/tetris` (not the
-   Dropbox `AI Shared` folder) -- Jimmy specifically wants this so there's
-   no more manual `cd`-ing for Tetris work.
-2. Build to Shadowfax and smoke-test: the Drift toggle (Settings > Game),
-   the previously-broken info/gear/menu taps, and general v1.1 sanity.
-3. Once device-verified, flip `SHOW_BUILD_STAMP` to `false` per the archive
-   checklist above, then Jimmy can archive/submit v1.1 (build 4) with the
-   drafted release notes (Drift mode announcement + "fixed several buttons
-   that were hard to tap").
-4. Ask Jimmy whether to delete the now-fully-merged `feature/drift-cylinder`
-   branch (local + origin).
+1. Check App Store Connect to confirm whether v1.1 was actually submitted for review (see open question 1).
+2. Decide on final screenshots + video for the submission (open question 2), upload them.
+3. If Xcode Cloud auto-upload matters going forward, investigate its workflow signing config in App Store Connect (open question 3) - separate from this repo.
+4. Whenever Jimmy has a board-width redesign direction, implement the 16-column layout change (open question 4) - prototype visually first, playtest the wind/wrap feel before tuning anything.
 
 ## How to resume
-
 ```bash
 cd ~/Developer/tetris
-git pull                        # should already be at 4bcbf40 / clean
-npm install && npx cap sync ios # only needed if node_modules is stale
-# open ios/App/App.xcodeproj in Xcode -> Shadowfax -> Run
+git pull
 ```
-
-No other setup steps. This is the only working copy now -- no handoff
-between machines needed.
+Nothing else needed - single machine, single clone, already in sync with `origin/main`.
 
 ## Machine / account notes
-
-- Generated on **Gandalf**, from `~/Developer/tetris` -- the single working
-  copy as of this session (MacFQ is retired for this project; the old
-  Dropbox copy is untouched but unused).
-- Personal repo; push with the explicit token form:
+- Generated on **Gandalf** (personal laptop).
+- Personal repo - push with the explicit jimjimjimmy token form (already documented in `CLAUDE.md`):
   ```bash
   GITHUB_TOKEN=$(gh auth token --hostname github.com -u jimjimjimmy 2>/dev/null)
   git push "https://jimjimjimmy:${GITHUB_TOKEN}@github.com/jimjimjimmy/tetris.git" main
   ```
-- The GitHub push had transient network trouble earlier in this session
-  (HTTP 408 / RPC timeouts, unrelated to git or file size) -- if a push
-  hangs or 408s, it's very likely the connection, not the repo; just retry.
+- The three `.mp4` App Preview candidates are local-only (gitignored by design - large binaries). If picking this up on a different machine, they'll need to be re-generated or transferred manually; they were also sent to Jimmy directly as files during this session.
