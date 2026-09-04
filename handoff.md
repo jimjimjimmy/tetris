@@ -1,4 +1,4 @@
-# Handoff - RVAL (aka Tetris, aka Drift) - 2026-08-07
+# Handoff - RVAL (aka Tetris, aka Drift) - 2026-09-03
 
 ## What this is
 Two-player territorial Tetris game, App Store name **RVAL**, bundle id `com.typographic.drift`, working dir `~/Developer/tetris` (single source of truth, single-machine, no Dropbox copy). This session's focus: finishing the v1.1 "Drift mode" App Store submission (build fixes, copy, screenshots/video) end-to-end.
